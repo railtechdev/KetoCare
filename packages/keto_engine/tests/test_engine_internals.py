@@ -4,11 +4,15 @@
 from __future__ import annotations
 
 import pytest
+from scipy.optimize import OptimizeResult
 
 from keto_engine import (
     InfeasibleError,
     Ingredient,
+    MealMacroGoal,
+    SolveResult,
     Targets,
+    macro_fit,
     max_non_fat_grams,
     meal_macro_goal,
     scale,
@@ -16,12 +20,13 @@ from keto_engine import (
     verify,
     within_tolerance,
 )
-from keto_engine.constants import RATIO_TOLERANCE
+from keto_engine import engine as engine_module
+from keto_engine.constants import MEAL_MACRO_TOLERANCE_G, RATIO_TOLERANCE
 from keto_engine.engine import (
-    _candidate_is_valid,
+    _candidate_rank,
+    _closest_whole_grams,
     _diagnose_infeasibility,
     _max_achievable_kcal,
-    _repair_rounding,
 )
 
 
@@ -213,49 +218,77 @@ class TestRepairInternals:
 
     def test_candidate_rejected_below_lower_bound(self) -> None:
         targets = Targets(ratio=4.0, kcal=200.0, per_ingredient_bounds={"fat": (30.0, 60.0)})
-        assert not _candidate_is_valid([10.0, 16.0], [self.FAT, self.LEAN], targets)
+        assert _candidate_rank([10.0, 16.0], [self.FAT, self.LEAN], targets) is None
 
     def test_candidate_rejected_above_upper_bound(self) -> None:
         targets = Targets(ratio=4.0, kcal=200.0, per_ingredient_bounds={"fat": (0.0, 20.0)})
-        assert not _candidate_is_valid([25.0, 16.0], [self.FAT, self.LEAN], targets)
+        assert _candidate_rank([25.0, 16.0], [self.FAT, self.LEAN], targets) is None
 
     def test_candidate_rejected_when_all_masses_negligible(self) -> None:
         """Массы ниже минимальной реалистичной дают пустое блюдо."""
         targets = Targets(ratio=4.0, kcal=200.0)
-        assert not _candidate_is_valid([0.0, 0.0], [self.FAT, self.LEAN], targets)
+        assert _candidate_rank([0.0, 0.0], [self.FAT, self.LEAN], targets) is None
 
     def test_candidate_rejected_outside_kcal_corridor(self) -> None:
         targets = Targets(ratio=4.0, kcal=200.0)
-        assert not _candidate_is_valid([100.0, 60.0], [self.FAT, self.LEAN], targets)
+        assert _candidate_rank([100.0, 60.0], [self.FAT, self.LEAN], targets) is None
 
     def test_candidate_rejected_below_protein_minimum(self) -> None:
         targets = Targets(ratio=4.0, kcal=200.0, protein_min_g=50.0)
-        assert not _candidate_is_valid([23.0, 16.0], [self.FAT, self.LEAN], targets)
+        assert _candidate_rank([23.0, 16.0], [self.FAT, self.LEAN], targets) is None
 
     def test_candidate_rejected_above_carbs_limit(self) -> None:
         targets = Targets(ratio=4.0, kcal=200.0, carbs_max_g=0.5)
-        assert not _candidate_is_valid([23.0, 16.0], [self.FAT, self.LEAN], targets)
+        assert _candidate_rank([23.0, 16.0], [self.FAT, self.LEAN], targets) is None
 
     def test_repair_returns_input_when_nothing_can_move_ratio(self) -> None:
         """У продукта, чьё собственное соотношение равно целевому, сдвиг массы
         не меняет R — двигать нечего, возвращается исходное решение."""
         neutral = Ingredient("neutral", kcal=0.0, fat=40.0, protein=10.0, carbs=0.0)
         base = [10.0]
-        assert _repair_rounding(base, [neutral], Targets(ratio=4.0, kcal=200.0)) == base
+        assert _closest_whole_grams(base, [neutral], Targets(ratio=4.0, kcal=200.0)) == base
 
     def test_repair_returns_best_effort_when_tolerance_unreachable(self) -> None:
         """Если в допуск не попадает ни один кандидат, возвращается ближайший,
         а не исходный: показать «почти верное» лучше, чем заведомо худшее."""
         targets = Targets(ratio=4.0, kcal=200.0)
-        repaired = _repair_rounding([23.0, 17.0], [self.FAT, self.LEAN], targets)
+        repaired = _closest_whole_grams([23.0, 17.0], [self.FAT, self.LEAN], targets)
         assert repaired != [23.0, 17.0]
+
+    def test_candidate_without_a_ratio_is_not_ranked(self) -> None:
+        pure_fat = Ingredient("pure_fat", kcal=900.0, fat=100.0, protein=0.0, carbs=0.0)
+        assert _candidate_rank([22.0], [pure_fat], Targets(ratio=4.0, kcal=198.0)) is None
+
+    def test_ratio_inside_tolerance_outranks_any_ratio_outside(self) -> None:
+        """A dish exact on calories with the ratio past its tolerance loses to
+        one whose calories are worse and whose ratio is inside."""
+        targets = Targets(ratio=4.0, kcal=200.0)
+        ingredients = [self.FAT, self.LEAN]
+        outside = _candidate_rank([23.0, 17.0], ingredients, targets)
+        inside = _candidate_rank([24.0, 17.0], ingredients, targets)
+        assert outside is not None and inside is not None
+        assert outside[0] and not inside[0]
+        assert inside < outside
+
+    def test_search_returns_the_closest_dish_not_the_first_allowed(self) -> None:
+        """Every whole-gram neighbour is weighed: nothing in reach is closer
+        to the ratio and the calories than what comes back."""
+        targets = Targets(ratio=4.0, kcal=200.0)
+        ingredients = [self.FAT, self.LEAN]
+        chosen = _closest_whole_grams([23.0, 17.0], ingredients, targets)
+        chosen_rank = _candidate_rank(chosen, ingredients, targets)
+        assert chosen_rank is not None
+        for fat in range(21, 26):
+            for lean in range(15, 20):
+                rank = _candidate_rank([float(fat), float(lean)], ingredients, targets)
+                assert rank is None or chosen_rank <= rank
 
     def test_repair_skips_candidates_without_defined_ratio(self) -> None:
         """Кандидат из одних жиров даёт ratio=None (нет белков и углеводов) и
         должен пропускаться, а не ронять подбор."""
         pure_fat = Ingredient("pure_fat", kcal=900.0, fat=100.0, protein=0.0, carbs=0.0)
         targets = Targets(ratio=4.0, kcal=200.0)
-        result = _repair_rounding([22.0, 2.0], [pure_fat, self.LEAN], targets)
+        result = _closest_whole_grams([22.0, 2.0], [pure_fat, self.LEAN], targets)
         assert isinstance(result, list)
 
 
@@ -795,3 +828,165 @@ class TestFluidRequirement:
 
         with pytest.raises(ValueError):
             fluid_requirement(weight)
+
+
+class TestMacroFit:
+    """Where a dish sits against the protein and net carbs of its meal."""
+
+    EGG = Ingredient("egg", kcal=139.0, fat=9.5, protein=12.6, carbs=0.7)
+
+    def test_nothing_to_compare_without_goals(self) -> None:
+        assert macro_fit(verify([(self.EGG, 50.0)]), None, None) is None
+
+    def test_deltas_are_fact_minus_goal(self) -> None:
+        dish = verify([(self.EGG, 100.0)])
+        fit = macro_fit(dish, 10.0, 2.0)
+        assert fit is not None
+        assert fit.protein_delta_g == pytest.approx(2.6)
+        assert fit.net_carbs_delta_g == pytest.approx(-1.3)
+        assert not fit.within_tolerance
+
+    def test_one_gram_either_way_still_matches(self) -> None:
+        dish = verify([(self.EGG, 100.0)])
+        fit = macro_fit(dish, 12.6 - MEAL_MACRO_TOLERANCE_G, 0.7 + MEAL_MACRO_TOLERANCE_G)
+        assert fit is not None and fit.within_tolerance
+
+    def test_a_single_goal_is_judged_alone(self) -> None:
+        dish = verify([(self.EGG, 100.0)])
+        fit = macro_fit(dish, None, 0.5)
+        assert fit is not None
+        assert fit.protein_delta_g is None
+        assert fit.net_carbs_delta_g == pytest.approx(0.2)
+        assert fit.within_tolerance
+
+
+class TestSolveAimsAtTheMealSplit:
+    """The dietitian's complaint of 2026-11-15 (ADR-0083).
+
+    The solver held the ratio and the calories and gave the meal 8.1 g of
+    protein and 0.8 g of carbs against a goal of 4.6 and 4.3. The products
+    could reach the goal; nothing asked the solver to.
+    """
+
+    EGG = Ingredient("egg", kcal=139.0, fat=9.5, protein=12.6, carbs=0.7)
+    BUTTER = Ingredient("butter", kcal=735.0, fat=81.3, protein=0.9, carbs=0.1)
+    CREAM = Ingredient("cream", kcal=347.0, fat=36.0, protein=2.5, carbs=3.2)
+    PEPPER = Ingredient("pepper", kcal=31.0, fat=0.3, protein=1.0, carbs=6.0, fiber=2.0)
+    PRODUCTS = (EGG, BUTTER, CREAM, PEPPER)
+    ENTERED = {"egg": 61.0, "butter": 23.0, "cream": 6.0, "pepper": 5.0}
+    BOUNDS = {name: (2.0, 5000.0) for name in ENTERED}
+
+    def _goal(self) -> MealMacroGoal:
+        return meal_macro_goal(3.0, 276.0, day_protein_g=23.0, day_kcal=1380.0)
+
+    def test_without_the_goals_the_split_is_not_judged(self) -> None:
+        result = solve(
+            list(self.PRODUCTS), Targets(ratio=3.0, kcal=276.0, per_ingredient_bounds=self.BOUNDS)
+        )
+        assert result.macro_fit is None
+
+    def test_protein_and_net_carbs_reach_the_goal(self) -> None:
+        goal = self._goal()
+        result = solve(
+            list(self.PRODUCTS),
+            Targets(
+                ratio=3.0,
+                kcal=276.0,
+                per_ingredient_bounds=self.BOUNDS,
+                protein_g=goal.protein_g,
+                net_carbs_g=goal.net_carbs_g,
+            ),
+        )
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
+        assert result.macro_fit is not None and result.macro_fit.within_tolerance
+        assert result.dish.protein_g == pytest.approx(4.6, abs=0.5)
+        assert result.dish.net_carbs_g == pytest.approx(4.3, abs=0.5)
+
+    def test_goals_out_of_reach_are_reported_not_refused(self) -> None:
+        """Egg and butter hold no carbs to speak of: the ratio and calories
+        still come out, and the result says how far the split is."""
+        goal = self._goal()
+        result = solve(
+            [self.EGG, self.BUTTER],
+            Targets(ratio=3.0, kcal=276.0, protein_g=goal.protein_g, net_carbs_g=goal.net_carbs_g),
+        )
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
+        fit = result.macro_fit
+        assert fit is not None and not fit.within_tolerance
+        assert fit.protein_delta_g is not None and fit.protein_delta_g > 1.0
+        assert fit.net_carbs_delta_g is not None and fit.net_carbs_delta_g < -1.0
+
+    def test_goals_never_break_the_minimum_or_the_limit(self) -> None:
+        goal = self._goal()
+        result = solve(
+            list(self.PRODUCTS),
+            Targets(
+                ratio=3.0,
+                kcal=276.0,
+                protein_min_g=6.0,
+                carbs_max_g=3.0,
+                per_ingredient_bounds=self.BOUNDS,
+                protein_g=goal.protein_g,
+                net_carbs_g=goal.net_carbs_g,
+            ),
+        )
+        assert result.dish.protein_g >= 6.0
+        assert result.dish.carbs_g <= 3.0
+
+
+class TestSolveStaysNearTheEnteredDish:
+    """Of the dishes that reach the goals, the one that moves the fewest grams."""
+
+    PRODUCTS = TestSolveAimsAtTheMealSplit.PRODUCTS
+    ENTERED = TestSolveAimsAtTheMealSplit.ENTERED
+    BOUNDS = TestSolveAimsAtTheMealSplit.BOUNDS
+
+    def _targets(self, **extra: object) -> Targets:
+        goal = meal_macro_goal(3.0, 276.0, day_protein_g=23.0, day_kcal=1380.0)
+        return Targets(
+            ratio=3.0,
+            kcal=276.0,
+            per_ingredient_bounds=self.BOUNDS,
+            protein_g=goal.protein_g,
+            net_carbs_g=goal.net_carbs_g,
+            **extra,  # type: ignore[arg-type]
+        )
+
+    @staticmethod
+    def _moved(result: SolveResult, entered: dict[str, float]) -> float:
+        grams = {item.ingredient.product_id: item.grams for item in result.dish.items}
+        return sum(abs(grams.get(name, 0.0) - mass) for name, mass in entered.items())
+
+    def test_the_dish_moves_less_and_still_reaches_the_goals(self) -> None:
+        anywhere = solve(list(self.PRODUCTS), self._targets())
+        near = solve(list(self.PRODUCTS), self._targets(near_grams=self.ENTERED))
+
+        assert near.macro_fit is not None and near.macro_fit.within_tolerance
+        assert near.ratio_within_tolerance and near.kcal_within_tolerance
+        assert self._moved(near, self.ENTERED) < self._moved(anywhere, self.ENTERED)
+
+    def test_a_dish_already_on_target_is_left_alone(self) -> None:
+        first = solve(list(self.PRODUCTS), self._targets(near_grams=self.ENTERED))
+        grams = {item.ingredient.product_id: item.grams for item in first.dish.items}
+        again = solve(list(self.PRODUCTS), self._targets(near_grams=grams))
+        assert self._moved(again, grams) <= 4.0
+
+    def test_masses_of_products_not_in_the_dish_are_ignored(self) -> None:
+        result = solve(list(self.PRODUCTS), self._targets(near_grams={"not-here": 40.0}))
+        assert result.macro_fit is not None and result.macro_fit.within_tolerance
+
+    def test_a_failed_second_pass_keeps_the_first_answer(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The second pass only chooses between dishes that already reach the
+        goals: if it comes back empty, the first pass still stands."""
+        real = engine_module._build_and_solve
+
+        def first_pass_only(*args: object, **kwargs: object) -> object:
+            if kwargs.get("goal_budget") is not None:
+                return OptimizeResult(success=False)
+            return real(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(engine_module, "_build_and_solve", first_pass_only)
+        result = solve(list(self.PRODUCTS), self._targets(near_grams=self.ENTERED))
+        assert result.macro_fit is not None and result.macro_fit.within_tolerance

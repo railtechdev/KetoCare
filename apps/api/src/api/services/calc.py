@@ -14,7 +14,9 @@ from keto_engine import (
     ENGINE_VERSION,
     DishResult,
     Ingredient,
+    MacroFit,
     MealMacroGoal,
+    SolveResult,
     Targets,
     dietary_unit_kcal,
     meal_macro_goal,
@@ -27,6 +29,7 @@ from ..schemas_calc import (
     IngredientIn,
     ItemIn,
     ItemOut,
+    MacroFitOut,
     MealGoalOut,
     PrescriptionGoalRequest,
     PrescriptionGoalResponse,
@@ -134,7 +137,9 @@ def near_current(
 ) -> Targets | None:
     """Targets that keep the solver near the masses in the form, if any are known.
 
-    Products with a bound from the caller (pins) keep it and do not scale.
+    Products with a bound from the caller (pins) keep it and do not scale. The
+    scaled masses also go into `near_grams`: inside the corridor, and later
+    outside it, the solver moves as few grams as the goals allow.
     """
 
     if not current_grams:
@@ -166,7 +171,11 @@ def near_current(
     factor = remaining / free_kcal
     bounds = dict(keeping_all.per_ingredient_bounds or {})
     bounds.update({ingredient.product_id: near_grams(grams, factor) for ingredient, grams in free})
-    return replace(keeping_all, per_ingredient_bounds=bounds)
+    return replace(
+        keeping_all,
+        per_ingredient_bounds=bounds,
+        near_grams={ingredient.product_id: grams * factor for ingredient, grams in free},
+    )
 
 
 def _pinned_items(
@@ -226,15 +235,70 @@ def _goal_out(goal: MealMacroGoal) -> MealGoalOut:
     )
 
 
-def to_meal_goal(targets: TargetsIn, prescription: Prescription | None) -> MealGoalOut:
-    return _goal_out(
-        meal_macro_goal(
-            targets.ratio,
-            targets.kcal,
-            day_protein_g=None if prescription is None else float(prescription.protein_g),
-            day_kcal=None if prescription is None else float(prescription.kcal_per_day),
-        )
+def meal_goal(ratio: float, kcal: float, prescription: Prescription | None) -> MealMacroGoal:
+    """The goal of one meal at this ratio and these calories.
+
+    One function for what the screen shows as the goal, what the solver aims at
+    and what the verdict is measured against: three readers of one number.
+    """
+
+    return meal_macro_goal(
+        ratio,
+        kcal,
+        day_protein_g=None if prescription is None else float(prescription.protein_g),
+        day_kcal=None if prescription is None else float(prescription.kcal_per_day),
     )
+
+
+def to_meal_goal(targets: TargetsIn, prescription: Prescription | None) -> MealGoalOut:
+    return _goal_out(meal_goal(targets.ratio, targets.kcal, prescription))
+
+
+def aiming_at(targets: Targets, goal: MealMacroGoal) -> Targets:
+    """Targets that also aim at the goal's protein and net carbs (ADR-0083)."""
+
+    return replace(targets, protein_g=goal.protein_g, net_carbs_g=goal.net_carbs_g)
+
+
+def to_macro_fit(fit: MacroFit | None) -> MacroFitOut | None:
+    if fit is None:
+        return None
+    return MacroFitOut(
+        protein_delta_g=fit.protein_delta_g,
+        net_carbs_delta_g=fit.net_carbs_delta_g,
+        within_tolerance=fit.within_tolerance,
+    )
+
+
+def reaches_the_split(result: SolveResult) -> bool:
+    """The dish has no protein and carbs goal, or it is within tolerance of it."""
+
+    return result.macro_fit is None or result.macro_fit.within_tolerance
+
+
+def closer_to_the_split(candidate: SolveResult, current: SolveResult) -> bool:
+    """`candidate` is nearer the protein and carbs goal than `current`.
+
+    Decides whether leaving the corridor around the entered masses was worth
+    it: a dish reshaped for no gain is only a dish the person did not ask for.
+    """
+
+    def miss(result: SolveResult) -> float:
+        fit = result.macro_fit
+        if fit is None:
+            return 0.0
+        return sum(
+            abs(delta)
+            for delta in (fit.protein_delta_g, fit.net_carbs_delta_g)
+            if delta is not None
+        )
+
+    return reaches_the_split(candidate) or miss(candidate) < miss(current) - _SPLIT_GAIN_G
+
+
+#: Grams of protein and carbs a reshaped dish must win to be preferred. Below
+#: the precision the screen prints, so it only stops ties and rounding noise.
+_SPLIT_GAIN_G = 0.05
 
 
 def to_prescription_goal(raw: PrescriptionGoalRequest) -> PrescriptionGoalResponse:

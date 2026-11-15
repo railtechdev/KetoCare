@@ -149,3 +149,55 @@ def test_solve_result_within_tolerance_when_feasible(
     assert dish.ratio is not None
     assert abs(dish.ratio - ratio) <= RATIO_TOLERANCE
     assert abs(dish.kcal - kcal_target) <= kcal_target * KCAL_TOLERANCE_FRACTION
+
+
+@given(
+    fat=st.floats(min_value=50.0, max_value=100.0, allow_nan=False),
+    protein=st.floats(min_value=0.0, max_value=30.0, allow_nan=False),
+    carbs=st.floats(min_value=0.0, max_value=20.0, allow_nan=False),
+    ratio=st.sampled_from([2.0, 2.5, 3.0, 3.5, 4.0]),
+    kcal_target=st.floats(min_value=200.0, max_value=1200.0, allow_nan=False),
+    protein_goal=st.floats(min_value=0.0, max_value=60.0, allow_nan=False),
+    carbs_goal=st.floats(min_value=0.0, max_value=60.0, allow_nan=False),
+    entered=st.lists(_grams, min_size=3, max_size=3),
+)
+@settings(max_examples=60)
+def test_meal_goals_and_entered_masses_never_cost_the_tolerances(
+    fat: float,
+    protein: float,
+    carbs: float,
+    ratio: float,
+    kcal_target: float,
+    protein_goal: float,
+    carbs_goal: float,
+    entered: list[float],
+) -> None:
+    """The split of the meal and the entered masses are preferences: whatever
+    they are, a solved dish holds the ratio and the calories (ADR-0083)."""
+    products = [
+        Ingredient("fat_source", kcal=fat * 9, fat=fat, protein=0.0, carbs=0.0),
+        Ingredient(
+            "lean_source", kcal=(protein + 1.0) * 4, fat=0.0, protein=protein + 1.0, carbs=0.0
+        ),
+        Ingredient("carb_source", kcal=(carbs + 1.0) * 4, fat=0.0, protein=0.0, carbs=carbs + 1.0),
+    ]
+    targets = Targets(
+        ratio=ratio,
+        kcal=kcal_target,
+        protein_g=protein_goal,
+        net_carbs_g=carbs_goal,
+        near_grams={
+            product.product_id: grams for product, grams in zip(products, entered, strict=True)
+        },
+    )
+
+    try:
+        result = solve(products, targets)
+    except InfeasibleError:
+        return
+
+    dish = verify([(item.ingredient, item.grams) for item in result.dish.items])
+    assert dish.ratio is not None
+    assert abs(dish.ratio - ratio) <= RATIO_TOLERANCE
+    assert abs(dish.kcal - kcal_target) <= kcal_target * KCAL_TOLERANCE_FRACTION
+    assert result.macro_fit is not None

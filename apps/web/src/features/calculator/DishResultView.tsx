@@ -4,7 +4,9 @@ import {
   cn,
   formatGrams,
   formatKcal,
+  macroSplitParts,
 } from "@ketocare/ui";
+import type { MacroFit } from "@ketocare/ui";
 import type { components } from "@ketocare/api-client";
 import { useTranslation } from "react-i18next";
 
@@ -38,6 +40,11 @@ interface Props {
   kcalWithinTolerance?: boolean;
   /** Grams one meal should contain, from the server; `null` without a goal. */
   mealGoal?: MealGoal | null;
+  /**
+   * Сошлись ли белок и углеводы с целью приёма — от сервера. `null` — у цели
+   * такой раскладки нет (нет ребёнка или назначения), и судить не о чем.
+   */
+  macroFit?: MacroFit | null;
 }
 
 /**
@@ -55,6 +62,7 @@ export function DishResultView({
   ratioWithinTolerance,
   kcalWithinTolerance,
   mealGoal = null,
+  macroFit = null,
 }: Props) {
   const { t } = useTranslation("calculator");
 
@@ -72,9 +80,20 @@ export function DishResultView({
     ratioWithinTolerance === undefined ||
     kcalWithinTolerance === undefined
       ? null
-      : ratioWithinTolerance && kcalWithinTolerance
-        ? "within"
-        : "off";
+      : !(ratioWithinTolerance && kcalWithinTolerance)
+        ? "off"
+        : macroFit !== null && !macroFit.within_tolerance
+          ? "split"
+          : "within";
+
+  // «Цель достигнута» под блюдом с двойным белком и без углеводов — ровно то,
+  // на что пожаловалась диетолог 15.11.2026: соотношение и калорийность
+  // раскладку не задают, и о ней экран говорит отдельно, с числами (ADR-0083).
+  const splitParts = macroSplitParts(macroFit)
+    .map((part) =>
+      t(`result.splitParts.${part.key}`, { value: formatGrams(part.grams) }),
+    )
+    .join(", ");
 
   return (
     <div className="flex flex-col gap-section">
@@ -119,7 +138,9 @@ export function DishResultView({
             verdict === "within" ? "text-success" : "text-warning-strong",
           )}
         >
-          {t(verdict === "within" ? "result.within" : "result.off")}
+          {verdict === "split"
+            ? t("result.split", { parts: splitParts })
+            : t(verdict === "within" ? "result.within" : "result.off")}
         </p>
       )}
 

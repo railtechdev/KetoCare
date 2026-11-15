@@ -17,7 +17,7 @@ from keto_engine import InfeasibleError, SolveResult, Targets, solve, verify
 from keto_engine.constants import DEFAULT_MAX_INGREDIENT_GRAMS, MIN_INGREDIENT_GRAMS
 
 from . import composition as composition_service
-from .calc import near_grams
+from .calc import aiming_at, closer_to_the_split, meal_goal, near_grams, reaches_the_split
 
 
 def meal_targets(prescription: Prescription) -> Targets:
@@ -25,13 +25,15 @@ def meal_targets(prescription: Prescription) -> Targets:
 
     The daily carbohydrate limit bounds a single meal as it stands: how it is
     shared between meals is not decided (question 55), but no meal may exceed
-    the whole day's limit.
+    the whole day's limit. The meal's protein and net carbs are aimed at, the
+    same goal the calculator shows and solves for (ADR-0083).
     """
 
-    return Targets(
-        ratio=float(prescription.ratio),
-        kcal=round(float(prescription.kcal_per_day) / prescription.meals_per_day),
-        carbs_max_g=float(prescription.carbs_limit_g),
+    ratio = float(prescription.ratio)
+    kcal = round(float(prescription.kcal_per_day) / prescription.meals_per_day)
+    return aiming_at(
+        Targets(ratio=ratio, kcal=kcal, carbs_max_g=float(prescription.carbs_limit_g)),
+        meal_goal(ratio, kcal, prescription),
     )
 
 
@@ -74,15 +76,25 @@ async def fit_composition(
         for ingredient in ingredients
     }
 
+    # Scaled to one meal, the recipe is what the fit stays close to: inside
+    # the corridor and, when the corridor cannot reach the goal, outside it.
+    targets = replace(
+        targets,
+        near_grams={ingredient.product_id: grams * factor for ingredient, grams in counted},
+    )
+
+    nearby: SolveResult | None = None
     try:
-        solved = await run_in_threadpool(
+        nearby = await run_in_threadpool(
             solve,
             ingredients,
             replace(targets, per_ingredient_bounds=near),
         )
-        return Fit(result=solved, reshaped=False, factor=factor), uncounted
     except InfeasibleError:
         pass
+    else:
+        if reaches_the_split(nearby):
+            return Fit(result=nearby, reshaped=False, factor=factor), uncounted
 
     try:
         solved = await run_in_threadpool(
@@ -91,5 +103,11 @@ async def fit_composition(
             replace(targets, per_ingredient_bounds=anywhere),
         )
     except InfeasibleError as exc:
+        if nearby is not None:
+            return Fit(result=nearby, reshaped=False, factor=factor), uncounted
         return FitFailure(exc.reason), uncounted
+    # The corridor held the ratio and the calories but not the protein and
+    # carbs of the meal: proportions change only if that gets the dish closer.
+    if nearby is not None and not closer_to_the_split(solved, nearby):
+        return Fit(result=nearby, reshaped=False, factor=factor), uncounted
     return Fit(result=solved, reshaped=True, factor=factor), uncounted

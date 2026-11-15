@@ -29,6 +29,19 @@ class Targets:
     #: намеренно считаются по-разному, см. `constants`.
     carbs_max_g: float | None = None
     per_ingredient_bounds: dict[str, tuple[float, float | None]] | None = None
+    #: Protein and net carbs the dish should come to: the meal's goal from
+    #: `meal_macro_goal()`. Goals, not bounds: the solver gets as close as the
+    #: products allow and never refuses because of them. Without them the split
+    #: of protein against carbs is whatever satisfies the ratio, which is how a
+    #: meal came out with twice the protein and a fifth of the carbs (ADR-0083).
+    protein_g: float | None = None
+    net_carbs_g: float | None = None
+    #: Masses to stay close to, by product: the composition the person entered.
+    #: A preference far weaker than any goal: of the compositions that reach the
+    #: goals equally well the solver returns the one that moves the fewest
+    #: grams. Without it the answer is a corner of the feasible region, and a
+    #: dish adjusted by hand jumped to different products' bounds on each run.
+    near_grams: dict[str, float] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,12 +86,29 @@ class DishResult:
 
 
 @dataclass(frozen=True, slots=True)
+class MacroFit:
+    """A dish against the protein and net carbs goals of its meal.
+
+    The deltas are fact minus goal, in grams: positive is more than the goal.
+    A delta is `None` when that goal was not given.
+    """
+
+    protein_delta_g: float | None
+    net_carbs_delta_g: float | None
+    #: Every given goal is met within `constants.MEAL_MACRO_TOLERANCE_G`.
+    within_tolerance: bool
+
+
+@dataclass(frozen=True, slots=True)
 class SolveResult:
     """Результат подбора масс ингредиентов под цели."""
 
     dish: DishResult
     ratio_within_tolerance: bool
     kcal_within_tolerance: bool
+    #: How the dish sits against the protein and net carbs goals; `None` when
+    #: the targets carried neither.
+    macro_fit: MacroFit | None = None
 
 
 class InfeasibleError(Exception):

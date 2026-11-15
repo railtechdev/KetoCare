@@ -182,6 +182,14 @@ export function useSolve(patientId: string) {
           patient_id: patientId,
           ingredients: input.rows.map(ingredientOf),
           targets: targetsBody(input.targets),
+          // Набранные массы: с ними подбор остаётся рядом с составом, который
+          // собрал человек, а не уходит к границам масс (ADR-0083). Пустые и
+          // непригодные поля не посылаются — держаться там не за что.
+          current_grams: Object.fromEntries(
+            input.rows
+              .map((row) => [row.product.id, parseAmount(row.grams)] as const)
+              .filter(([, grams]) => grams > 0 && !exceedsCalcGrams(grams)),
+          ),
         },
       });
       if (error || !data) throw error ?? new Error("Empty solve response");
