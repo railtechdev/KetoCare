@@ -95,6 +95,7 @@ function overview(mealsPerDay: number | null = 4, day: unknown = null) {
             meals_per_day: mealsPerDay,
             kcal_per_day: 1200,
             carbs_limit_g: 12,
+            protein_g: 23,
             ratio: 3.5,
           },
     day,
@@ -902,6 +903,10 @@ describe("итоги дня рядом с целями назначения", ()
 
     expect(await screen.findByText("1 200 из 1 200 ккал")).toBeInTheDocument();
     expect(screen.getByText("10,0 из 12,0 г")).toBeInTheDocument();
+    // Белок назначения — минимум, как в кабинете (М1 аудита ядра).
+    expect(screen.getByText("Белок, не меньше")).toBeInTheDocument();
+    expect(screen.getByText("24,0 из 23,0 г")).toBeInTheDocument();
+    expect(screen.getByText("норма назначения набрана")).toBeInTheDocument();
     // Соотношение — значком кита. Вердикт о допуске — отдельным блоком ниже,
     // правилом кита (`dayVerdict`), общим с кабинетом.
     expect(screen.getByText(/3\.5/)).toBeInTheDocument();

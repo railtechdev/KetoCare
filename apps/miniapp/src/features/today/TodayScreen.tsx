@@ -167,6 +167,7 @@ function TodaySummary({
                     : {
                         kcalPerDay: overview.data.prescription.kcal_per_day,
                         carbsLimitG: overview.data.prescription.carbs_limit_g,
+                        proteinG: overview.data.prescription.protein_g,
                       }
                 }
                 verdict={{

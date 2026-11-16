@@ -5,6 +5,7 @@ export { SEARCH_DELAY_MS } from "./lib/searchTiming";
 export { useDebouncedValue } from "./lib/useDebouncedValue";
 export {
   RATIO_CHOICES,
+  RATIO_LONG_TERM_MAX,
   RATIO_MAX,
   RATIO_MIN,
   RATIO_STEP,

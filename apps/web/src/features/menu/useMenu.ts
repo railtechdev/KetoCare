@@ -475,6 +475,8 @@ export function useDayTolerance(
 export interface DayTargets {
   kcalPerDay: number;
   carbsLimitG: number;
+  /** Белок назначения на сутки — нижняя граница */
+  proteinG: number;
   /**
    * Сколько приёмов пищи в день назначил врач.
    *
@@ -541,6 +543,7 @@ export function useDayTargets(
   return {
     kcalPerDay: prescription.kcal_per_day,
     carbsLimitG: prescription.carbs_limit_g,
+    proteinG: prescription.protein_g,
     mealsPerDay: prescription.meals_per_day,
   };
 }

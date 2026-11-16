@@ -175,6 +175,8 @@
 
 | Где | Решение | Источник |
 | --- | ------- | -------- |
+| `packages/ui/src/lib/ratioChoices.ts` (`RATIO_LONG_TERM_MAX`, `TODO(med)`), `PrescriptionForm.tsx` (`prescription.ratioHigh`) | выше 4,5 : 1 — пояснение под полем соотношения, не запрет; на подпись клинике — часть 3, строка 16 (ADR-0087) | Kossoff et al., Epilepsia Open 2018 |
+| `DayTargetBars.tsx`, Mini App `DayTotals.tsx` (`TargetBar kind="minimum"`), подписи `fields.protein*` | белок назначения — нижняя граница, полоса недобора в итогах дня, вердикта нет; часть 3, строка 15 (ADR-0087) | van der Louw 2016; Kossoff 2018 |
 | `infra/scripts/seed_e2e.py` (`MIN_TOTP_CHARS`) | секрет второго фактора у сида прогонов — не короче 26 символов base32 (128 бит) и только из алфавита `A-Z2-7`; умолчание длиной 32 символа — это рекомендованные 160 бит | RFC 4226 §4: «shared secret … at least 128 bits, 160 bits RECOMMENDED»; алфавит — RFC 4648. Величина техническая: клиника про длину ключа не решает. Пароль там же меряется общим `MIN_PASSWORD_LENGTH` из `core.tools.db_guard` — парольной меркой секрет мерить нельзя, 12 символов base32 дают 60 бит |
 
 ## Правила работы с этим списком

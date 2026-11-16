@@ -15,6 +15,8 @@ import { DayVerdictNote } from "./DayVerdictNote";
 export interface DayTargets {
   kcalPerDay: number;
   carbsLimitG: number;
+  /** Белок назначения на сутки — нижняя граница («не меньше») */
+  proteinG: number;
 }
 
 /** Вердикт сервера за показанный день — или «день не сегодняшний». */
@@ -117,6 +119,29 @@ export function DayTotals({
                   })
             }
           />
+          {/* Белок — минимум, как в кабинете (аудит ядра, М1): один день
+              читается одинаково везде (П40). */}
+          {Number.isFinite(targets.proteinG) && (
+            <TargetBar
+              kind="minimum"
+              label={t("menu.targets.proteinLabel")}
+              value={totals.protein}
+              target={targets.proteinG}
+              valueText={t("menu.targets.proteinOfMin", {
+                value: formatGrams(totals.protein),
+                min: formatGrams(targets.proteinG),
+              })}
+              hint={
+                // До десятой, как печатает formatGrams: 22,96 из 23 — набрано,
+                // а не «ещё 0,0 г».
+                Math.round((targets.proteinG - totals.protein) * 10) > 0
+                  ? t("menu.targets.proteinLeft", {
+                      value: formatGrams(targets.proteinG - totals.protein),
+                    })
+                  : t("menu.targets.proteinReached")
+              }
+            />
+          )}
         </div>
       )}
 

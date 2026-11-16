@@ -96,6 +96,8 @@ export function DayTotalsPanel({
           carbs={totals.carbs}
           kcalTarget={targets.kcalPerDay}
           carbsLimit={targets.carbsLimitG}
+          protein={totals.protein}
+          proteinMin={targets.proteinG}
         />
       )}
 

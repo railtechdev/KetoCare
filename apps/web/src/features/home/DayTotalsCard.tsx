@@ -102,6 +102,8 @@ export function DayTotalsCard({
             carbs={totals.carbs}
             kcalTarget={targetKcal}
             carbsLimit={carbsLimit}
+            protein={totals.protein}
+            proteinMin={proteinTarget ?? undefined}
           />
         )}
 
