@@ -110,7 +110,7 @@ export function ProductForm({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, submitCount },
+    formState: { errors, submitCount, dirtyFields },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
     defaultValues,
@@ -122,19 +122,40 @@ export function ProductForm({
 
   const activeId = `${ids}-active`;
   const seasoningId = `${ids}-seasoning`;
+  const withoutFiberId = `${ids}-carbs-without-fiber`;
 
   // Проверка значений по мере ввода (ответ клиники на вопрос 1): предупреждение,
   // а не запрет — сохранить карточку можно и с ним, если источник так и пишет.
   // Поля — на 1 г (ADR-0065); проверки и формула Этуотера считают на 100 г,
   // как сервер и источники.
-  const [kcal, fat, protein, carbs, fiber] = watch(NUTRIENTS).map((value) =>
-    value === undefined || Number.isNaN(value) ? value : toPer100(value),
+  const [kcal, fat, protein, enteredCarbs, fiber] = watch(NUTRIENTS).map(
+    (value) =>
+      value === undefined || Number.isNaN(value) ? value : toPer100(value),
   ) as [number, number, number, number, number];
+  // Проверки и формула Этуотера — по тому, что уйдёт в справочник: углеводы
+  // вместе с клетчаткой (М5 аудита ядра).
+  //
+  // У карточки из справочника углеводы уже вместе с клетчаткой: отметка
+  // прибавила бы её второй раз. Поэтому она появляется только у нового
+  // продукта или когда углеводы вписаны заново — в том числе на месте
+  // прочерка источника, где иначе в углеводы ушла бы одна клетчатка.
+  const canMarkWithoutFiber = mode === "create" || dirtyFields.carbs === true;
+  const carbsWithoutFiber =
+    canMarkWithoutFiber && watch("carbsWithoutFiber") === true;
+  const bothKnown =
+    enteredCarbs !== undefined &&
+    !Number.isNaN(enteredCarbs) &&
+    fiber !== undefined &&
+    !Number.isNaN(fiber);
+  const carbs =
+    carbsWithoutFiber && bothKnown ? enteredCarbs + fiber : enteredCarbs;
   const per100: Record<Nutrient, number | undefined> = {
     kcal,
     fat,
     protein,
-    carbs,
+    // Под полем — введённое число на 100 г, а не итог с клетчаткой: подсказка
+    // ловит ошибку переноса из колонки «на 100 г».
+    carbs: enteredCarbs,
     fiber,
   };
   const check = useProductValuesCheck({ kcal, fat, protein, carbs, fiber });
@@ -228,7 +249,15 @@ export function ProductForm({
   return (
     <form
       noValidate
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={handleSubmit((values) =>
+        // Отметка, оставшаяся от вернувшегося к прежнему числа поля, не
+        // действует: клетчатка в карточке уже учтена.
+        onSubmit({
+          ...values,
+          carbsWithoutFiber:
+            canMarkWithoutFiber && values.carbsWithoutFiber === true,
+        }),
+      )}
       className="flex flex-col gap-screen"
     >
       <FormErrorSummary
@@ -343,6 +372,36 @@ export function ProductForm({
               </div>
             );
           })}
+          {canMarkWithoutFiber ? (
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor={withoutFiberId}
+                className="flex min-h-touch items-center gap-field text-sm font-medium"
+              >
+                <Checkbox
+                  id={withoutFiberId}
+                  aria-describedby={`${withoutFiberId}-hint`}
+                  {...register("carbsWithoutFiber")}
+                />
+                {t("products.form.carbsWithoutFiber")}
+              </label>
+              <p
+                id={`${withoutFiberId}-hint`}
+                className="m-0 text-sm text-muted-foreground"
+                aria-live="polite"
+              >
+                {carbsWithoutFiber && bothKnown
+                  ? t("products.form.carbsWithoutFiberTotal", {
+                      value: formatMass(carbs),
+                    })
+                  : t("products.form.carbsWithoutFiberHint")}
+              </p>
+            </div>
+          ) : (
+            <p className="m-0 text-sm text-muted-foreground">
+              {t("products.form.carbsStoredWithFiber")}
+            </p>
+          )}
           {/* Рядом с пищевой ценностью, а не в происхождении: отметка решает,
               пойдут ли эти числа в расчёт ребёнку (ADR-0054). */}
           <div className="flex flex-col gap-1">

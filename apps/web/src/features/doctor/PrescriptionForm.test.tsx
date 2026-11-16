@@ -104,6 +104,30 @@ describe("предпросмотр назначения в граммах", () =
 });
 
 describe("кетосоотношение в назначении", () => {
+  it("выше 4,5 : 1 предупреждает, но не запрещает (консенсус 2018, М9 аудита)", async () => {
+    const onSubmit = renderForm(vi.fn(), { ratio: 5 });
+    const ratio = screen.getByLabelText("Кетосоотношение");
+    expect(ratio).toHaveAccessibleDescription(
+      /выше 4\.5 : 1: .* не применяют дольше нескольких месяцев/,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Сохранить/ }));
+    await vi.waitFor(() => expect(onSubmit).toHaveBeenCalled());
+  });
+
+  it("на 4,5 : 1 и ниже не предупреждает", () => {
+    renderForm(vi.fn(), { ratio: 4.5 });
+    expect(
+      screen.getByLabelText("Кетосоотношение"),
+    ).not.toHaveAccessibleDescription(/нескольких месяцев/);
+  });
+
+  it("белок подписан как нижняя граница", () => {
+    renderForm();
+    expect(
+      screen.getByLabelText(/Белок не меньше, г в сутки/),
+    ).toBeInTheDocument();
+  });
+
   it("выбирается из списка и подписано как соотношение", async () => {
     // Врач мыслит «4 : 1», а поле показывало «4»: это класс ошибок, а не
     // косметика. Пометка заказчицы на снимке формы — «4:1 3:1».

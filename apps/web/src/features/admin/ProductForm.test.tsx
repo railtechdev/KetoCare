@@ -144,6 +144,108 @@ describe("карточка продукта: приправа (ADR-0054)", () =>
   });
 });
 
+describe("карточка продукта: углеводы с этикетки без клетчатки (М5 аудита ядра)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.POST as Mock).mockResolvedValue({ data: [] });
+  });
+
+  it("поле углеводов называет правило, отметка прибавляет клетчатку и говорит итог", async () => {
+    // Брокколи с этикетки: 3,2 г углеводов без клетчатки, клетчатка 2,4 г.
+    renderForm({
+      kcal: 0.34,
+      fat: 0.004,
+      protein: 0.028,
+      carbs: 0.05,
+      fiber: 0.024,
+    });
+    // Карточка открыта на правку: число с упаковки вписывается заново.
+    fireEvent.change(screen.getByLabelText(adminRu.products.form.carbs), {
+      target: { value: "0.032" },
+    });
+    const toggle = await screen.findByRole("checkbox", {
+      name: adminRu.products.form.carbsWithoutFiber,
+    });
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toHaveAccessibleDescription(
+      adminRu.products.form.carbsWithoutFiberHint,
+    );
+
+    fireEvent.click(toggle);
+    expect(
+      await screen.findByText(/уйдёт 5,6 г углеводов на 100 г/),
+    ).toBeInTheDocument();
+    // Проверка значений спрашивает сервер о том, что уйдёт в справочник.
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenLastCalledWith("/api/v1/products/check", {
+        body: expect.objectContaining({ carbs_100g: expect.closeTo(5.6, 5) }),
+      }),
+    );
+  });
+});
+
+describe("карточка продукта: отметка «без клетчатки» у карточки из справочника", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (api.POST as Mock).mockResolvedValue({ data: [] });
+  });
+
+  it("появляется, только когда углеводы вписаны заново", async () => {
+    // renderForm открывает карточку на правку: углеводы в ней уже с клетчаткой.
+    renderForm({
+      kcal: 0.34,
+      fat: 0.004,
+      protein: 0.028,
+      carbs: 0.056,
+      fiber: 0.024,
+    });
+    expect(
+      screen.queryByRole("checkbox", {
+        name: adminRu.products.form.carbsWithoutFiber,
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByText(adminRu.products.form.carbsStoredWithFiber),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(adminRu.products.form.carbs), {
+      target: { value: "0.032" },
+    });
+    expect(
+      await screen.findByRole("checkbox", {
+        name: adminRu.products.form.carbsWithoutFiber,
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+  });
+
+  it("без клетчатки итога не называет", async () => {
+    renderForm({
+      kcal: 0.34,
+      fat: 0.004,
+      protein: 0.028,
+      carbs: 0.056,
+      fiber: 0.024,
+    });
+    fireEvent.change(screen.getByLabelText(adminRu.products.form.carbs), {
+      target: { value: "0.032" },
+    });
+    fireEvent.change(screen.getByLabelText(adminRu.products.form.fiber), {
+      target: { value: "" },
+    });
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: adminRu.products.form.carbsWithoutFiber,
+      }),
+    );
+    expect(
+      screen.getByText(adminRu.products.form.carbsWithoutFiberHint),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/уйдёт .* углеводов/)).toBeNull();
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+  });
+});
+
 describe("карточка продукта: контроль калорийности по формуле Этуотера", () => {
   beforeEach(() => {
     vi.clearAllMocks();

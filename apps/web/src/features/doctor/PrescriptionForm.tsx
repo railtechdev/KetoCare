@@ -4,7 +4,13 @@ import { useEffect, useId, useState } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
-import { Button, FormFooter, formatMass, formatRatio } from "@ketocare/ui";
+import {
+  Button,
+  FormFooter,
+  RATIO_LONG_TERM_MAX,
+  formatMass,
+  formatRatio,
+} from "@ketocare/ui";
 
 import { Field, SelectField, TextAreaField } from "../../components/Field";
 import {
@@ -265,6 +271,13 @@ export function PrescriptionForm({
           width="narrow"
           label={t("fields.ratio")}
           error={errors.ratio && t("prescription.errors.ratio")}
+          hint={
+            ratioValue > RATIO_LONG_TERM_MAX
+              ? t("prescription.ratioHigh", {
+                  max: formatRatio(RATIO_LONG_TERM_MAX),
+                })
+              : undefined
+          }
           {...register("ratio", { valueAsNumber: true })}
         >
           {/* Пустой вариант первым: без него браузер выбирал первый из

@@ -143,7 +143,11 @@
       "carbsLabel": "Uglevodlar",
       "carbsOfLimit": "{{value}} / {{limit}} g",
       "carbsLeft": "{{value}} g qoldi",
-      "carbsOver": "chegaradan {{value}} g ortiq"
+      "carbsOver": "chegaradan {{value}} g ortiq",
+      "proteinLabel": "Oqsil, kamida",
+      "proteinOfMin": "{{value}} / {{min}} g",
+      "proteinLeft": "tayinlangan me’yorgacha yana {{value}} g",
+      "proteinReached": "tayinlangan me’yor to‘ldi"
     },
     "tomorrowNoEaten": "«Yedi» belgisini bola ovqatlangan kuni qo‘yish mumkin.",
     "backToToday": "Bugun",

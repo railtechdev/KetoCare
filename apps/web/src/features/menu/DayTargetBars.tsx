@@ -9,6 +9,9 @@ interface Props {
   kcalTarget: number;
   /** Лимит углеводов назначения */
   carbsLimit: number;
+  /** Набрано белка за день и белок назначения — нижняя граница, «не меньше» */
+  protein?: number;
+  proteinMin?: number;
 }
 
 /**
@@ -24,7 +27,14 @@ interface Props {
  * Знак разницы решает только формулировку подсказки: превышение — не вердикт о
  * соответствии назначению, его выносит сервер (`dayVerdict` кита).
  */
-export function DayTargetBars({ kcal, carbs, kcalTarget, carbsLimit }: Props) {
+export function DayTargetBars({
+  kcal,
+  carbs,
+  kcalTarget,
+  carbsLimit,
+  protein,
+  proteinMin,
+}: Props) {
   const { t } = useTranslation("menu");
 
   const kcalLeft = kcalTarget - kcal;
@@ -62,6 +72,30 @@ export function DayTargetBars({ kcal, carbs, kcalTarget, carbsLimit }: Props) {
             : t("totals.carbsOver", { value: formatGrams(-carbsLeft) })
         }
       />
+      {/* Белок назначения — минимум, а не цель (аудит ядра 15.11.2026, М1):
+          минус грамм на каждом приёме «в цели» за день складывается в пять.
+          Вердикта по нему сервер не выносит, полоса только показывает. */}
+      {protein !== undefined && proteinMin !== undefined && (
+        <TargetBar
+          kind="minimum"
+          label={t("totals.proteinLabel")}
+          value={protein}
+          target={proteinMin}
+          valueText={t("totals.proteinOfMin", {
+            value: formatGrams(protein),
+            min: formatGrams(proteinMin),
+          })}
+          hint={
+            // Сравнивается то, что будет напечатано: 22,96 из 23 — не
+            // «ещё 0,0 г», а набрано.
+            Math.round((proteinMin - protein) * 10) > 0
+              ? t("totals.proteinLeft", {
+                  value: formatGrams(proteinMin - protein),
+                })
+              : t("totals.proteinReached")
+          }
+        />
+      )}
     </div>
   );
 }

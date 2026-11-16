@@ -201,6 +201,8 @@ function OverviewPanels({
                     carbs={day.totals.carbs}
                     kcalTarget={prescription.kcal_per_day}
                     carbsLimit={prescription.carbs_limit_g}
+                    protein={day.totals.protein}
+                    proteinMin={prescription.protein_g}
                   />
                 )}
 

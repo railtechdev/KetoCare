@@ -25,6 +25,7 @@ const VALID: ProductFormValues = {
   verifiedAt: "2026-03-01",
   isActive: true,
   seasoning: false,
+  carbsWithoutFiber: false,
   confirmed: {
     kcal: false,
     fat: false,
@@ -192,5 +193,43 @@ describe("toProductFormValues", () => {
     // Форма спрашивает «это приправа?» — обратное `counts_in_calculation`.
     expect(values.seasoning).toBe(true);
     expect(productFormSchema.safeParse(values).success).toBe(true);
+  });
+});
+
+describe("углеводы с этикетки без клетчатки (М5 аудита ядра)", () => {
+  // Брокколи с этикетки: углеводы 3,2 г без клетчатки и клетчатка 2,4 г на 100 г.
+  const broccoli = { ...VALID, carbs: 0.032, fiber: 0.024 };
+
+  it("без отметки углеводы уходят как введены — уже вместе с клетчаткой", () => {
+    expect(toProductCreateBody(broccoli).carbs_100g).toBeCloseTo(3.2);
+  });
+
+  it("с отметкой клетчатка прибавляется: справочник хранит углеводы с ней", () => {
+    const body = toProductCreateBody({ ...broccoli, carbsWithoutFiber: true });
+    expect(body.carbs_100g).toBeCloseTo(5.6);
+    expect(body.fiber_100g).toBeCloseTo(2.4);
+    expect(body).not.toHaveProperty("carbsWithoutFiber");
+  });
+
+  it("карточка из справочника открывается без отметки", () => {
+    expect(
+      toProductFormValues({
+        ...({} as Product),
+        name_ru: "Брокколи",
+        name_uz: null,
+        name_en: null,
+        category_id: VALID.categoryId,
+        kcal_100g: 34,
+        fat_100g: 0.4,
+        protein_100g: 2.8,
+        carbs_100g: 5.6,
+        fiber_100g: 2.4,
+        source: "Этикетка",
+        source_version: "2026",
+        verified_at: "2026-11-16",
+        is_active: true,
+        counts_in_calculation: true,
+      }).carbsWithoutFiber,
+    ).toBe(false);
   });
 });

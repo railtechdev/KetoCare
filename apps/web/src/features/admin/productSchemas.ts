@@ -62,6 +62,15 @@ export const productFormSchema = z.object({
    */
   seasoning: z.boolean(),
   /**
+   * Углеводы в поле записаны без клетчатки — как на большинстве этикеток ЕС и
+   * СНГ (аудит ядра 15.11.2026, М5). Справочник хранит углеводы ВМЕСТЕ с
+   * клетчаткой, и ядро вычитает её само (ADR-0030); без отметки клетчатка
+   * этикетки вычлась бы второй раз, а соотношение блюда завысилось бы.
+   * В тело запроса не идёт: при отметке клетчатка прибавляется к углеводам.
+   */
+  // Необязательна: формы, собранные до отметки, её не передают — тогда «нет».
+  carbsWithoutFiber: z.boolean().optional(),
+  /**
    * Поля с прочерком источника (ADR-0067), число в которых человек
    * подтвердил как есть. Без отметки настоящий ноль на месте прочерка не
    * отличить от «нет данных»: пометка снимается только сменой числа.
@@ -116,8 +125,21 @@ export const EMPTY_PRODUCT_FORM_VALUES: DefaultValues<ProductFormValues> = {
   // Какие продукты приправы, решает тот, кто заводит карточку: по умолчанию
   // продукт считается.
   seasoning: false,
+  carbsWithoutFiber: false,
   confirmed: NO_CONFIRMED,
 };
+
+/**
+ * Углеводы в 1 г вместе с клетчаткой — так их хранит справочник. Если поле
+ * заполнено по этикетке без клетчатки, она прибавляется.
+ */
+export function totalCarbsPerGram(
+  carbs: number,
+  fiber: number,
+  carbsWithoutFiber: boolean | undefined,
+): number {
+  return carbsWithoutFiber === true ? carbs + fiber : carbs;
+}
 
 export function toProductFormValues(product: Product): ProductFormValues {
   return {
@@ -135,6 +157,8 @@ export function toProductFormValues(product: Product): ProductFormValues {
     verifiedAt: product.verified_at,
     isActive: product.is_active,
     seasoning: !product.counts_in_calculation,
+    // Хранится всегда с клетчаткой: так и показывается.
+    carbsWithoutFiber: false,
     confirmed: NO_CONFIRMED,
   };
 }
@@ -176,7 +200,9 @@ export function toProductCreateBody(
     kcal_100g: toPer100(values.kcal),
     fat_100g: toPer100(values.fat),
     protein_100g: toPer100(values.protein),
-    carbs_100g: toPer100(values.carbs),
+    carbs_100g: toPer100(
+      totalCarbsPerGram(values.carbs, values.fiber, values.carbsWithoutFiber),
+    ),
     fiber_100g: toPer100(values.fiber),
     source: values.source.trim(),
     source_version: values.sourceVersion.trim(),
