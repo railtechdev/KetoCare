@@ -207,12 +207,27 @@ class TestRoundingKeepsHardBounds:
         assert result.dish.protein_g >= 5.4
         assert result.ratio_within_tolerance and result.kcal_within_tolerance
 
-    def test_carbs_limit_kept_or_refused(self) -> None:
-        # No whole-gram dish of these three holds 0.9 g of carbs at 30 kcal: a
-        # refusal with the reason, not a dish over the limit handed back.
+    def test_carbs_limit_kept_on_the_half_gram_grid(self) -> None:
+        # Until 1.12.0 no whole-gram dish of these three held 0.9 g of carbs at
+        # 30 kcal, and the solver refused. At 0.5 g (question 62) the dish
+        # exists: 11.5 g cucumber and 3.5 g macadamia, 0.88 g of carbs.
         targets = Targets(ratio=3.0, kcal=30.0, carbs_max_g=0.9)
-        with pytest.raises(InfeasibleError, match="лимите 0.9 г"):
-            solve([self.CUCUMBER, self.APPLE, self.MACADAMIA], targets)
+        result = solve([self.CUCUMBER, self.APPLE, self.MACADAMIA], targets)
+        assert result.dish.carbs_g <= 0.9
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
+        assert all((item.grams * 2) % 1 == 0 for item in result.dish.items)
+
+    def test_carbs_limit_refused_in_whole_grams(self) -> None:
+        # From 150 kcal the grid is whole grams: no dish of these two holds
+        # 4.2 g of carbs at 3:1, and the refusal names the grid it searched.
+        targets = Targets(ratio=3.0, kcal=150.0, carbs_max_g=4.2)
+        with pytest.raises(InfeasibleError, match="В целых граммах .* лимите 4.2 г"):
+            solve([self.CUCUMBER, self.MACADAMIA], targets)
+
+    def test_carbs_limit_refusal_names_the_half_gram_grid(self) -> None:
+        targets = Targets(ratio=3.0, kcal=140.0, carbs_max_g=3.9)
+        with pytest.raises(InfeasibleError, match="С шагом 0,5 г .* лимите 3.9 г"):
+            solve([self.CUCUMBER, self.MACADAMIA], targets)
 
     def test_protein_minimum_kept_or_refused(self) -> None:
         targets = Targets(ratio=1.0, kcal=20.0, protein_min_g=0.4)
@@ -1489,3 +1504,47 @@ class TestSolvingOnesOwnAnswerChangesNothing:
     def test_engine_version_was_raised_with_this_behaviour(self) -> None:
         major, minor, _ = (int(part) for part in ENGINE_VERSION.split("."))
         assert (major, minor) >= (1, 10)
+
+
+class TestHalfGramStepForSmallMeals:
+    """Question 62, agreed on 2026-11-16: 0.5 g below 150 kcal, whole grams above."""
+
+    CUCUMBER = Ingredient("cucumber", kcal=0.0, fat=0.1, protein=0.7, carbs=3.6, fiber=0.5)
+    MACADAMIA = Ingredient("macadamia", kcal=0.0, fat=76.0, protein=7.8, carbs=13.4, fiber=8.0)
+
+    @pytest.mark.parametrize(
+        ("kcal", "step"), [(62.0, 0.5), (149.9, 0.5), (150.0, 1.0), (400.0, 1.0)]
+    )
+    def test_step_by_meal_size(self, kcal: float, step: float) -> None:
+        from keto_engine import gram_step
+
+        assert gram_step(kcal) == step
+
+    def test_the_dish_one_kcal_below_the_threshold_exists(self) -> None:
+        # At 150 kcal the same request is refused in whole grams (see
+        # TestRoundingKeepsHardBounds); at 149 kcal the half-gram grid holds it.
+        result = solve(
+            [self.CUCUMBER, self.MACADAMIA], Targets(ratio=3.0, kcal=149.0, carbs_max_g=4.2)
+        )
+        assert result.dish.carbs_g <= 4.2
+        assert result.ratio_within_tolerance and result.kcal_within_tolerance
+        grams = {item.ingredient.product_id: item.grams for item in result.dish.items}
+        assert any(value % 1 for value in grams.values())
+        assert all((value * 2) % 1 == 0 for value in grams.values())
+
+    def test_masses_of_an_ordinary_meal_stay_whole(self) -> None:
+        result = solve([self.CUCUMBER, self.MACADAMIA], Targets(ratio=3.0, kcal=300.0))
+        assert all(item.grams % 1 == 0 for item in result.dish.items)
+
+    def test_refine_keeps_a_half_gram_dish_of_a_small_meal(self) -> None:
+        targets = Targets(ratio=3.0, kcal=149.0, carbs_max_g=4.2)
+        solved = solve([self.CUCUMBER, self.MACADAMIA], targets)
+        entered = [(item.ingredient, item.grams) for item in solved.dish.items]
+        again = refine(entered, targets)
+        assert again is not None
+        assert [item.grams for item in again.dish.items] == [g for _, g in entered]
+
+    def test_refine_leaves_a_half_gram_dish_of_an_ordinary_meal_to_solve(self) -> None:
+        # From 150 kcal the grid is whole grams: 40.5 g is off it.
+        targets = Targets(ratio=3.0, kcal=300.0)
+        assert refine([(self.CUCUMBER, 40.5), (self.MACADAMIA, 30.0)], targets) is None

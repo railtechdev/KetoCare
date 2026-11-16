@@ -366,6 +366,24 @@ def fluid_requirement(weight_kg: float) -> float:
     return total
 
 
+def gram_step(meal_kcal: float) -> float:
+    """Step of the masses `solve()` and `refine()` work in for a meal of this size, g.
+
+    0.5 g below `SMALL_MEAL_KCAL`, whole grams from it (question 62): on a small
+    feed one gram of oil is a large share of the calories.
+    """
+
+    if meal_kcal < constants.SMALL_MEAL_KCAL:
+        return constants.SMALL_MEAL_GRAM_STEP
+    return float(constants.GRAM_ROUNDING)
+
+
+def _on_the_grid(step: float) -> str:
+    """How a refusal names the step it searched in."""
+
+    return "В целых граммах" if step == 1 else f"С шагом {_fmt_grams(step).replace('.', ',')} г"
+
+
 def meal_kcal(day_kcal: float, meals_per_day: int) -> float:
     """Calories of one meal when the day is split equally, in whole kilocalories.
 
@@ -504,10 +522,10 @@ def _build_and_solve(
     tolerance of the split where one inside it existed.
 
     `leave_rounding_room` keeps the exact solution away from the protein
-    minimum and the carbs limit by as much as rounding every mass to a whole
-    gram can move them. A solution that sits on the limit breaks it on half of
-    the roundings, and the products that carry the carbs are rarely the ones
-    the whole-gram search moves.
+    minimum and the carbs limit by as much as rounding every mass to the grid
+    of `gram_step()` can move them. A solution that sits on the limit breaks it
+    on half of the roundings, and the products that carry the carbs are rarely
+    the ones the grid search moves.
 
     `ratio_band` holds the ratio inside its tolerance instead of exactly on the
     target, and still prefers the exact ratio. The tolerance is how a dish is
@@ -616,7 +634,7 @@ def _build_and_solve(
         a_ub_rows.append(row(-kcal_coef))
         b_ub.append(-kcal_lo)
 
-    half_step = constants.GRAM_ROUNDING / 2 if leave_rounding_room else 0.0
+    half_step = gram_step(targets.kcal) / 2 if leave_rounding_room else 0.0
 
     if include_protein and targets.protein_min_g is not None:
         a_ub_rows.append(row(-protein_coef))
@@ -792,7 +810,7 @@ def _distance(dish: DishResult, ratio: float, targets: Targets) -> float:
 def _candidate_rank(
     grams: Sequence[float], ingredients: Sequence[Ingredient], targets: Targets
 ) -> tuple[bool, bool, bool, float] | None:
-    """Rank of a whole-gram composition, lower is better; `None` if it is not a dish.
+    """Rank of a composition on the grid of `gram_step()`, lower is better; `None` if it is not a dish.
 
     Not a dish: a mass outside its bounds, nothing left above the minimum mass,
     or no ratio at all. Everything else is ranked, in this order: no hard limit
@@ -881,9 +899,9 @@ def _free_by_influence(ingredients: Sequence[Ingredient], targets: Targets) -> l
 def _closest_whole_grams(
     grams: Sequence[float], ingredients: Sequence[Ingredient], targets: Targets
 ) -> list[float]:
-    """Подбирает целочисленные массы рядом с округлённым решением — ближайшие к целям.
+    """Подбирает массы на сетке `gram_step()` рядом с округлённым решением — ближайшие к целям.
 
-    LP решает задачу точно, но массы затем округляются до `GRAM_ROUNDING`, и на
+    LP решает задачу точно, но массы затем округляются до шага сетки, и на
     небольших приёмах пищи это сдвигает соотношение за допуск: при 4:1 и 200 ккал
     решение 23.26/16.53 г округляется в 23/17 г — соотношение 3.85 вместо 4.0,
     хотя рядом есть 24/17 (4.01), укладывающееся и в допуск, и в коридор
@@ -896,7 +914,7 @@ def _closest_whole_grams(
     грамм лежал у пятого.
     """
 
-    step = constants.GRAM_ROUNDING
+    step = gram_step(targets.kcal)
     base = list(grams)
     free = _free_by_influence(ingredients, targets)
     movable = [
@@ -949,9 +967,9 @@ def _closest_whole_grams(
 def _descend(
     grams: Sequence[float], ingredients: Sequence[Ingredient], targets: Targets
 ) -> list[float]:
-    """Идёт от состава по одному грамму, пока состав становится ближе к целям.
+    """Идёт от состава по одному шагу (`gram_step()`), пока состав становится ближе к целям.
 
-    Ход — грамм у одного свободного продукта либо грамм, переложенный между
+    Ход — шаг у одного свободного продукта либо шаг, переложенный между
     двумя. Каждый раз берётся лучший из всех ходов, и только если он строго
     лучше: спуск заканчивается в составе, который ни одним ходом не улучшить.
 
@@ -962,7 +980,7 @@ def _descend(
     руками, нажимала кнопку, и состав уезжал («сбивается», жалоба 15.11.2026).
     """
 
-    step = constants.GRAM_ROUNDING
+    step = gram_step(targets.kcal)
     free = _free_by_influence(ingredients, targets)
     paired = free[:_MAX_PAIR_INGREDIENTS]
     moves: list[tuple[tuple[int, float], ...]] = [
@@ -1011,7 +1029,7 @@ def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
     """Подбирает массы продуктов под цели. Бросает `InfeasibleError`, если задача неразрешима.
 
     Цели приёма и набранные массы (`protein_g`, `net_carbs_g`, `near_grams`) —
-    пожелания: если с ними подбор в целых граммах не сошёлся, он повторяется
+    пожелания: если с ними подбор на сетке граммов (`gram_step`) не сошёлся, он повторяется
     без них. Отказывает только задача, неразрешимая и без пожеланий: иначе
     «подойти ближе к цели» превращалось бы в отказ там, где блюдо есть.
 
@@ -1049,10 +1067,10 @@ def solve(ingredients: Sequence[Ingredient], targets: Targets) -> SolveResult:
 
 
 def refine(items: Sequence[tuple[Ingredient, float]], targets: Targets) -> SolveResult | None:
-    """The entered dish, moved gram by gram to the nearest dish that is closer to the targets.
+    """The entered dish, moved step by step (`gram_step`) to the nearest dish that is closer to the targets.
 
     `None` when the entered dish is not on target as it stands: a mass that is
-    not a whole number of grams or is outside its bounds, a hard limit broken,
+    off the grid of `gram_step()` or is outside its bounds, a hard limit broken,
     or the ratio, the calories or the split outside their tolerances. Such a
     dish is for `solve()`, which is free to change its proportions.
 
@@ -1061,7 +1079,7 @@ def refine(items: Sequence[tuple[Ingredient, float]], targets: Targets) -> Solve
     better, and the person who adjusted the grams by hand would see them move.
     """
 
-    step = constants.GRAM_ROUNDING
+    step = gram_step(targets.kcal)
     if not items or any(abs(grams / step - round(grams / step)) > 1e-9 for _, grams in items):
         return None
 
@@ -1102,7 +1120,7 @@ def _restored(grams: Sequence[float], order: Sequence[int]) -> list[float]:
 def _solve(
     ingredients: Sequence[Ingredient], targets: Targets, leave_rounding_room: bool
 ) -> list[float]:
-    """Whole-gram masses for the ingredients as given; raises when there is no dish."""
+    """Masses on the grid of `gram_step()` for the ingredients as given; raises when there is no dish."""
 
     def programme(**extra: float | bool | None) -> OptimizeResult:
         return _build_and_solve(
@@ -1147,7 +1165,7 @@ def _solve(
             result = nearest
 
     grams = result.x[: len(ingredients)]
-    rounding = constants.GRAM_ROUNDING
+    rounding = gram_step(targets.kcal)
     rounded = [float(g) for g in np.round(grams / rounding) * rounding]
 
     # Округление до грамма сдвигает и соотношение, и калорийность, и белок с
@@ -1199,17 +1217,17 @@ def _result(
         )
     # Белок и лимит углеводов — границы, а не допуски: флага для них у
     # результата нет, и блюдо за границей выглядело бы подобранным верно. Если
-    # в целых граммах их не удержать, это отказ с причиной, а не результат.
+    # на сетке граммов их не удержать, это отказ с причиной, а не результат.
     if targets.protein_min_g is not None and dish.protein_g < targets.protein_min_g - 1e-9:
         raise InfeasibleError(
-            f"В целых граммах не удаётся набрать белок {_fmt_grams(targets.protein_min_g)} г "
+            f"{_on_the_grid(gram_step(targets.kcal))} не удаётся набрать белок {_fmt_grams(targets.protein_min_g)} г "
             f"при соотношении {_fmt_ratio(targets.ratio)} и калорийности {targets.kcal:g} "
             f"ккал — ближайший состав даёт {_fmt_grams(dish.protein_g)} г. Добавьте "
             "белковый продукт или уменьшите цель по белку."
         )
     if targets.carbs_max_g is not None and dish.carbs_g > targets.carbs_max_g + 1e-9:
         raise InfeasibleError(
-            f"В целых граммах не удаётся удержать углеводы в лимите "
+            f"{_on_the_grid(gram_step(targets.kcal))} не удаётся удержать углеводы в лимите "
             f"{_fmt_grams(targets.carbs_max_g)} г при соотношении {_fmt_ratio(targets.ratio)} "
             f"и калорийности {targets.kcal:g} ккал — ближайший состав даёт "
             f"{_fmt_grams(dish.carbs_g)} г. Замените продукт с углеводами или увеличьте лимит."

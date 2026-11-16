@@ -178,8 +178,13 @@ export function CalculatorScreen({ session }: { session: Session }) {
       current.map((row) => {
         const next = grams.get(row.product.id);
         // Как есть, без своего округления: кабинет кладёт в поле то же число,
-        // а «21.8» вместо 21.75 — уже другая граммовка, пусть и на 0.05 г.
-        return next === undefined ? row : { ...row, grams: String(next) };
+        // а «21,8» вместо 21,75 — уже другая граммовка, пусть и на 0,05 г.
+        // Запятой, как остальные числа экрана (П45): с шагом 0,5 г на
+        // маленьком приёме (вопрос 62) дробь приходит из подбора; разбор поля
+        // понимает и запятую, и точку.
+        return next === undefined
+          ? row
+          : { ...row, grams: String(next).replace(".", ",") };
       }),
     );
   }, [solvedItems, scaledItems]);

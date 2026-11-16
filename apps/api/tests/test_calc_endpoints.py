@@ -1192,7 +1192,7 @@ class TestSolvePinnedMass:
         assert error["details"]["product_ids"] == ["broccoli"]
 
     async def test_fractional_pin_is_refused_by_name(self, client, make_user, auth_headers):
-        # The solver returns whole grams, so 20.5 would come back as 20.
+        # From 150 kcal the solver returns whole grams, so 20.5 would come back as 20.
         doctor = await make_user(role=UserRole.DOCTOR)
 
         response = await client.post(
@@ -1210,6 +1210,53 @@ class TestSolvePinnedMass:
 
         assert response.status_code == 422, response.text
         assert response.json()["error"]["details"]["product_ids"] == ["broccoli"]
+        assert "в целых граммах" in response.json()["error"]["message"]
+
+    async def test_half_gram_pin_is_kept_on_a_small_meal(self, client, make_user, auth_headers):
+        """Question 62: below 150 kcal the solver works in 0.5 g, and the
+        masses it returns are on that grid."""
+        doctor = await make_user(role=UserRole.DIETITIAN)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, BROCCOLI],
+                "targets": {
+                    "ratio": 3.5,
+                    "kcal": 120,
+                    "per_ingredient_bounds": {"broccoli": [10.5, 10.5]},
+                },
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 200, response.text
+        grams = {item["product_id"]: item["grams"] for item in response.json()["dish"]["items"]}
+        assert grams["broccoli"] == pytest.approx(10.5, abs=0.05)
+        assert all((value * 2) == pytest.approx(round(value * 2)) for value in grams.values())
+
+    async def test_pin_between_half_grams_is_refused_on_a_small_meal(
+        self, client, make_user, auth_headers
+    ):
+        doctor = await make_user(role=UserRole.DOCTOR)
+
+        response = await client.post(
+            "/api/v1/calc/solve",
+            json={
+                "ingredients": [CHICKEN, BUTTER, BROCCOLI],
+                "targets": {
+                    "ratio": 3.5,
+                    "kcal": 120,
+                    "per_ingredient_bounds": {"broccoli": [10.3, 10.3]},
+                },
+            },
+            headers=auth_headers(doctor),
+        )
+
+        assert response.status_code == 422, response.text
+        error = response.json()["error"]
+        assert error["details"]["product_ids"] == ["broccoli"]
+        assert "с шагом 0,5 г" in error["message"]
 
     async def test_pin_that_makes_the_goal_unreachable_says_so(
         self, client, make_user, auth_headers
