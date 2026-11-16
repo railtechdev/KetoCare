@@ -859,18 +859,39 @@ class TestDietaryUnit:
 
 
 class TestProteinRequirement:
-    @pytest.mark.parametrize(("weight", "expected"), [(23.0, 23.0), (18.5, 18.5), (4.2, 4.2)])
-    def test_one_gram_per_kilogram(self, weight, expected):
+    """Protein by age (question 59, agreed by the clinic on 2026-11-16)."""
+
+    @pytest.mark.parametrize(
+        ("age", "weight", "expected"),
+        [
+            # From two years: 1 g per kg, as before.
+            (5, 23.0, 23.0),
+            (2, 18.5, 18.5),
+            (16, 50.0, 50.0),
+            # From one to two: 1.2 g per kg.
+            (1, 10.0, 12.0),
+            # Under one year: 1.5 g per kg (the audit's 5 kg infant got 5 g).
+            (0, 5.0, 7.5),
+            (0, 4.2, 6.3),
+        ],
+    )
+    def test_grams_by_age_row(self, age, weight, expected):
         from keto_engine import protein_requirement
 
-        assert protein_requirement(weight) == pytest.approx(expected)
+        assert protein_requirement(age, weight) == pytest.approx(expected)
 
-    @pytest.mark.parametrize("weight", [0.0, -1.0])
-    def test_rejects_impossible_weight(self, weight):
+    @pytest.mark.parametrize(("age", "per_kg"), [(0, 1.5), (1, 1.2), (2, 1.0), (11, 1.0)])
+    def test_per_kg_by_full_years(self, age, per_kg):
+        from keto_engine import protein_per_kg
+
+        assert protein_per_kg(age) == per_kg
+
+    @pytest.mark.parametrize(("age", "weight"), [(5, 0.0), (5, -1.0), (-1, 10.0)])
+    def test_rejects_impossible_input(self, age, weight):
         from keto_engine import protein_requirement
 
         with pytest.raises(ValueError):
-            protein_requirement(weight)
+            protein_requirement(age, weight)
 
 
 class TestFluidRequirement:

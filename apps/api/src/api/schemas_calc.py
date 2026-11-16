@@ -317,7 +317,10 @@ class EnergyRequirementResponse(BaseModel):
     kcal_max: float
     kcal_per_kg_min: float
     kcal_per_kg_max: float
+    #: Daily protein: weight times the age row (question 59, ADR-0085).
     protein_g: float
+    #: The age row itself, g per kg: 1.5 under one year, 1.2 to two, then 1.
+    protein_g_per_kg: float
     #: Daily fluid in mL by the Holliday-Segar method (question 53, ADR-0069).
     fluid_ml: float
     engine_version: str
