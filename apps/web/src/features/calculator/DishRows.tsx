@@ -138,7 +138,10 @@ export function DishRows({
                   pattern="[0-9]*[.,]?[0-9]*"
                   min={0}
                   max={CALC_GRAMS_MAX}
-                  step={1}
+                  // Любой шаг: подбор на приёме меньше 150 ккал отдаёт
+                  // полуграммы (вопрос 62), и `step={1}` объявлял бы их
+                  // неверным вводом.
+                  step="any"
                   readOnly={readOnlyGrams}
                   aria-invalid={tooHeavy || undefined}
                   aria-describedby={tooHeavy ? errorId : undefined}

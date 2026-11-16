@@ -20,6 +20,7 @@ from keto_engine import (
     SolveResult,
     Targets,
     dietary_unit_kcal,
+    gram_step,
     macro_fit,
     meal_kcal,
     meal_macro_goal,
@@ -126,8 +127,9 @@ NEAR_UPPER = 1.5
 def near_grams(grams: float, factor: float) -> tuple[float, float | None]:
     """Search corridor for one product at `grams`, after scaling by `factor`.
 
-    The bounds are whole grams, widened outwards: the solver answers in whole
-    grams, and a corridor of 2.0–2.36 g holds no mass it could return. With a
+    The bounds are whole grams, widened outwards: the solver answers on a grid
+    of whole or half grams (`keto_engine.gram_step`), a whole gram lies on both,
+    and a corridor of 2.0–2.36 g holds no mass it could return. With a
     fractional bound the rounded mass fell outside it, the whole-gram search
     rejected every neighbour, and the dish came back with its ratio unrepaired.
     """
@@ -238,16 +240,21 @@ def pins_too_small(targets: Targets, product_ids: Iterable[str]) -> list[str]:
     ]
 
 
-def pins_not_whole(targets: Targets, product_ids: Iterable[str]) -> list[str]:
-    """Pinned products with a fractional mass: the solver returns whole grams."""
+def pins_off_grid(targets: Targets, product_ids: Iterable[str]) -> list[str]:
+    """Pinned products whose mass is off the solver's grid for this meal.
 
+    The grid is whole grams, or half grams below 150 kcal (`gram_step`,
+    question 62): a pin between its points can be neither kept nor moved.
+    """
+
+    step = gram_step(targets.kcal)
     bounds = targets.per_ingredient_bounds or {}
     return [
         product_id
         for product_id in product_ids
         if product_id in bounds
         and bounds[product_id][0] == bounds[product_id][1]
-        and bounds[product_id][0] != round(bounds[product_id][0])
+        and abs(bounds[product_id][0] / step - round(bounds[product_id][0] / step)) > 1e-9
     ]
 
 

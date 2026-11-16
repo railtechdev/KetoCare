@@ -1280,7 +1280,7 @@ describe("калькулятор в Mini App", () => {
     );
 
     expect(await screen.findByLabelText(/Масло сливочное, граммы/)).toHaveValue(
-      "42.5",
+      "42,5",
     );
   });
 
@@ -1310,7 +1310,7 @@ describe("калькулятор в Mini App", () => {
       // Мутация продолжается сама после события `online` — асинхронно.
       await waitFor(() =>
         expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue(
-          "42.5",
+          "42,5",
         ),
       );
       expect(screen.queryByText(WAITING)).not.toBeInTheDocument();

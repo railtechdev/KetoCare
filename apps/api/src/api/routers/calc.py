@@ -26,6 +26,7 @@ from keto_engine import (
     Targets,
     energy_requirement,
     fluid_requirement,
+    gram_step,
     protein_per_kg,
     protein_requirement,
     refine,
@@ -248,13 +249,18 @@ async def solve_dish(
             details={"product_ids": too_small},
         )
 
-    fractional = calc_service.pins_not_whole(targets, ingredients.keys())
+    fractional = calc_service.pins_off_grid(targets, ingredients.keys())
     if fractional:
         names = ", ".join(await _product_names(session, fractional))
+        grid = (
+            "в целых граммах"
+            if gram_step(targets.kcal) == 1
+            else f"с шагом {gram_step(targets.kcal):g} г".replace(".", ",")
+        )
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
-            f"Подбор работает в целых граммах, а закреплена дробная масса: {names}. "
-            "Округлите её или снимите закрепление.",
+            f"Подбор на этом приёме работает {grid}, а закреплена масса между шагами: "
+            f"{names}. Округлите её или снимите закрепление.",
             details={"product_ids": fractional},
         )
 

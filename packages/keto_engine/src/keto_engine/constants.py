@@ -37,8 +37,14 @@ RATIO_TOLERANCE = 0.15
 # TODO(med): подтвердить у медицинской команды — допуск по калорийности приёма, доля от цели
 KCAL_TOLERANCE_FRACTION = 0.05
 
-# TODO(med): подтвердить у медицинской команды — округление итоговых масс ингредиентов, г
+# Step of the masses solve() returns, g. Whole grams for an ordinary meal; for a
+# meal below `SMALL_MEAL_KCAL` the step is `SMALL_MEAL_GRAM_STEP`: one gram of
+# oil is 9 kcal, a seventh of a 62 kcal feed. International practice weighs to
+# 0.1 g; the clinic's dietitian agreed on 2026-11-16 to 0.5 g below 150 kcal and
+# whole grams above (question 62, ADR-0086).
 GRAM_ROUNDING = 1
+SMALL_MEAL_KCAL = 150.0
+SMALL_MEAL_GRAM_STEP = 0.5
 
 # TODO(med): подтвердить у медицинской команды — минимальная реалистичная масса ингредиента, г.
 # Используется как порог пост-обработки solve(): после округления массы ниже порога
@@ -136,7 +142,10 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # 1.2 g per kg from one to two, 1 g per kg from two (question 59, ADR-0085).
 # Minor: a hint for the prescription form; verify(), solve() and every stored
 # number stay the same, and nothing changes for children from two years.
-ENGINE_VERSION = "1.11.0"
+# 1.12.0 — solve() and refine() step masses by 0.5 g for a meal below 150 kcal
+# (question 62, ADR-0086): `gram_step()`. Minor: verify() and every stored
+# number stay the same, and nothing changes for meals from 150 kcal.
+ENGINE_VERSION = "1.12.0"
 
 
 # Daily calories per kilogram on the ketogenic diet by age: Yonsei University,
