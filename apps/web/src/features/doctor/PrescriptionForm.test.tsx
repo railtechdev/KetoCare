@@ -426,7 +426,17 @@ describe("жидкость по весу (Холлидей — Сегар)", () 
           error={null}
           onSubmit={onSubmit}
           kcalHint={(apply) => (
-            <button type="button" onClick={() => apply(1224, 18, 1400)}>
+            <button
+              type="button"
+              onClick={() =>
+                apply({
+                  kcal: 1224,
+                  proteinG: 18,
+                  proteinPerKg: 1,
+                  fluidMl: 1400,
+                })
+              }
+            >
               Подставить
             </button>
           )}
@@ -464,6 +474,16 @@ describe("жидкость по весу (Холлидей — Сегар)", () 
     await user.click(screen.getByRole("button", { name: "Подставить" }));
     expect(valueControl(fluid)).toHaveValue(1000);
     expect(screen.queryByText(/Рассчитано по весу/)).toBeNull();
+  });
+
+  it("белок, набранный руками, подсказка не перезаписывает", async () => {
+    renderWithHint();
+    const user = userEvent.setup();
+    const protein = screen.getByLabelText(/Белок/);
+    await user.type(protein, "21");
+    await user.click(screen.getByRole("button", { name: "Подставить" }));
+    expect(valueControl(protein)).toHaveValue(21);
+    expect(screen.queryByText(/г на кг/)).toBeNull();
   });
 
   it("значения из прежней версии подсказка не перезаписывает", async () => {

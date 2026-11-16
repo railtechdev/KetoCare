@@ -13,6 +13,7 @@ import {
 } from "../../components/FormErrorSummary";
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
+import type { EnergyHintValues } from "./EnergyHint";
 import {
   PrescriptionGoalPreview,
   usePrescriptionGoal,
@@ -88,9 +89,7 @@ export function PrescriptionForm({
 }: {
   defaultValues: DefaultValues<PrescriptionFormValues>;
   /** Подсказка под калорийностью; получает функцию, ставящую число в поле */
-  kcalHint?: (
-    apply: (kcal: number, proteinG: number, fluidMl: number) => void,
-  ) => ReactNode;
+  kcalHint?: (apply: (values: EnergyHintValues) => void) => ReactNode;
   pending: boolean;
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
   error: unknown;
@@ -128,6 +127,10 @@ export function PrescriptionForm({
   // поверх своего же прежнего числа. Значение, перенесённое из действующей
   // версии назначения, — выбор врача, и подсказка его не перезаписывает.
   const [proteinFromHint, setProteinFromHint] = useState<number | null>(null);
+  // Строка таблицы белка, по которой подсказка посчитала число (вопрос 59).
+  const [proteinPerKgFromHint, setProteinPerKgFromHint] = useState<
+    number | null
+  >(null);
   const [fluidFromHint, setFluidFromHint] = useState<number | null>(null);
   const proteinValue = watch("proteinG");
   const fluidValue = watch("fluidMlPerDay");
@@ -298,8 +301,11 @@ export function PrescriptionForm({
           label={t("fields.proteinInput")}
           error={errors.proteinG && t("prescription.errors.protein")}
           hint={
-            fromHint(proteinValue, proteinFromHint)
-              ? t("prescription.proteinDerived")
+            fromHint(proteinValue, proteinFromHint) &&
+            proteinPerKgFromHint !== null
+              ? t("prescription.proteinDerived", {
+                  perKg: formatMass(proteinPerKgFromHint),
+                })
               : undefined
           }
           {...register("proteinG", { valueAsNumber: true })}
@@ -363,18 +369,20 @@ export function PrescriptionForm({
             разрывала ряд показателей (аудит продукта 12.11.2026). Пустая —
             не занимает места. */}
         <div className="col-span-full empty:hidden">
-          {kcalHint?.((kcal, proteinG, fluidMl) => {
+          {kcalHint?.(({ kcal, proteinG, proteinPerKg, fluidMl }) => {
             setValue("kcalPerDay", kcal, {
               shouldDirty: true,
               shouldValidate: true,
             });
-            // Белок идёт за калорийностью, как в KDC: 1 г на кг веса.
+            // Белок идёт за калорийностью, как в KDC: по весу, а г на кг —
+            // по возрасту (вопрос 59).
             if (hintMayFill(getValues("proteinG"), proteinFromHint)) {
               setValue("proteinG", proteinG, {
                 shouldDirty: true,
                 shouldValidate: true,
               });
               setProteinFromHint(proteinG);
+              setProteinPerKgFromHint(proteinPerKg);
             }
             // Жидкость — тоже по весу (Холлидей — Сегар, ADR-0069).
             if (hintMayFill(getValues("fluidMlPerDay"), fluidFromHint)) {

@@ -132,7 +132,11 @@ DEFAULT_MAX_INGREDIENT_GRAMS = 5000.0
 # their order in the request. verify() refuses negative masses. `meal_kcal()`
 # is the one place the calories of a meal are rounded. Minor: verify() and
 # every stored number stay the same; solve() holds the same hard constraints.
-ENGINE_VERSION = "1.10.0"
+# 1.11.0 — `protein_requirement()` takes the age: 1.5 g per kg under one year,
+# 1.2 g per kg from one to two, 1 g per kg from two (question 59, ADR-0085).
+# Minor: a hint for the prescription form; verify(), solve() and every stored
+# number stay the same, and nothing changes for children from two years.
+ENGINE_VERSION = "1.11.0"
 
 
 # Daily calories per kilogram on the ketogenic diet by age: Yonsei University,
@@ -151,10 +155,22 @@ ENERGY_KCAL_PER_KG_BY_AGE: tuple[tuple[float, float, float], ...] = (
 )
 
 
-# Daily protein target on the ketogenic diet: 1 g per kilogram of body weight.
-# Confirmed by the clinic on 2026-11-11 ("верно, правило 1 г на кг"), as in KDC,
-# where protein is derived rather than entered.
-PROTEIN_G_PER_KG = 1.0
+# Daily protein target on the ketogenic diet by age, grams per kilogram of body
+# weight. Rows: (upper bound of age in whole years, exclusive; g per kg).
+# From two years: 1 g per kg, confirmed by the clinic on 2026-11-11 ("верно,
+# правило 1 г на кг"), as in KDC, where protein is derived rather than entered.
+# Under two years the international guidance asks for more: van der Louw E. et al.
+# "Ketogenic diet guidelines for infants with refractory epilepsy", Eur J Paediatr
+# Neurol 2016;20:798-809 (1.1-2.0 g/kg by month of the first year), and Ruiz
+# Herrero J. et al., Spanish recommendations 2020 (1.5 g/kg under one year). The
+# rows below were proposed after the engine audit of 2026-11-15 and agreed by the
+# clinic's dietitian on 2026-11-16 (question 59): "Абсолютно согласна детям до
+# 2-х лет увеличить диапазон белков".
+PROTEIN_G_PER_KG_BY_AGE: tuple[tuple[float, float], ...] = (
+    (1, 1.5),
+    (2, 1.2),
+    (float("inf"), 1.0),
+)
 
 
 # Daily fluid requirement by weight, Holliday-Segar method: Holliday MA, Segar WE.

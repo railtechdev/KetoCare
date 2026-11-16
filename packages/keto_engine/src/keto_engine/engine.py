@@ -324,12 +324,27 @@ def energy_requirement(age_years: int, weight_kg: float) -> tuple[float, float]:
     raise AssertionError("the last row covers every age")  # pragma: no cover
 
 
-def protein_requirement(weight_kg: float) -> float:
-    """Daily protein target in grams: weight times `PROTEIN_G_PER_KG`."""
+def protein_per_kg(age_years: int) -> float:
+    """Grams of protein per kilogram a day for this age (question 59).
+
+    The row of `PROTEIN_G_PER_KG_BY_AGE` is picked by full years of age, as the
+    calorie table is.
+    """
+
+    if age_years < 0:
+        raise ValueError("Возраст не может быть отрицательным")
+    for upper, grams in constants.PROTEIN_G_PER_KG_BY_AGE:
+        if age_years < upper:
+            return grams
+    raise AssertionError("the last row covers every age")  # pragma: no cover
+
+
+def protein_requirement(age_years: int, weight_kg: float) -> float:
+    """Daily protein target in grams: weight times `protein_per_kg(age)`."""
 
     if weight_kg <= 0:
         raise ValueError("Вес должен быть положительным")
-    return weight_kg * constants.PROTEIN_G_PER_KG
+    return weight_kg * protein_per_kg(age_years)
 
 
 def fluid_requirement(weight_kg: float) -> float:

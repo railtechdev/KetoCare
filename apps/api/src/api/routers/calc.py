@@ -26,6 +26,7 @@ from keto_engine import (
     Targets,
     energy_requirement,
     fluid_requirement,
+    protein_per_kg,
     protein_requirement,
     refine,
     scale,
@@ -407,7 +408,8 @@ async def energy(payload: EnergyRequirementRequest, _: CurrentUserDep) -> Energy
         kcal_max=high,
         kcal_per_kg_min=low / payload.weight_kg,
         kcal_per_kg_max=high / payload.weight_kg,
-        protein_g=protein_requirement(payload.weight_kg),
+        protein_g=protein_requirement(payload.age_years, payload.weight_kg),
+        protein_g_per_kg=protein_per_kg(payload.age_years),
         fluid_ml=fluid_requirement(payload.weight_kg),
         engine_version=ENGINE_VERSION,
     )
