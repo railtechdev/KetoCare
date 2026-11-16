@@ -50,7 +50,8 @@ MIN_INGREDIENT_GRAMS = 2.0
 # "within 4 kcal of the goal" is the precision rule of KetoDietCalculator, the
 # tool the clinic's dietitians fit meals with today (docs/AUDIT_KDC_GAP_2026-11.md,
 # G16).
-# TODO(med): подтвердить у медицинской команды (вопрос 58)
+# Confirmed by the clinic's dietitian on 2026-11-16 (question 58): "0,5–1 г разницы
+# играть не будет, главное, чтобы соотношение не менялось".
 MEAL_MACRO_TOLERANCE_G = 1.0
 
 # Верхняя граница массы одного ингредиента по умолчанию для solve(), г.
