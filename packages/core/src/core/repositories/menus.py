@@ -390,7 +390,13 @@ async def usage_rows(session: AsyncSession, *, patient_id: uuid.UUID) -> list[Us
             CustomDish.source_recipe_id,
         )
         .join(Menu, Menu.id == MenuItem.menu_id)
-        .outerjoin(CustomDish, CustomDish.id == MenuItem.custom_dish_id)
+        # The dish must be the child's own: writes already guarantee it, and the
+        # join should not depend on that.
+        .outerjoin(
+            CustomDish,
+            (CustomDish.id == MenuItem.custom_dish_id)
+            & (CustomDish.patient_id == MenuItem.patient_id),
+        )
         .where(
             MenuItem.patient_id == patient_id,
             MenuItem.deleted_at.is_(None),

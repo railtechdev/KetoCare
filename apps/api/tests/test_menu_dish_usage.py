@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import select
 
 from core.models import (
+    AuditLog,
     CustomDish,
     MenuItem,
     Product,
@@ -324,3 +325,83 @@ class TestRefreshItem:
         # День не тронут: снимок прежний.
         item = await session.get(MenuItem, uuid.UUID(saved["items"][0]["id"]))
         assert item is not None and item.snapshot is not None
+
+    async def test_specialist_refresh_tells_the_family_once(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        _, dietitian, patient, product = await _setup(session, make_user, make_patient)
+        dish = await _dish(session, patient, product, grams=20)
+        headers = auth_headers(dietitian)
+        saved = await _save(
+            client,
+            headers,
+            patient,
+            "2026-11-20",
+            [{"meal_index": 1, "custom_dish_id": str(dish.id)}],
+        )
+        enqueued.clear()
+        dish.ingredients = [{"product_id": str(product.id), "grams": 30}]
+        await session.flush()
+        url = f"/api/v1/patients/{patient.id}/menus/items/{saved['items'][0]['id']}/refresh"
+
+        first = await client.post(url, headers=headers)
+        again = await client.post(url, headers=headers)
+
+        assert first.status_code == 200 and again.status_code == 200
+        notices = [args for task, args in enqueued if task == "notify_family_menu_composed"]
+        assert notices == [(str(patient.id), "2026-11-20", dietitian.full_name, "dietitian")]
+        audits = await session.scalars(
+            select(AuditLog).where(
+                AuditLog.action == "menu_composed_by_specialist",
+                AuditLog.entity_id == uuid.UUID(saved["id"]),
+                AuditLog.user_id == dietitian.id,
+            )
+        )
+        # Одна запись за сохранение дня и одна за обновление, повтор — ничего.
+        assert len(list(audits)) == 2
+
+    async def test_unchanged_dish_leaves_the_day_alone(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        parent, dietitian, patient, product = await _setup(session, make_user, make_patient)
+        dish = await _dish(session, patient, product)
+        saved = await _save(
+            client,
+            auth_headers(parent),
+            patient,
+            "2026-11-20",
+            [{"meal_index": 1, "custom_dish_id": str(dish.id)}],
+        )
+        enqueued.clear()
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{saved['items'][0]['id']}/refresh",
+            headers=auth_headers(dietitian),
+        )
+        assert response.status_code == 200
+        # «Составил(а)» прежний, сообщения нет.
+        assert response.json()["updated_by_role"] == "parent"
+        assert enqueued == []
+
+    async def test_family_refresh_sends_nothing(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        parent, _, patient, product = await _setup(session, make_user, make_patient)
+        dish = await _dish(session, patient, product, grams=20)
+        headers = auth_headers(parent)
+        saved = await _save(
+            client,
+            headers,
+            patient,
+            "2026-11-20",
+            [{"meal_index": 1, "custom_dish_id": str(dish.id)}],
+        )
+        dish.ingredients = [{"product_id": str(product.id), "grams": 30}]
+        await session.flush()
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{saved['items'][0]['id']}/refresh",
+            headers=headers,
+        )
+        assert response.status_code == 200
+        assert [task for task, _ in enqueued if task == "notify_family_menu_composed"] == []

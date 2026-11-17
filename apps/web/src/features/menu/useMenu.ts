@@ -454,6 +454,10 @@ export function useEatenMutation(patientId: string | null, date: string) {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: key });
+      // «Съедено 10 нояб.» в выборе блюда (ADR-0089) — из той же отметки.
+      void queryClient.invalidateQueries({
+        queryKey: [...menusKey(patientId), "dish-usage"],
+      });
     },
   });
 }

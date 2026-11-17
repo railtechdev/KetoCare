@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from datetime import date, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Path, Query, Request
 
@@ -429,6 +429,14 @@ def _plan_of(items: Sequence[MenuItem]) -> list[tuple[int, str, str, float]]:
     )
 
 
+def _frozen_part(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
+    """What a family cooks by: name, servings and the weighed composition."""
+
+    if snapshot is None:
+        return None
+    return {key: snapshot.get(key) for key in ("title", "servings", "ingredients")}
+
+
 @router.post(
     "/items/{item_id}/refresh",
     response_model=MenuRead,
@@ -482,6 +490,12 @@ async def refresh_item(
             )
         ],
     )
+    # Состав уже тот же — день не трогается: ни «Составил(а)», ни аудита, ни
+    # второго сообщения семье (то же правило, что у `PUT` дня, `plan_changed`).
+    # Кнопку экран показывает только при расхождении, но держит это сервер.
+    if _frozen_part(snapshot) == _frozen_part(item.snapshot):
+        return await _read(session, menu)
+
     await menus_repo.set_snapshot(
         session, menu=menu, item=item, snapshot=snapshot, updated_by=user.id
     )
