@@ -188,3 +188,39 @@ describe("форма рецепта в адресе", () => {
     await waitFor(() => expect(currentAddress().item).toBeUndefined());
   });
 });
+
+describe("вид выдачи в адресе", () => {
+  it("специалисту по умолчанию — строками, без фото", async () => {
+    // Замечание диетолога 17.11.2026: фото у рецептов почти нет, и карточки с
+    // заглушками показывали четыре рецепта на экран.
+    renderPage({});
+
+    expect(
+      await screen.findByRole("table", { name: "Рецепты" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Омлет на сливках" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Без фото")).not.toBeInTheDocument();
+  });
+
+  it("карточки выбираются и переживают F5", async () => {
+    const user = userEvent.setup();
+    renderPage({});
+
+    await user.click(await screen.findByRole("radio", { name: "Карточками" }));
+    await waitFor(() => expect(currentAddress().view).toBe("tiles"));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+
+    // Возврат к умолчанию роли чистит адрес.
+    await user.click(screen.getByRole("radio", { name: "Списком" }));
+    await waitFor(() => expect(currentAddress().view).toBeUndefined());
+  });
+
+  it("открывается карточками по ссылке", async () => {
+    renderPage({ view: "tiles" });
+
+    expect(await screen.findByText("Без фото")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+});

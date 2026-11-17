@@ -1,6 +1,7 @@
 import {
   AsyncSection,
   Button,
+  SegmentedControl,
   Tabs,
   TabsBar,
   TabsContent,
@@ -35,8 +36,10 @@ import {
   hasActiveFilters,
   isRatioRangeInvalid,
   RECIPE_CATEGORIES,
+  RECIPE_VIEWS,
   RECIPES_PAGE_SIZE,
   type RecipeFilters,
+  type RecipeView,
 } from "./types";
 import { useRecipeSearch } from "./useRecipes";
 import { queryState } from "../../lib/queryState";
@@ -120,6 +123,27 @@ export function RecipesPage() {
     ratioMin: address.ratioMin ?? "",
     ratioMax: address.ratioMax ?? "",
   }));
+  // Вид выдачи — в адресе, как отборы: «Назад» из рецепта возвращает к тому же
+  // виду. Умолчание по роли: специалист работает с базой строками (замечание
+  // диетолога 17.11.2026 — фото почти нет), семья выбирает глазами по фото.
+  const defaultView: RecipeView = familyView ? "tiles" : "list";
+  const view: RecipeView =
+    RECIPE_VIEWS.find((value) => value === address.view) ?? defaultView;
+  const viewToggle = (
+    <SegmentedControl
+      label={t("view.label")}
+      value={view}
+      onChange={(next) =>
+        patchAddress({ view: next === defaultView ? undefined : next })
+      }
+      items={RECIPE_VIEWS.map((value) => ({
+        value,
+        label: t(`view.${value}`),
+      }))}
+      size="sm"
+      className="self-start"
+    />
+  );
   const [openId, setOpenId] = useSectionItem();
   const form = formOf(openId);
   const setForm = (next: { recipeId: string | null } | null) =>
@@ -231,7 +255,7 @@ export function RecipesPage() {
   const items = recipes.data?.items ?? [];
 
   return (
-    // Выдача — плитки с фотографиями: страница, на которой ищут, а не читают.
+    // Выдача — строками или плитками с фото: страница, на которой ищут.
     <PageLayout
       title={t("title")}
       width="wide"
@@ -286,6 +310,7 @@ export function RecipesPage() {
                 onChange={patchFilters}
                 onReset={resetFilters}
               />
+              {viewToggle}
 
               {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанную выдачу. */}
@@ -316,6 +341,7 @@ export function RecipesPage() {
                 }
               >
                 <RecipeList
+                  view={view}
                   recipes={items}
                   total={recipes.data?.total ?? items.length}
                   showStatus={canEdit}
@@ -346,6 +372,7 @@ export function RecipesPage() {
             onChange={patchFilters}
             onReset={resetFilters}
           />
+          {viewToggle}
 
           {/* Правило пяти состояний — в AsyncSection: там же записано, почему
           ошибка не должна прятать уже показанную выдачу. */}
@@ -376,6 +403,7 @@ export function RecipesPage() {
             }
           >
             <RecipeList
+              view={view}
               recipes={items}
               total={recipes.data?.total ?? items.length}
               showStatus={canEdit}

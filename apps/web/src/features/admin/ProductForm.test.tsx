@@ -219,7 +219,8 @@ describe("карточка продукта: отметка «без клетч�
     await waitFor(() => expect(api.POST).toHaveBeenCalled());
   });
 
-  it("без клетчатки итога не называет", async () => {
+  it("пустая клетчатка — ноль: итог равен углеводам, под полем сказано почему", async () => {
+    // Замечание диетолога 17.11.2026: клетчатку пишут не на каждой упаковке.
     renderForm({
       kcal: 0.34,
       fat: 0.004,
@@ -230,18 +231,23 @@ describe("карточка продукта: отметка «без клетч�
     fireEvent.change(screen.getByLabelText(adminRu.products.form.carbs), {
       target: { value: "0.032" },
     });
-    fireEvent.change(screen.getByLabelText(adminRu.products.form.fiber), {
-      target: { value: "" },
-    });
+    fireEvent.change(
+      screen.getByLabelText(adminRu.products.form.fiber, { exact: false }),
+      { target: { value: "" } },
+    );
     fireEvent.click(
       await screen.findByRole("checkbox", {
         name: adminRu.products.form.carbsWithoutFiber,
       }),
     );
     expect(
-      screen.getByText(adminRu.products.form.carbsWithoutFiberHint),
+      screen.getByText(adminRu.products.form.fiberEmpty),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/уйдёт .* углеводов/)).toBeNull();
+    expect(
+      screen.getByText(
+        "В справочник уйдёт 3,2 г углеводов на 100 г — вместе с клетчаткой.",
+      ),
+    ).toBeInTheDocument();
     await waitFor(() => expect(api.POST).toHaveBeenCalled());
   });
 });

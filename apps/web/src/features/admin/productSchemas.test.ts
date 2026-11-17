@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  fiberFromInput,
   productFormSchema,
   toProductCreateBody,
   toProductFormValues,
@@ -132,6 +133,22 @@ describe("toProductCreateBody", () => {
 
   it("не отправляет флаг активности: новый продукт создаётся активным", () => {
     expect(toProductCreateBody(VALID)).not.toHaveProperty("is_active");
+  });
+
+  it("пустая клетчатка уходит нулём с пометкой «не указана»", () => {
+    // Замечание диетолога 17.11.2026: клетчатку пишут не на каждой упаковке.
+    const parsed = productFormSchema.parse({
+      ...VALID,
+      fiber: fiberFromInput(""),
+    });
+    const body = toProductCreateBody(parsed);
+
+    expect(body.fiber_100g).toBe(0);
+    expect(body.fiber_known).toBe(false);
+    // Указанная клетчатка пометки не несёт: решает правило стандарта.
+    expect(toProductCreateBody(VALID)).not.toHaveProperty("fiber_known");
+    // У правки пометки нет: известность решает сервер по вписанному числу.
+    expect(toProductUpdateBody(parsed)).not.toHaveProperty("fiber_known");
   });
 });
 

@@ -418,6 +418,10 @@ ProductValueField = Literal["kcal_100g", "fat_100g", "protein_100g", "carbs_100g
 class ProductCreate(ProductBase):
     #: Не указан — основной стандарт.
     standard_id: uuid.UUID | None = None
+    #: `false` — на упаковке клетчатки нет, и `fiber_100g` = 0 значит «не
+    #: указана» (замечание диетолога 17.11.2026). Не передан — по правилу
+    #: стандарта (`carbs_convention`).
+    fiber_known: bool | None = None
 
 
 class ProductUpdate(ProductBase):
