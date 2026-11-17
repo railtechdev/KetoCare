@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 
+import { api } from "../../lib/api";
 import i18n from "../../lib/i18n";
 import menuRu from "../../locales/ru/menu.json";
 import { PatientRouter } from "../../test/PatientRouter";
@@ -166,13 +167,36 @@ describe("week cell item", () => {
     expect(link.getAttribute("href")).toContain("item=recipe%3Ar1");
   });
 
-  it("says the day keeps its numbers when the dish changed since", async () => {
+  it("offers the new composition when the dish changed since (ADR-0089)", async () => {
     const user = userEvent.setup();
+    (api.POST as Mock).mockResolvedValue({
+      data: { date: "2026-11-16", items: [] },
+    });
     renderItem(item({ changed_since_saved: true }));
 
     await user.click(await screen.findByRole("button", { name: /Омлет/ }));
     expect(
-      await screen.findByText(/Числа этого дня остались прежними/),
+      await screen.findByText(/в дне пока прежние граммы/),
     ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Взять новый состав" }),
+    );
+
+    await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(1));
+    expect((api.POST as Mock).mock.calls[0]![0]).toBe(
+      "/api/v1/patients/{patient_id}/menus/items/{item_id}/refresh",
+    );
+    expect((api.POST as Mock).mock.calls[0]![1].params.path.item_id).toBe("i1");
+  });
+
+  it("does not offer it for an eaten item", async () => {
+    const user = userEvent.setup();
+    renderItem(item({ changed_since_saved: true, eaten: true }));
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+    await screen.findByRole("link", { name: "Открыть блюдо" });
+    expect(
+      screen.queryByRole("button", { name: "Взять новый состав" }),
+    ).toBeNull();
   });
 });

@@ -33,6 +33,8 @@ from .. import after_commit
 from ..errors import ApiError, ErrorCode
 from ..schemas import DishComputed, PrescriptionRead
 from ..schemas_menus import (
+    DishUsageEntry,
+    DishUsageRead,
     MenuItemIngredient,
     MenuItemRead,
     MenuItemWrite,
@@ -418,6 +420,37 @@ def _withdrawn_products(
             for pid, product in withdrawn.items()
         ),
         key=lambda entry: entry.name_ru,
+    )
+
+
+def dish_usage(rows: Sequence[menus_repo.UsageRow]) -> DishUsageRead:
+    """Group a child's planned items into «where has this dish stood».
+
+    A day counts once however many times the dish stands in it. A recipe
+    collects its own items and those of the child's dishes fitted from it.
+    """
+
+    recipes: dict[uuid.UUID, list[menus_repo.UsageRow]] = {}
+    dishes: dict[uuid.UUID, list[menus_repo.UsageRow]] = {}
+    for row in rows:
+        recipe_id = row.recipe_id or row.source_recipe_id
+        if recipe_id is not None:
+            recipes.setdefault(recipe_id, []).append(row)
+        if row.custom_dish_id is not None:
+            dishes.setdefault(row.custom_dish_id, []).append(row)
+
+    def entry(key: uuid.UUID, group: list[menus_repo.UsageRow]) -> DishUsageEntry:
+        eaten = [row.day for row in group if row.eaten]
+        return DishUsageEntry(
+            id=key,
+            last_date=max(row.day for row in group),
+            days=len({row.day for row in group}),
+            last_eaten=max(eaten) if eaten else None,
+        )
+
+    return DishUsageRead(
+        recipes=[entry(key, group) for key, group in recipes.items()],
+        dishes=[entry(key, group) for key, group in dishes.items()],
     )
 
 
