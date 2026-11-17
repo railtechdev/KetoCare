@@ -570,7 +570,12 @@ async def create_product(
             session,
             changed_by=user.id,
             standard_id=standard_id,
-            **payload.model_dump(exclude={"standard_id"}),
+            # Не переданная пометка клетчатки — по правилу стандарта: репозиторий
+            # ставит её сам, а явный `None` эту подстановку бы перебил.
+            **payload.model_dump(
+                exclude={"standard_id"}
+                | ({"fiber_known"} if payload.fiber_known is None else set())
+            ),
         )
         await session.flush()
     except products_repo.StandardLockedError as error:

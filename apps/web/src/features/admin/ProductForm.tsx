@@ -26,6 +26,7 @@ import { anomalyDetail } from "./productAnomalyText";
 import {
   MAX_GRAMS_PER_GRAM,
   MAX_KCAL_PER_GRAM,
+  fiberFromInput,
   productFormSchema,
   type Nutrient,
   type ProductFormValues,
@@ -128,10 +129,15 @@ export function ProductForm({
   // а не запрет — сохранить карточку можно и с ним, если источник так и пишет.
   // Поля — на 1 г (ADR-0065); проверки и формула Этуотера считают на 100 г,
   // как сервер и источники.
-  const [kcal, fat, protein, enteredCarbs, fiber] = watch(NUTRIENTS).map(
+  const [kcal, fat, protein, enteredCarbs, enteredFiber] = watch(NUTRIENTS).map(
     (value) =>
       value === undefined || Number.isNaN(value) ? value : toPer100(value),
   ) as [number, number, number, number, number];
+  // Клетчатку пишут не на каждой упаковке (замечание диетолога 17.11.2026):
+  // пустое поле — 0. Это осторожная сторона: соотношение не завышается, а
+  // справочник помечает клетчатку как неизвестную.
+  const fiberEmpty = enteredFiber === undefined || Number.isNaN(enteredFiber);
+  const fiber = fiberEmpty ? 0 : enteredFiber;
   // Проверки и формула Этуотера — по тому, что уйдёт в справочник: углеводы
   // вместе с клетчаткой (М5 аудита ядра).
   //
@@ -142,11 +148,7 @@ export function ProductForm({
   const canMarkWithoutFiber = mode === "create" || dirtyFields.carbs === true;
   const carbsWithoutFiber =
     canMarkWithoutFiber && watch("carbsWithoutFiber") === true;
-  const bothKnown =
-    enteredCarbs !== undefined &&
-    !Number.isNaN(enteredCarbs) &&
-    fiber !== undefined &&
-    !Number.isNaN(fiber);
+  const bothKnown = enteredCarbs !== undefined && !Number.isNaN(enteredCarbs);
   const carbs =
     carbsWithoutFiber && bothKnown ? enteredCarbs + fiber : enteredCarbs;
   const per100: Record<Nutrient, number | undefined> = {
@@ -156,7 +158,7 @@ export function ProductForm({
     // Под полем — введённое число на 100 г, а не итог с клетчаткой: подсказка
     // ловит ошибку переноса из колонки «на 100 г».
     carbs: enteredCarbs,
-    fiber,
+    fiber: enteredFiber,
   };
   const check = useProductValuesCheck({ kcal, fat, protein, carbs, fiber });
   const findings = check.data ?? [];
@@ -339,6 +341,7 @@ export function ProductForm({
                   step="0.0001"
                   inputMode="decimal"
                   label={t(`products.form.${nutrient}`)}
+                  optional={nutrient === "fiber"}
                   // Под полем — то же число на 100 г, как в источнике: поле
                   // «в 1 г», а источники и этикетки пишут на 100 г, и ошибку
                   // переноса видно сразу (ADR-0073). Прочерк источника
@@ -347,6 +350,8 @@ export function ProductForm({
                   hint={
                     unknown ? (
                       t("products.form.noData")
+                    ) : nutrient === "fiber" && fiberEmpty ? (
+                      t("products.form.fiberEmpty")
                     ) : (
                       <Per100Hint
                         nutrient={nutrient}
@@ -355,7 +360,9 @@ export function ProductForm({
                     )
                   }
                   error={fieldError(nutrient)}
-                  {...register(nutrient, { valueAsNumber: true })}
+                  {...(nutrient === "fiber"
+                    ? register("fiber", { setValueAs: fiberFromInput })
+                    : register(nutrient, { valueAsNumber: true }))}
                 />
                 {unknown && (
                   <label

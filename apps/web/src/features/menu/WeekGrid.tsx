@@ -269,6 +269,11 @@ export function WeekGrid({
                             value: formatKcal(day.menu.totals.kcal),
                           })}
                         </span>
+                        <DayMacroTotals
+                          protein={day.menu.totals.protein}
+                          carbs={day.menu.totals.carbs}
+                          prescription={day.menu.prescription ?? null}
+                        />
                       </div>
                     )}
                   </td>
@@ -279,6 +284,74 @@ export function WeekGrid({
         </div>
       </AsyncSection>
     </Section>
+  );
+}
+
+/**
+ * Белок и углеводы дня рядом с назначением — в «Итого» недели.
+ *
+ * Диетолог 17.11.2026 боялась, что дети в первый день «не добрали» белок, а
+ * неделя показывала только соотношение и калории: белок дня было видно, лишь
+ * открыв день. Белок назначения — минимум (ADR-0087), сверх него не
+ * подсвечивается; углеводы — предел. Сравнение до десятой, как печатает
+ * `formatGrams`: 22,96 из 23 — набрано. Вердикта нет — его выносит сервер.
+ */
+function DayMacroTotals({
+  protein,
+  carbs,
+  prescription,
+}: {
+  protein: number;
+  carbs: number;
+  prescription: { protein_g: number; carbs_limit_g: number } | null;
+}) {
+  const { t } = useTranslation("menu");
+
+  if (prescription === null) {
+    return (
+      <span className="text-muted-foreground">
+        {t("week.macros", {
+          protein: formatGrams(protein),
+          carbs: formatGrams(carbs),
+        })}
+      </span>
+    );
+  }
+
+  const proteinShort = Math.round((prescription.protein_g - protein) * 10) > 0;
+  const carbsOver = Math.round((carbs - prescription.carbs_limit_g) * 10) > 0;
+
+  return (
+    <>
+      <span className={cn(proteinShort && "font-medium text-warning-strong")}>
+        <span aria-hidden="true">
+          {t("week.proteinShort", {
+            value: formatGrams(protein),
+            min: formatGrams(prescription.protein_g),
+          })}
+        </span>
+        <span className="sr-only">
+          {t(proteinShort ? "week.proteinBelow" : "week.proteinFull", {
+            value: formatGrams(protein),
+            min: formatGrams(prescription.protein_g),
+          })}
+        </span>
+      </span>
+      <span className={cn(carbsOver && "font-medium text-destructive")}>
+        <span aria-hidden="true">
+          {t("week.carbsShort", {
+            value: formatGrams(carbs),
+            limit: formatGrams(prescription.carbs_limit_g),
+          })}
+        </span>
+        <span className="sr-only">
+          {t(carbsOver ? "week.carbsAbove" : "week.carbsFull", {
+            value: formatGrams(carbs),
+            limit: formatGrams(prescription.carbs_limit_g),
+          })}
+        </span>
+      </span>
+    </>
   );
 }
 
