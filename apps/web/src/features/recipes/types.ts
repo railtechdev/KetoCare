@@ -55,6 +55,11 @@ export interface RecipeFilters {
 
 export const RECIPES_PAGE_SIZE = 24;
 
+/** Вид выдачи базы рецептов: строками или карточками с фото. */
+export type RecipeView = "list" | "tiles";
+
+export const RECIPE_VIEWS: readonly RecipeView[] = ["list", "tiles"];
+
 export const EMPTY_RECIPE_FILTERS: RecipeFilters = {
   q: "",
   category: "",

@@ -48,7 +48,13 @@ export const productFormSchema = z.object({
   fat: gramsPerGram,
   protein: gramsPerGram,
   carbs: gramsPerGram,
-  fiber: gramsPerGram,
+  /**
+   * Клетчатка необязательна: на упаковке её указывают не всегда (замечание
+   * диетолога 17.11.2026). Пустое поле — «не указана» (`undefined`, см.
+   * `fiberFromInput`): в справочник уходит 0 с пометкой «клетчатка
+   * неизвестна». Это осторожная сторона — соотношение не завышается.
+   */
+  fiber: gramsPerGram.optional(),
   source: requiredText,
   sourceVersion: requiredText,
   /** `<input type="date">` отдаёт ISO-дату; пустое поле не проходит проверку */
@@ -86,6 +92,16 @@ export const productFormSchema = z.object({
     })
     .optional(),
 });
+
+/**
+ * Значение поля клетчатки: пустое — «не указана», а не `NaN`, который
+ * `valueAsNumber` отдал бы и который не прошёл бы проверку как незаполненное
+ * обязательное поле.
+ */
+export function fiberFromInput(value: unknown): number | undefined {
+  if (value === "" || value === null || value === undefined) return undefined;
+  return typeof value === "number" ? value : Number(value);
+}
 
 /** Поле формы → поле значения API. */
 export const NUTRIENT_FIELDS = {
@@ -135,10 +151,10 @@ export const EMPTY_PRODUCT_FORM_VALUES: DefaultValues<ProductFormValues> = {
  */
 export function totalCarbsPerGram(
   carbs: number,
-  fiber: number,
+  fiber: number | undefined,
   carbsWithoutFiber: boolean | undefined,
 ): number {
-  return carbsWithoutFiber === true ? carbs + fiber : carbs;
+  return carbsWithoutFiber === true ? carbs + (fiber ?? 0) : carbs;
 }
 
 export function toProductFormValues(product: Product): ProductFormValues {
@@ -203,7 +219,10 @@ export function toProductCreateBody(
     carbs_100g: toPer100(
       totalCarbsPerGram(values.carbs, values.fiber, values.carbsWithoutFiber),
     ),
-    fiber_100g: toPer100(values.fiber),
+    fiber_100g: toPer100(values.fiber ?? 0),
+    // Пустая клетчатка — «не указана», а не «нет»: иначе справочник показал
+    // бы 0 как известное число. Указанная — по правилу стандарта.
+    ...(values.fiber === undefined ? { fiber_known: false } : {}),
     source: values.source.trim(),
     source_version: values.sourceVersion.trim(),
     verified_at: values.verifiedAt,
@@ -215,8 +234,11 @@ export function toProductCreateBody(
 export function toProductUpdateBody(
   values: ProductFormValues,
 ): ProductUpdateBody {
+  // Пометка «клетчатка не указана» — только у нового продукта: при правке
+  // сервер сам решает, что стало известным (вписанное число — известно).
+  const { fiber_known: _fiberKnown, ...body } = toProductCreateBody(values);
   return {
-    ...toProductCreateBody(values),
+    ...body,
     is_active: values.isActive,
     confirmed_fields: confirmedFields(values),
   };

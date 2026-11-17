@@ -37,7 +37,8 @@ function week(start: string, extra: object[] = []) {
         index === 0
           ? {
               id: "m1",
-              totals: { kcal: 1180, ratio: 3.5 },
+              totals: { kcal: 1180, ratio: 3.5, protein: 20.4, carbs: 11.2 },
+              prescription: { protein_g: 23, carbs_limit_g: 10 },
               items: [
                 {
                   id: "i1",
@@ -97,6 +98,21 @@ describe("неделя ребёнка", () => {
     const cell = await screen.findByText("Омлет");
     expect(cell.closest("tr")).toHaveTextContent("Приём 2");
     expect(screen.getByText("1 180 ккал")).toBeInTheDocument();
+  });
+
+  it("показывает белок и углеводы дня рядом с назначением", async () => {
+    renderGrid();
+
+    await screen.findByText("Омлет");
+    // Белок — минимум: недобор отмечен; углеводы — предел: перебор отмечен.
+    expect(screen.getByText("Б 20,4 / ≥ 23,0 г")).toBeInTheDocument();
+    expect(screen.getByText("У 11,2 / ≤ 10,0 г")).toBeInTheDocument();
+    expect(
+      screen.getByText("Белок 20,4 г — меньше назначенных 23,0 г"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Углеводы 11,2 г — больше предела 10,0 г"),
+    ).toBeInTheDocument();
   });
 
   it("запрашивает неделю с понедельника", async () => {

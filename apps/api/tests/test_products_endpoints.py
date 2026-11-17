@@ -63,6 +63,30 @@ class TestCategories:
 
 
 class TestProductWrites:
+    async def test_fibre_not_on_the_label_is_stored_as_unknown(
+        self, client, session, make_user, auth_headers
+    ):
+        # Замечание диетолога 17.11.2026: на упаковке клетчатки бывает не
+        # указано. Ноль уходит в справочник, но не как известное число.
+        dietitian = await make_user(UserRole.DIETITIAN)
+        category = await _category(session)
+
+        unknown = await client.post(
+            "/api/v1/products",
+            json={**_product_payload(category.id), "fiber_known": False},
+            headers=auth_headers(dietitian),
+        )
+        known = await client.post(
+            "/api/v1/products", json=_product_payload(category.id), headers=auth_headers(dietitian)
+        )
+
+        assert unknown.status_code == 201, unknown.text
+        assert unknown.json()["fiber_known"] is False
+        assert unknown.json()["fiber_100g"] == 0
+        # Не переданная пометка — по правилу стандарта, как раньше.
+        assert known.status_code == 201, known.text
+        assert known.json()["fiber_known"] is True
+
     async def test_admin_creates_product_with_revision_and_audit(
         self, client, session, make_user, auth_headers
     ):

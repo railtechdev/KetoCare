@@ -125,6 +125,12 @@ export interface FilterSearch {
   action?: string;
   /** Учётные записи: отбор по роли */
   role?: "admin" | "doctor" | "dietitian" | "parent";
+  /**
+   * База рецептов: вид выдачи — строками (`list`) или карточками с фото
+   * (`tiles`). Без параметра — умолчание роли: специалисту строки, семье
+   * карточки.
+   */
+  view?: "list" | "tiles";
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -201,6 +207,7 @@ function validateFilters(search: Record<string, unknown>): FilterSearch {
     role: (["admin", "doctor", "dietitian", "parent"] as const).find(
       (value) => value === search.role,
     ),
+    view: (["list", "tiles"] as const).find((value) => value === search.view),
   };
 }
 
