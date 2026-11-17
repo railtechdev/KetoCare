@@ -30,6 +30,8 @@ export interface FitToSave {
   idempotencyKey: string;
   title: string;
   ingredients: { product_id: string; grams: number }[];
+  /** The library recipe it is fitted from: the dish takes its steps (ADR-0088). */
+  recipeId: string;
 }
 
 /**
@@ -59,6 +61,7 @@ export function useSaveFits(patientId: string) {
               title: fit.title,
               ingredients: fit.ingredients,
               reject_excluded: true,
+              source_recipe_id: fit.recipeId,
             },
           },
         );

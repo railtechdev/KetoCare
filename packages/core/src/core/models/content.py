@@ -17,6 +17,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -310,6 +311,15 @@ class CustomDish(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMi
     )  # [{product_id, grams}]
     computed: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     engine_version: Mapped[str | None] = mapped_column(String(32))
+    #: How to cook it. A dish fitted from a library recipe gets the recipe's
+    #: steps: without them the card printed for a family or a cook said what
+    #: to weigh and not what to do with it (ADR-0088).
+    instructions: Mapped[str | None] = mapped_column(Text)
+    #: The library recipe the dish was fitted from; `None` for a dish composed
+    #: from scratch. Kept when the recipe is deleted: the dish is the child's.
+    source_recipe_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("recipes.id", ondelete="SET NULL")
+    )
 
 
 class RecipeImportDraft(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):

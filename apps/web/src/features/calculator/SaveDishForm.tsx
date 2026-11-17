@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Field } from "../../components/Field";
+import { Field, TextAreaField } from "../../components/Field";
 import { FormError } from "../../components/FormError";
 import { SectionLink } from "../../components/SectionLink";
 import { PatientViewLink } from "../doctor/PatientViewLink";
@@ -53,6 +53,14 @@ interface Props {
   onSavedAsNew?: (dishId: string) => void;
   /** The dish was written: the composition on screen is no longer a draft. */
   onSaved?: () => void;
+  /**
+   * Cooking steps, held by the calculator: its printed card shows them too
+   * (ADR-0088). Absent — the form has no steps field.
+   */
+  steps?: string;
+  onStepsChange?: (steps: string) => void;
+  /** The library recipe the composition was opened from. */
+  sourceRecipeId?: string | null;
 }
 
 /** «Сохранить как моё блюдо» (раздел 8.3 ТЗ). */
@@ -65,6 +73,9 @@ export function SaveDishForm({
   editing = null,
   onSavedAsNew,
   onSaved,
+  steps,
+  onStepsChange,
+  sourceRecipeId = null,
 }: Props) {
   const { t } = useTranslation("calculator");
   const queryClient = useQueryClient();
@@ -113,6 +124,7 @@ export function SaveDishForm({
             product_id: row.product.id,
             grams: row.grams,
           })),
+          instructions: steps,
         });
         if (!quiet) toast.success(t("save.savedChanges"));
         setSaved(true);
@@ -131,6 +143,8 @@ export function SaveDishForm({
         title: title.trim(),
         rows,
         idempotencyKey: attemptKey,
+        instructions: steps,
+        sourceRecipeId,
       });
       // Успех — тост, а не зелёная строка навсегда в потоке страницы (П16
       // канона): форма остаётся на месте и готова принять следующее блюдо.
@@ -220,6 +234,22 @@ export function SaveDishForm({
             if (saved) setSaved(false);
           }}
         />
+
+        {steps !== undefined && (
+          <TextAreaField
+            id="dish-steps"
+            label={t("save.steps")}
+            hint={t("save.stepsHint")}
+            optional
+            rows={5}
+            maxLength={10000}
+            value={steps}
+            onChange={(event) => {
+              onStepsChange?.(event.target.value);
+              if (saved) setSaved(false);
+            }}
+          />
+        )}
 
         <fieldset className="m-0 flex min-w-0 flex-col gap-field border-0 p-0">
           <legend className="mb-field p-0 text-sm font-medium">

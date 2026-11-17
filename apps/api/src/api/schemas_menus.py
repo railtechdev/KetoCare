@@ -137,6 +137,11 @@ class MenuItemRead(BaseModel):
     #: надо: рецепт правят, когда в нём нашли ошибку, и семье решать,
     #: пересобрать день или оставить как есть.
     changed_since_saved: bool = False
+    #: How to cook it, for the printed menu (ADR-0088). Read from the recipe or
+    #: the child's dish as they are now, not from the snapshot: steps decide
+    #: nothing that is counted, and a corrected step has to reach the cook of
+    #: a day already planned. `None` — the dish has no steps.
+    instructions: str | None = None
 
 
 class WithdrawnProduct(BaseModel):

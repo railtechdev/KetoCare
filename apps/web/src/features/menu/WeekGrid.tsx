@@ -8,7 +8,7 @@ import {
   cn,
   formatGrams,
   formatKcal,
-  formatMass,
+  formatRatio,
   toast,
 } from "@ketocare/ui";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -16,6 +16,7 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PrintButton } from "../../components/PrintButton";
+import { PrintedDish } from "../../components/PrintedDish";
 import { errorMessageOf } from "../../lib/api";
 import { queryState } from "../../lib/queryState";
 import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
@@ -354,6 +355,11 @@ function DayMacroTotals({
   );
 }
 
+/**
+ * The week on paper for a family or a cook (ADR-0088): a day per page, each
+ * dish a block — the composition as a table, then how to cook it — and the
+ * day's numbers under its date.
+ */
 export function WeekPrint({
   week,
   patientName,
@@ -365,21 +371,40 @@ export function WeekPrint({
 
   return (
     <div className="flex flex-col gap-4 text-sm">
-      <h1 className="m-0 text-lg font-semibold">
-        {t("week.printTitle", { name: patientName })}
-      </h1>
       {week.days
         .filter((day) => (day.menu?.items ?? []).length > 0)
-        .map((day) => (
-          <section key={day.date} className="break-inside-avoid">
-            <h2 className="m-0 font-semibold">{formatDayLabel(day.date)}</h2>
-            {day.menu?.totals != null && (
-              <p className="m-0">
-                {t("week.printTotals", {
-                  kcal: formatKcal(day.menu.totals.kcal),
-                })}
-              </p>
+        .map((day, index) => (
+          <section
+            key={day.date}
+            className={cn(
+              "flex flex-col gap-3",
+              index > 0 && "break-before-page",
             )}
+          >
+            <header className="flex flex-col gap-0.5 border-b border-black pb-1">
+              <p className="m-0 text-xs">
+                {t("week.printTitle", { name: patientName })}
+              </p>
+              <h1 className="m-0 text-lg font-semibold">
+                {formatDayLabel(day.date)}
+              </h1>
+              {day.menu?.totals != null && (
+                <p className="m-0">
+                  {day.menu.totals.ratio !== null && (
+                    <>{formatRatio(day.menu.totals.ratio)} · </>
+                  )}
+                  {t("week.printTotals", {
+                    kcal: formatKcal(day.menu.totals.kcal),
+                  })}
+                  {" · "}
+                  {t("week.printMacros", {
+                    fat: formatGrams(day.menu.totals.fat),
+                    protein: formatGrams(day.menu.totals.protein),
+                    carbs: formatGrams(day.menu.totals.carbs),
+                  })}
+                </p>
+              )}
+            </header>
             {(day.menu?.excluded_products ?? []).length > 0 && (
               <p className="m-0 font-semibold">
                 {t("week.printExcluded", {
@@ -389,22 +414,24 @@ export function WeekPrint({
                 })}
               </p>
             )}
-            {(day.menu?.items ?? []).map((item) => (
-              <div key={item.id} className="mt-1">
-                <p className="m-0 font-medium">
-                  {t("week.mealNumber", { number: item.meal_index })}:{" "}
-                  {item.title ?? t("week.untitled")}
-                </p>
-                <ul className="m-0 list-none p-0">
-                  {(item.ingredients ?? []).map((row) => (
-                    <li key={row.product_id}>
-                      {row.name_ru} —{" "}
-                      {t("week.grams", { value: formatMass(row.grams) })}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            {[...(day.menu?.items ?? [])]
+              .sort((a, b) => a.meal_index - b.meal_index)
+              .map((item) => (
+                <PrintedDish
+                  key={item.id}
+                  level={2}
+                  heading={t("week.printDish", {
+                    number: item.meal_index,
+                    title: item.title ?? t("week.untitled"),
+                  })}
+                  lines={(item.ingredients ?? []).map((row) => ({
+                    key: row.product_id,
+                    name: row.name_ru,
+                    grams: row.grams,
+                  }))}
+                  steps={item.instructions}
+                />
+              ))}
           </section>
         ))}
     </div>

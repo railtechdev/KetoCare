@@ -131,6 +131,23 @@ export function CalculatorView({
   // Готовое блюдо: рецепт или своя раскладка — приходит из карточки рецепта и
   // из списка блюд ребёнка.
   const incomingDish = useIncomingComposition(incoming, patientId);
+  // Cooking steps of the opened recipe or dish (ADR-0088): edited in the save
+  // form and printed on the card, so they live here. They follow the opened
+  // item and only change when another item is opened.
+  const [steps, setSteps] = useState("");
+  const [stepsFor, setStepsFor] = useState<string | null>(null);
+  // Nothing opened, or a single product: no steps to carry over, and the
+  // previous dish's would otherwise go into a new dish and onto its card.
+  const stepsSource =
+    incoming === null || incoming.kind === "product"
+      ? ""
+      : incomingDish.steps === undefined
+        ? undefined
+        : (incomingDish.steps ?? "");
+  if (stepsSource !== undefined && stepsFor !== (incomingId ?? null)) {
+    setStepsFor(incomingId ?? null);
+    setSteps(stepsSource);
+  }
 
   /**
    * Цель расчёта. `null` в каждой половине — «не задано».
@@ -698,6 +715,9 @@ export function CalculatorView({
                     blockedBy={saveBlockedBy}
                     waitingFor={saveWaitsFor}
                     inCard={inCard}
+                    steps={steps}
+                    onStepsChange={setSteps}
+                    sourceRecipeId={incomingDish.sourceRecipeId ?? null}
                     editing={
                       incoming?.kind === "dish" &&
                       incomingDish.dishTitle !== undefined
@@ -962,9 +982,10 @@ export function CalculatorView({
                       PLAN_UI_TEXT_2026-11). */}
                   <PrintButton label={t("print.button")} disabled={stale}>
                     <DishPrint
-                      title={incomingDish.dishTitle ?? t("print.untitled")}
+                      title={incomingDish.title ?? t("print.untitled")}
                       rows={rows}
                       dish={dish}
+                      steps={steps}
                     />
                   </PrintButton>
                 </div>

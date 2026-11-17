@@ -33,6 +33,8 @@ const DISH = {
   ingredients: [{ product_id: "p1", grams: 60 }],
   computed: null,
   engine_version: "1.3.0",
+  instructions: "Взбить яйца, запечь." as string | null,
+  source_recipe_id: null as string | null,
 };
 
 const VERIFIED = {
@@ -153,12 +155,34 @@ describe("saved dish opened in the calculator", () => {
     expect(options.body).toEqual({
       title: "Омлет",
       ingredients: [{ product_id: "p1", grams: 60 }],
+      instructions: "Взбить яйца, запечь.",
     });
     expect(
       (api.POST as Mock).mock.calls.some(([path]) =>
         String(path).includes("custom-dishes"),
       ),
     ).toBe(false);
+  });
+
+  it("shows the dish's steps and saves the edited ones (ADR-0088)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const steps = await screen.findByLabelText(/Приготовление/);
+    expect(steps).toHaveValue("Взбить яйца, запечь.");
+    await user.clear(steps);
+    await user.type(steps, "Запечь при 180");
+
+    const save = await saveChanges();
+    await waitFor(() => expect(save).toBeEnabled(), { timeout: 3000 });
+    await user.click(save);
+
+    await waitFor(() => expect(api.PUT).toHaveBeenCalledTimes(1));
+    const [, options] = (api.PUT as Mock).mock.calls[0] as [
+      string,
+      { body: { instructions?: string } },
+    ];
+    expect(options.body.instructions).toBe("Запечь при 180");
   });
 
   it("saves a copy and then shows that copy", async () => {

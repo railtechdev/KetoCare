@@ -137,6 +137,7 @@ describe("блюда из библиотеки", () => {
       title: "Курица с брокколи",
       ingredients: [{ product_id: "p1", grams: 26 }],
       reject_excluded: true,
+      source_recipe_id: "r1",
     });
     expect(options.params.header["Idempotency-Key"]).toEqual(
       expect.any(String),

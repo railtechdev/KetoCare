@@ -13,11 +13,13 @@ from fastapi import APIRouter, Path, Request, Response
 
 from core import exclusions
 from core.models import CustomDish
+from core.models.enums import RecipeStatus, UserRole
 from core.repositories import custom_dishes as dishes_repo
 from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
+from core.repositories import recipes as recipes_repo
 
-from ..deps.auth import PatientAccessDep, SessionDep
+from ..deps.auth import CurrentUser, PatientAccessDep, SessionDep
 from ..deps.idempotency import IdempotencyKeyDep
 from ..deps.query import PaginationDep
 from ..errors import ApiError, ErrorCode
@@ -60,6 +62,41 @@ async def _reject_excluded(
         )
 
 
+def _steps(text: str | None) -> str | None:
+    """Steps as stored: blank text is no steps, not an empty section on paper."""
+
+    if text is None:
+        return None
+    return text.strip() or None
+
+
+async def _source_recipe_steps(
+    session: SessionDep, user: CurrentUser, payload: CustomDishWrite
+) -> str | None:
+    """Steps the new dish gets (ADR-0088).
+
+    Sent steps win; otherwise the source recipe's are copied. A recipe the
+    user cannot read is refused the way the recipes section refuses it — a
+    draft hidden from a family is "not found" — so the link cannot be used to
+    read a draft's steps.
+    """
+
+    if payload.source_recipe_id is None:
+        return _steps(payload.instructions)
+    recipe = await recipes_repo.get(session, payload.source_recipe_id)
+    if recipe is None or (
+        user.role is UserRole.PARENT and recipe.status is not RecipeStatus.PUBLISHED
+    ):
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Рецепт, из которого собрано блюдо, не найден.",
+            details={"source_recipe_id": str(payload.source_recipe_id)},
+        )
+    if "instructions" in payload.model_fields_set:
+        return _steps(payload.instructions)
+    return _steps(recipe.instructions)
+
+
 @router.get("", response_model=Page[CustomDishRead], summary="Свои блюда пациента")
 async def list_dishes(
     patient_id: Annotated[uuid.UUID, Path()],
@@ -87,6 +124,7 @@ async def create_dish(
     _reject_duplicates(payload)
     if payload.reject_excluded:
         await _reject_excluded(session, patient_id, payload)
+    instructions = await _source_recipe_steps(session, user, payload)
     reservation: uuid.UUID | None = None
     if idempotency_key is not None:
         outcome = await idempotency.begin(
@@ -111,6 +149,8 @@ async def create_dish(
         ingredients=stored,
         computed=computed,
         engine_version=engine_version,
+        instructions=instructions,
+        source_recipe_id=payload.source_recipe_id,
     )
     created = CustomDishRead.model_validate(dish)
     if reservation is not None:
@@ -154,6 +194,11 @@ async def update_dish(
         ingredients=stored,
         computed=computed,
         engine_version=engine_version,
+        instructions=(
+            _steps(payload.instructions)
+            if "instructions" in payload.model_fields_set
+            else dish.instructions
+        ),
     )
     return CustomDishRead.model_validate(updated)
 

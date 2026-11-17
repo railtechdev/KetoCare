@@ -233,6 +233,7 @@ function FitReview({
           picked.map((item) => ({
             idempotencyKey: keys.get(item.recipe_id) as string,
             title: item.title,
+            recipeId: item.recipe_id,
             ingredients: (item.ingredients ?? []).map((row) => ({
               product_id: row.product_id,
               grams: row.grams,
