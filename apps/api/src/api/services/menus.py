@@ -339,9 +339,9 @@ async def _live_instructions(
 ) -> dict[uuid.UUID, str]:
     """Cooking steps of each item, from its recipe or the child's dish.
 
-    Read leniently, like `_live_compositions`: a deleted dish or a recipe
-    gone from the library leaves the item without steps, not the day
-    unreadable.
+    Read leniently, like `_live_compositions`: a deleted dish, a recipe gone
+    from the library or taken back to draft leaves the item without steps,
+    not the day unreadable.
     """
 
     recipe_ids = list({item.recipe_id for item in items if item.recipe_id is not None})
@@ -355,7 +355,12 @@ async def _live_instructions(
     for item in items:
         text: str | None = None
         if item.recipe_id is not None and item.recipe_id in recipes:
-            text = recipes[item.recipe_id].instructions
+            recipe = recipes[item.recipe_id]
+            # A recipe taken back to draft is being rewritten, and a family
+            # does not read drafts (section 5.3): its day keeps the grams of
+            # the snapshot and loses the steps until it is published again.
+            if recipe.status is RecipeStatus.PUBLISHED:
+                text = recipe.instructions
         elif item.custom_dish_id is not None and item.custom_dish_id in dishes:
             text = dishes[item.custom_dish_id].instructions
         if text is not None and text.strip():

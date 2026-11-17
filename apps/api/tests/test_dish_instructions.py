@@ -279,3 +279,27 @@ class TestMenuCarriesSteps:
         assert response.status_code == 200, response.text
         steps = {item["meal_index"]: item["instructions"] for item in response.json()["items"]}
         assert steps == {1: STEPS, 2: "Запечь", 3: None}
+
+    async def test_recipe_taken_back_to_draft_loses_its_steps(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """A draft is being rewritten; a family does not read drafts (5.3)."""
+        parent, dietitian, patient, product = await _setup(session, make_user, make_patient)
+        recipe = await _recipe(session, dietitian, product)
+        saved = await client.put(
+            f"/api/v1/patients/{patient.id}/menus",
+            json={"date": "2026-11-18", "items": [{"meal_index": 1, "recipe_id": str(recipe.id)}]},
+            headers=auth_headers(parent),
+        )
+        assert saved.json()["items"][0]["instructions"] == STEPS
+
+        recipe.status = RecipeStatus.DRAFT
+        await session.flush()
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/menus",
+            params={"date": "2026-11-18"},
+            headers=auth_headers(parent),
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["items"][0]["instructions"] is None

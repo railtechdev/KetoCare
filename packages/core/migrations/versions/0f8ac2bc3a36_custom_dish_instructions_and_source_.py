@@ -5,10 +5,12 @@ cooking steps, so the printed card told a family or a cook what to weigh and
 not how to cook it (dietitian, 17.11.2026; ADR-0088).
 
 Dishes saved before this revision carry no link to their recipe. The fitting
-sheet names a dish after its recipe, so a dish whose title matches exactly one
-recipe gets that recipe's steps and link. A title matching no recipe, or
-several, is left alone: guessing between two recipes would print the wrong
-steps.
+sheet names a dish after its recipe and changes grams, not products, so a dish
+gets a recipe's steps and link only when its title matches exactly one
+published recipe and its products are exactly that recipe's. Drafts are never
+matched: fitting refuses them, and a family must not read a draft's steps.
+Anything else is left alone — wrong steps on a cook's sheet are worse than
+none.
 
 Revision ID: 0f8ac2bc3a36
 Revises: 3dda4ca27efc
@@ -43,19 +45,34 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        WITH unique_titles AS (
-            SELECT lower(btrim(title)) AS key, (array_agg(id))[1] AS recipe_id
-            FROM recipes
-            GROUP BY lower(btrim(title))
-            HAVING count(*) = 1
+        WITH candidates AS (
+            SELECT lower(btrim(recipe.title)) AS key,
+                   recipe.id,
+                   recipe.instructions,
+                   ARRAY(
+                       SELECT DISTINCT line.product_id
+                       FROM recipe_ingredients AS line
+                       WHERE line.recipe_id = recipe.id
+                       ORDER BY 1
+                   ) AS products
+            FROM recipes AS recipe
+            WHERE recipe.status = 'published'
+        ),
+        unique_titles AS (
+            SELECT key FROM candidates GROUP BY key HAVING count(*) = 1
         )
         UPDATE custom_dishes AS dish
-        SET source_recipe_id = recipe.id,
-            instructions = NULLIF(btrim(recipe.instructions), '')
-        FROM unique_titles
-        JOIN recipes AS recipe ON recipe.id = unique_titles.recipe_id
-        WHERE lower(btrim(dish.title)) = unique_titles.key
+        SET source_recipe_id = candidate.id,
+            instructions = NULLIF(btrim(candidate.instructions), '')
+        FROM candidates AS candidate
+        JOIN unique_titles USING (key)
+        WHERE lower(btrim(dish.title)) = candidate.key
           AND dish.source_recipe_id IS NULL
+          AND candidate.products = ARRAY(
+              SELECT DISTINCT (line ->> 'product_id')::uuid
+              FROM jsonb_array_elements(dish.ingredients) AS line
+              ORDER BY 1
+          )
         """
     )
 

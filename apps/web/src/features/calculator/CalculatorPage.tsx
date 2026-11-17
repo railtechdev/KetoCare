@@ -136,9 +136,17 @@ export function CalculatorView({
   // item and only change when another item is opened.
   const [steps, setSteps] = useState("");
   const [stepsFor, setStepsFor] = useState<string | null>(null);
-  if (incomingDish.steps !== undefined && stepsFor !== (incomingId ?? null)) {
+  // Nothing opened, or a single product: no steps to carry over, and the
+  // previous dish's would otherwise go into a new dish and onto its card.
+  const stepsSource =
+    incoming === null || incoming.kind === "product"
+      ? ""
+      : incomingDish.steps === undefined
+        ? undefined
+        : (incomingDish.steps ?? "");
+  if (stepsSource !== undefined && stepsFor !== (incomingId ?? null)) {
     setStepsFor(incomingId ?? null);
-    setSteps(incomingDish.steps ?? "");
+    setSteps(stepsSource);
   }
 
   /**
