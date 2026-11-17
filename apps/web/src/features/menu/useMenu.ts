@@ -371,6 +371,36 @@ export function useDeleteMenuMutation(patientId: string | null) {
 }
 
 /**
+ * «Взять новый состав»: позиция дня получает блюдо таким, какое оно сейчас
+ * (ADR-0089). Та же позиция — отметки и ссылки дневника на неё сохраняются.
+ */
+export function useRefreshMenuItemMutation(patientId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    networkMode: "always",
+    retry: false,
+    mutationFn: async (itemId: string) => {
+      if (patientId === null)
+        throw new Error("patientId is required to refresh an item");
+      const { data, error } = await api.POST(
+        "/api/v1/patients/{patient_id}/menus/items/{item_id}/refresh",
+        { params: { path: { patient_id: patientId, item_id: itemId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty menu response");
+      return data;
+    },
+    onSuccess: (menu) => {
+      queryClient.setQueryData(menuKey(patientId, menu.date), menu);
+      void queryClient.invalidateQueries({ queryKey: menusKey(patientId) });
+      void queryClient.invalidateQueries({
+        queryKey: patientOverviewKey(patientId),
+      });
+    },
+  });
+}
+
+/**
  * Отметка «съедено» с оптимистичным апдейтом.
  *
  * Раздел 8.4 ТЗ разрешает оптимистичные апдейты только для этих чекбоксов:
@@ -424,6 +454,10 @@ export function useEatenMutation(patientId: string | null, date: string) {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: key });
+      // «Съедено 10 нояб.» в выборе блюда (ADR-0089) — из той же отметки.
+      void queryClient.invalidateQueries({
+        queryKey: [...menusKey(patientId), "dish-usage"],
+      });
     },
   });
 }

@@ -13,7 +13,11 @@ import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
 import { incomingDish, incomingRecipe } from "../calculator/incomingItem";
 import { PatientViewLink } from "../doctor/PatientViewLink";
-import { useRemoveMenuItemMutation, type MenuItemRead } from "./useMenu";
+import {
+  useRefreshMenuItemMutation,
+  useRemoveMenuItemMutation,
+  type MenuItemRead,
+} from "./useMenu";
 
 /**
  * Блюдо в ячейке недели: нажатие открывает «Открыть блюдо» и «Убрать из меню».
@@ -47,18 +51,19 @@ export function WeekCellItem({
   const { t } = useTranslation("menu");
   const [open, setOpen] = useState(false);
   const removal = useRemoveMenuItemMutation(patientId);
+  const refresh = useRefreshMenuItemMutation(patientId);
   const title = item.title ?? t("week.untitled");
   // Только для слов на экране: что на самом деле уйдёт — `PUT` или удаление
   // дня, — решает состав дня на сервере в момент нажатия.
   const last = dayItems.length === 1;
-  const pending = removal.isPending;
+  const pending = removal.isPending || refresh.isPending;
   const opensAs =
     item.custom_dish_id !== null
       ? incomingDish(item.custom_dish_id)
       : item.recipe_id !== null
         ? incomingRecipe(item.recipe_id)
         : null;
-  const error = removal.error;
+  const error = removal.error ?? refresh.error;
 
   function remove() {
     if (pending) return;
@@ -80,7 +85,10 @@ export function WeekCellItem({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) removal.reset();
+        if (!next) {
+          removal.reset();
+          refresh.reset();
+        }
       }}
     >
       <PopoverTrigger asChild>
@@ -120,10 +128,29 @@ export function WeekCellItem({
             </PatientViewLink>
           </Button>
         )}
-        {item.changed_since_saved && (
-          <p className="m-0 text-sm text-muted-foreground">
-            {t("item.changedSinceSaved")}
-          </p>
+        {item.changed_since_saved && !item.eaten && (
+          <>
+            <p className="m-0 text-sm text-muted-foreground">
+              {t("item.changedRefresh")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch self-start"
+              disabled={pending}
+              aria-busy={refresh.isPending || undefined}
+              onClick={() =>
+                refresh.mutate(item.id, {
+                  onSuccess: () => {
+                    setOpen(false);
+                    toast.success(t("item.refreshed", { title }));
+                  },
+                })
+              }
+            >
+              {t("item.refresh")}
+            </Button>
+          </>
         )}
         {item.eaten ? (
           <p className="m-0 text-sm text-muted-foreground">

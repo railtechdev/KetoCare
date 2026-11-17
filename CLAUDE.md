@@ -32,7 +32,7 @@ KetoCare — платформа сопровождения кетогенной 
 
 - `packages/keto_engine` — verify/solve/scale, 35 provisional-эталонов, property-тесты, покрытие 100%.
 - `packages/core` — все 31 таблица раздела 4.2, Alembic-миграции с сидом справочников, репозитории (`access`, `prescriptions`, `products`, `patients`, `users`, `audit`).
-- `apps/api` — JWT + TOTP, RBAC-зависимости, приглашения, `/auth`, `/patients`, `/prescriptions`, `/products` (включая CSV-импорт), `/calc`. Всего в API сейчас 101 путь и 144 операции.
+- `apps/api` — JWT + TOTP, RBAC-зависимости, приглашения, `/auth`, `/patients`, `/prescriptions`, `/products` (включая CSV-импорт), `/calc`. Всего в API сейчас 150 путей и 204 операции (17.11.2026).
 - `packages/api-client` — генерируется из OpenAPI (`make openapi`).
 - `Makefile`, `infra/docker-compose.dev.yml`, `.github/workflows/ci.yml` (шесть
   задач; в том числе **сборка всех трёх целей Dockerfile** — `main` уезжает на
@@ -732,6 +732,10 @@ KDC, остаётся вопросом K7. **Вид документа «МРТ 
 — блоки `components/PrintedDish.tsx` (состав таблицей, «Приготовление» под ним, день — со своей
 страницы); из ячейки недели блюдо открывается в калькуляторе карты. Тот же лист выгружается в
 Word (`WordButton`, `lib/wordExport.ts` грузит `docx` по нажатию; модель — `features/print/`).
+
+**«Уже давали» и «Взять новый состав»** ([ADR-0089](docs/adr/0089-dish-usage-and-item-refresh.md),
+17.11.2026): `GET …/menus/dish-usage` (рецепт считает и блюда ребёнка из него) — пометка в выборе
+блюда; `POST …/menus/items/{id}/refresh` переснимает состав одной несъеденной позиции, позиция та же.
 
 **В строке состава стоит вклад позиции** — калории, жиры, белки, углеводы на её
 массу (дополнение к ADR-0028 от 09.09.2026). Считает ядро: `verify()` отдаёт вклад

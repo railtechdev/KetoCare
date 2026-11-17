@@ -11,7 +11,9 @@ import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { DishUsageNote } from "./DishUsageNote";
 import { useDishOptions, type DishOption } from "./useDishCatalog";
+import { useDishUsage } from "./useDishUsage";
 
 interface Props {
   patientId: string | null;
@@ -62,6 +64,7 @@ export function DishPicker({
     debounced,
   );
 
+  const usage = useDishUsage(patientId);
   const isOpen = open && options.length > 0;
 
   function pick(option: DishOption | undefined) {
@@ -114,6 +117,15 @@ export function DishPicker({
                 {t("picker.servings", { count: option.servings })}
               </span>
             )}
+            <span className="basis-full">
+              <DishUsageNote
+                usage={
+                  option.kind === "recipe"
+                    ? usage.recipe(option.id)
+                    : usage.dish(option.id)
+                }
+              />
+            </span>
           </div>
         )}
       >

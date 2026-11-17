@@ -56,6 +56,14 @@ export function formatWeekday(value: string): string {
   }).format(parseIsoDate(value));
 }
 
+/** Короткая дата в строке списка: «12 нояб.». */
+export function formatShortDate(value: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "short",
+  }).format(parseIsoDate(value));
+}
+
 /** Подпись дня для заголовка: «пт, 28 августа 2026 г.». */
 export function formatDayLabel(value: string): string {
   return new Intl.DateTimeFormat("ru-RU", {

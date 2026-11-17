@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from datetime import date, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Path, Query, Request
 
@@ -26,6 +26,7 @@ from ..deps.auth import CurrentUser, PatientAccessDep, SessionDep
 from ..errors import ApiError, ErrorCode
 from ..schemas import ProductRead
 from ..schemas_menus import (
+    DishUsageRead,
     MenuItemEatenWrite,
     MenuItemRead,
     MenuItemWrite,
@@ -121,6 +122,27 @@ async def recent_products(
         for pid in ids
         if pid in products and products[pid].is_active
     ][:RECENT_PRODUCTS_LIMIT]
+
+
+@router.get(
+    "/dish-usage",
+    response_model=DishUsageRead,
+    summary="Где уже стояли рецепты и блюда ребёнка",
+)
+async def dish_usage(
+    patient_id: PatientIdPath,
+    session: SessionDep,
+    _: PatientAccessDep,
+) -> DishUsageRead:
+    """«Уже давали»: когда блюдо стояло в меню этого ребёнка и когда его съели.
+
+    Диетолог подбирает рецепты каждому ребёнку и ставит их в неделю; без этого
+    приходилось помнить, что из подобранного ребёнок уже пробовал (замечание
+    17.11.2026).
+    """
+
+    rows = await menus_repo.usage_rows(session, patient_id=patient_id)
+    return menus_service.dish_usage(rows)
 
 
 async def _save_day(
@@ -405,6 +427,92 @@ def _plan_of(items: Sequence[MenuItem]) -> list[tuple[int, str, str, float]]:
         )
         for item in items
     )
+
+
+def _frozen_part(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
+    """What a family cooks by: name, servings and the weighed composition."""
+
+    if snapshot is None:
+        return None
+    return {key: snapshot.get(key) for key in ("title", "servings", "ingredients")}
+
+
+@router.post(
+    "/items/{item_id}/refresh",
+    response_model=MenuRead,
+    summary="Взять в день новый состав блюда",
+)
+async def refresh_item(
+    patient_id: PatientIdPath,
+    item_id: Annotated[uuid.UUID, Path()],
+    request: Request,
+    session: SessionDep,
+    user: PatientAccessDep,
+) -> MenuRead:
+    """Позиция дня получает состав блюда или рецепта таким, какой он сейчас.
+
+    Позиция хранит снимок состава на день сохранения (ADR-0016), и подогнанные
+    после этого граммы в день не попадали: «убрать и добавить заново» —
+    единственный путь, и диетолог правила блюдо, не видя, что неделя осталась
+    прежней (17.11.2026). Съеденное не обновляется: это уже запись о том, что
+    ребёнок ел. Отказ снимка (рецепт снят с публикации, блюдо удалено) — тот
+    же, что у сохранения дня.
+    """
+
+    item = await _owned_item(session, item_id, patient_id)
+    # Та же блокировка дня, что у сохранения и отметки «съедено» (Н10): отметка,
+    # поставленная в эту секунду, либо видна здесь, либо ждёт обновления.
+    menu = await menus_repo.lock_menu(session, menu_id=item.menu_id)
+    await session.refresh(item)
+    if menu is None or menu.deleted_at is not None or item.deleted_at is not None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "План дня только что изменили, и этого блюда в нём больше нет. Обновите план.",
+            details={"reason": "plan_changed"},
+        )
+    if item.eaten:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Блюдо уже отмечено съеденным — это запись о том, что ребёнок ел, и её "
+            "состав не меняется.",
+            details={"reason": "eaten"},
+        )
+
+    (snapshot,) = await menus_service.build_snapshots(
+        session,
+        patient_id=patient_id,
+        items=[
+            MenuItemWrite(
+                meal_index=item.meal_index,
+                recipe_id=item.recipe_id,
+                custom_dish_id=item.custom_dish_id,
+                portion_factor=float(item.portion_factor),
+            )
+        ],
+    )
+    # Состав уже тот же — день не трогается: ни «Составил(а)», ни аудита, ни
+    # второго сообщения семье (то же правило, что у `PUT` дня, `plan_changed`).
+    # Кнопку экран показывает только при расхождении, но держит это сервер.
+    if _frozen_part(snapshot) == _frozen_part(item.snapshot):
+        return await _read(session, menu)
+
+    await menus_repo.set_snapshot(
+        session, menu=menu, item=item, snapshot=snapshot, updated_by=user.id
+    )
+    items = await menus_repo.list_items(session, menu_id=menu.id)
+    totals, engine_version = menus_service.totals_from_items(items)
+    menu = await menus_repo.set_totals(
+        session, menu=menu, totals=totals, engine_version=engine_version
+    )
+    if user.role in SPECIALIST_ROLES:
+        await menus_service.tell_family_about_plan(
+            session,
+            menu=menu,
+            composer_id=user.id,
+            items=len(items),
+            ip=client_address(request),
+        )
+    return await menus_service.to_read(session, menu, items)
 
 
 @router.post(

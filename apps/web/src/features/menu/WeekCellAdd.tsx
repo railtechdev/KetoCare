@@ -25,6 +25,8 @@ import {
   type RecipeFit,
 } from "../dishes/useRecipeFits";
 import { useRecipeSearch } from "../recipes/useRecipes";
+import { DishUsageNote } from "./DishUsageNote";
+import { useDishUsage } from "./useDishUsage";
 import { useAddToMenuMutation, type DishKind } from "./useMenu";
 
 /** Сколько рецептов показать в ячейке: выбирают по названию, а не листают. */
@@ -112,6 +114,7 @@ function CellPicker({
   const needle = query.trim().toLocaleLowerCase("ru-RU");
 
   const dishes = useCustomDishes(patientId);
+  const usage = useDishUsage(patientId);
   const recipes = useRecipeSearch(
     {
       q: debounced.trim(),
@@ -220,7 +223,10 @@ function CellPicker({
                   disabled={add.isPending}
                   onClick={() => addDish("custom", dish.id, dish.title)}
                 >
-                  {dish.title}
+                  <span className="min-w-0 break-words">
+                    {dish.title}
+                    <DishUsageNote usage={usage.dish(dish.id)} />
+                  </span>
                 </Button>
               </li>
             ))}
@@ -256,7 +262,10 @@ function CellPicker({
                     setRecipe({ id: item.id, title: item.title });
                   }}
                 >
-                  <span className="min-w-0 break-words">{item.title}</span>
+                  <span className="min-w-0 break-words">
+                    {item.title}
+                    <DishUsageNote usage={usage.recipe(item.id)} />
+                  </span>
                   {item.computed && <RatioBadge ratio={item.computed.ratio} />}
                 </Button>
               </li>

@@ -208,6 +208,39 @@ class MenuRead(BaseModel):
     tolerance_gap: ToleranceGap | None = None
 
 
+class DishUsageEntry(BaseModel):
+    """Where one recipe or one child's dish has stood in this child's menu.
+
+    Consumer: the cabinet's dish pickers (`features/menu/useDishUsage.ts`) —
+    «уже давали», so a dish is not given again by mistake (dietitian,
+    17.11.2026).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    #: The latest day it is planned on, past or future.
+    last_date: date
+    #: How many days it is planned on.
+    days: int
+    #: The latest day the family marked it eaten; `None` — never.
+    last_eaten: date | None
+
+
+class DishUsageRead(BaseModel):
+    """Usage of recipes and of the child's dishes in the child's menus.
+
+    A recipe's entry also counts the child's dishes fitted from it
+    (`custom_dishes.source_recipe_id`, ADR-0088): fitting changes grams, not
+    the dish, and «чтобы не назначать повторно» is about the dish.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    recipes: list[DishUsageEntry]
+    dishes: list[DishUsageEntry]
+
+
 class DayPrescription(BaseModel):
     """Назначение на дату — для дня, у которого меню ещё нет.
 

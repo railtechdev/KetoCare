@@ -25,6 +25,8 @@ import {
   type RecipeFit,
   type RecipeFitsResponse,
 } from "./useRecipeFits";
+import { DishUsageNote } from "../menu/DishUsageNote";
+import { useDishUsage } from "../menu/useDishUsage";
 
 const SEARCH_LIMIT = 50;
 const MAX_SELECTED = 20;
@@ -82,6 +84,7 @@ function FitFlow({
 
   return (
     <RecipeChoice
+      patientId={patientId}
       pending={fit.isPending}
       error={
         fit.isError
@@ -95,11 +98,13 @@ function FitFlow({
 }
 
 function RecipeChoice({
+  patientId,
   pending,
   error,
   onCancel,
   onSubmit,
 }: {
+  patientId: string;
   pending: boolean;
   error: string | null;
   onCancel: () => void;
@@ -108,6 +113,7 @@ function RecipeChoice({
   const { t } = useTranslation("recipes");
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const usage = useDishUsage(patientId);
   const search = useRecipeSearch(
     { q, category: "", ratioMin: "", ratioMax: "", limit: SEARCH_LIMIT },
     true,
@@ -166,7 +172,10 @@ function RecipeChoice({
                   checked={selected.has(recipe.id)}
                   onChange={() => toggle(recipe.id)}
                 />
-                <span className="flex-1">{recipe.title}</span>
+                <span className="flex-1">
+                  {recipe.title}
+                  <DishUsageNote usage={usage.recipe(recipe.id)} />
+                </span>
                 {recipe.computed && (
                   <RatioBadge ratio={recipe.computed.ratio} />
                 )}

@@ -362,6 +362,79 @@ async def has_eaten_on(session: AsyncSession, *, patient_id: uuid.UUID, day: dat
     return bool(found)
 
 
+@dataclass(frozen=True, slots=True)
+class UsageRow:
+    """One planned item of a child's menu, reduced to what usage needs."""
+
+    day: date
+    eaten: bool
+    recipe_id: uuid.UUID | None
+    custom_dish_id: uuid.UUID | None
+    #: The recipe the child's dish was fitted from, if any.
+    source_recipe_id: uuid.UUID | None
+
+
+async def usage_rows(session: AsyncSession, *, patient_id: uuid.UUID) -> list[UsageRow]:
+    """Every live item of the child's live days, with the dish's source recipe.
+
+    A child's history is days times meals — hundreds of rows a year — so it
+    is read whole and grouped by the caller.
+    """
+
+    stmt = (
+        select(
+            Menu.date,
+            MenuItem.eaten,
+            MenuItem.recipe_id,
+            MenuItem.custom_dish_id,
+            CustomDish.source_recipe_id,
+        )
+        .join(Menu, Menu.id == MenuItem.menu_id)
+        # The dish must be the child's own: writes already guarantee it, and the
+        # join should not depend on that.
+        .outerjoin(
+            CustomDish,
+            (CustomDish.id == MenuItem.custom_dish_id)
+            & (CustomDish.patient_id == MenuItem.patient_id),
+        )
+        .where(
+            MenuItem.patient_id == patient_id,
+            MenuItem.deleted_at.is_(None),
+            Menu.deleted_at.is_(None),
+        )
+    )
+    return [
+        UsageRow(
+            day=row[0],
+            eaten=row[1],
+            recipe_id=row[2],
+            custom_dish_id=row[3],
+            source_recipe_id=row[4],
+        )
+        for row in await session.execute(stmt)
+    ]
+
+
+async def set_snapshot(
+    session: AsyncSession,
+    *,
+    menu: Menu,
+    item: MenuItem,
+    snapshot: dict[str, Any],
+    updated_by: uuid.UUID,
+) -> MenuItem:
+    """Replace the frozen composition of one item — only on an explicit ask.
+
+    The day's composer becomes the one who asked: the plan the family cooks
+    by changed, and «Составил(а)» must name who changed it (ADR-0047).
+    """
+
+    item.snapshot = snapshot
+    menu.updated_by = updated_by
+    await session.flush()
+    return item
+
+
 async def get_recipes_by_ids(
     session: AsyncSession, *, recipe_ids: Sequence[uuid.UUID]
 ) -> dict[uuid.UUID, Recipe]:

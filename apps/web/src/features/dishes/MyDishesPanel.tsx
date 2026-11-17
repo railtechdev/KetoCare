@@ -31,6 +31,8 @@ import {
 } from "./useCustomDishes";
 import { queryState } from "../../lib/queryState";
 import { RecipeFitSheet } from "./RecipeFitSheet";
+import { DishUsageNote } from "../menu/DishUsageNote";
+import { useDishUsage } from "../menu/useDishUsage";
 
 /**
  * Блюда ребёнка — раскладки, сохранённые из калькулятора.
@@ -59,6 +61,7 @@ export function MyDishesPanel({
   const { t } = useTranslation("recipes");
   const inCard = openIn === "card";
   const dishes = useCustomDishes(patientId);
+  const usage = useDishUsage(patientId);
   // Цель есть только у специалиста в карте: семье сервер этого не отдаёт.
   const review = useDishReview(inCard ? patientId : null);
   const offTarget = new Set(
@@ -121,7 +124,10 @@ export function MyDishesPanel({
               key={dish.id}
               className="flex flex-wrap items-center gap-field rounded-xl border border-border p-3"
             >
-              <span className="flex-1 font-semibold">{dish.title}</span>
+              <span className="flex-1 font-semibold">
+                {dish.title}
+                <DishUsageNote usage={usage.dish(dish.id)} />
+              </span>
 
               {offTarget.has(dish.id) && (
                 <span className="text-sm text-warning-strong">
