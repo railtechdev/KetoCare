@@ -80,16 +80,23 @@ export function useUpdateCustomDish(patientId: string) {
       dishId,
       title,
       ingredients,
+      instructions,
     }: {
       dishId: string;
       title: string;
       ingredients: CustomDish["ingredients"];
+      /** Left out, the saved steps stay (ADR-0088). */
+      instructions?: string;
     }) => {
       const { data, error } = await api.PUT(
         "/api/v1/patients/{patient_id}/custom-dishes/{dish_id}",
         {
           params: { path: { patient_id: patientId, dish_id: dishId } },
-          body: { title, ingredients },
+          body: {
+            title,
+            ingredients,
+            ...(instructions === undefined ? {} : { instructions }),
+          },
         },
       );
       if (error || !data) throw error ?? new Error("Empty dish response");

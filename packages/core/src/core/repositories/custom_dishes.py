@@ -50,6 +50,8 @@ async def create(
     ingredients: list[dict[str, Any]],
     computed: dict[str, Any],
     engine_version: str,
+    instructions: str | None = None,
+    source_recipe_id: uuid.UUID | None = None,
 ) -> CustomDish:
     dish = CustomDish(
         patient_id=patient_id,
@@ -57,6 +59,8 @@ async def create(
         ingredients=ingredients,
         computed=computed,
         engine_version=engine_version,
+        instructions=instructions,
+        source_recipe_id=source_recipe_id,
     )
     session.add(dish)
     await session.flush()
@@ -71,6 +75,7 @@ async def update(
     ingredients: list[dict[str, Any]],
     computed: dict[str, Any],
     engine_version: str,
+    instructions: str | None,
 ) -> CustomDish:
     """Пересчитанные значения сохраняются вместе с версией движка (раздел 4.1 ТЗ):
     без неё нельзя отличить, каким кодом получен сохранённый результат."""
@@ -79,6 +84,7 @@ async def update(
     dish.ingredients = ingredients
     dish.computed = computed
     dish.engine_version = engine_version
+    dish.instructions = instructions
     await session.flush()
     return dish
 

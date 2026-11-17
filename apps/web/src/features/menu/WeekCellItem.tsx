@@ -11,10 +11,16 @@ import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
 import { errorMessageOf } from "../../lib/api";
+import { incomingDish, incomingRecipe } from "../calculator/incomingItem";
+import { PatientViewLink } from "../doctor/PatientViewLink";
 import { useRemoveMenuItemMutation, type MenuItemRead } from "./useMenu";
 
 /**
- * Блюдо в ячейке недели: нажатие открывает «Убрать из меню».
+ * Блюдо в ячейке недели: нажатие открывает «Открыть блюдо» и «Убрать из меню».
+ *
+ * «Открыть» ведёт в калькулятор карты — подогнать граммы, не разыскивая блюдо
+ * в списке (диетолог, 17.11.2026). День при этом не меняется: позиция хранит
+ * снимок состава, и об этом сказано рядом, если блюдо уже правили.
  *
  * Раньше ячейка только показывала название: ошибочно поставленное блюдо
  * убиралось лишь в сборке дня под сеткой — найти день, прокрутить, найти приём.
@@ -46,6 +52,12 @@ export function WeekCellItem({
   // дня, — решает состав дня на сервере в момент нажатия.
   const last = dayItems.length === 1;
   const pending = removal.isPending;
+  const opensAs =
+    item.custom_dish_id !== null
+      ? incomingDish(item.custom_dish_id)
+      : item.recipe_id !== null
+        ? incomingRecipe(item.recipe_id)
+        : null;
   const error = removal.error;
 
   function remove() {
@@ -96,6 +108,23 @@ export function WeekCellItem({
       </PopoverTrigger>
       <PopoverContent align="start" className="flex w-72 flex-col gap-field">
         <p className="m-0 font-medium break-words">{title}</p>
+        {opensAs !== null && (
+          <Button asChild variant="outline" className="min-h-touch self-start">
+            <PatientViewLink
+              patientId={patientId}
+              view="calculator"
+              item={opensAs}
+              onClick={() => setOpen(false)}
+            >
+              {t("week.openItem")}
+            </PatientViewLink>
+          </Button>
+        )}
+        {item.changed_since_saved && (
+          <p className="m-0 text-sm text-muted-foreground">
+            {t("item.changedSinceSaved")}
+          </p>
+        )}
         {item.eaten ? (
           <p className="m-0 text-sm text-muted-foreground">
             {t("item.eatenByFamily")}

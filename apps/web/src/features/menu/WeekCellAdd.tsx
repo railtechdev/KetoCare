@@ -388,6 +388,7 @@ function RecipeStep({
                   {
                     idempotencyKey: attemptKey,
                     title: result.title,
+                    recipeId: result.recipe_id,
                     ingredients: (result.ingredients ?? []).map((row) => ({
                       product_id: row.product_id,
                       grams: row.grams,

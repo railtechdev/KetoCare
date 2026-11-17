@@ -1126,6 +1126,14 @@ class CustomDishWrite(BaseModel):
     #: Refuse a composition with what is excluded to this child. Sent when the
     #: composition is a proposal: an exclusion may have appeared since it was made.
     reject_excluded: bool | None = None
+    #: How to cook it (ADR-0088). Left out of a `PUT`, the saved steps stay:
+    #: clients that only rename a dish or change its grams send no steps, and
+    #: their absence must not erase them. An empty string clears them.
+    instructions: Annotated[str, Field(max_length=10000)] | None = None
+    #: The library recipe the dish is fitted from. Only `POST` reads it: a dish
+    #: does not change its origin. Without `instructions` the recipe's steps
+    #: are copied.
+    source_recipe_id: uuid.UUID | None = None
 
 
 class DishComputed(BaseModel):
@@ -1150,6 +1158,8 @@ class CustomDishRead(BaseModel):
     ingredients: list[DishIngredientIn]
     computed: DishComputed | None
     engine_version: str | None
+    instructions: str | None = None
+    source_recipe_id: uuid.UUID | None = None
     created_at: datetime
 
 

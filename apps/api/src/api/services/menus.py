@@ -110,6 +110,7 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
     а не `model_validate(menu)`."""
 
     live = await _live_compositions(session, menu=menu, items=items)
+    steps = await _live_instructions(session, menu=menu, items=items)
     composer = None if menu.updated_by is None else await users_repo.get(session, menu.updated_by)
     prescription = await prescriptions_repo.get_active_on(
         session, patient_id=menu.patient_id, day=menu.date
@@ -136,12 +137,14 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
                         "ingredients",
                         "has_snapshot",
                         "changed_since_saved",
+                        "instructions",
                     }
                 ),
                 title=None if item.snapshot is None else item.snapshot.get("title"),
                 ingredients=_snapshot_ingredients(item),
                 has_snapshot=item.snapshot is not None,
                 changed_since_saved=_changed_since_saved(item, live.get(item.id, [])),
+                instructions=steps.get(item.id),
             )
             for item in items
         ],
@@ -329,6 +332,35 @@ async def _live_compositions(
         item_id: [(pid, grams, products[pid]) for pid, grams in rows if pid in products]
         for item_id, rows in raw.items()
     }
+
+
+async def _live_instructions(
+    session: AsyncSession, *, menu: Menu, items: Sequence[MenuItem]
+) -> dict[uuid.UUID, str]:
+    """Cooking steps of each item, from its recipe or the child's dish.
+
+    Read leniently, like `_live_compositions`: a deleted dish or a recipe
+    gone from the library leaves the item without steps, not the day
+    unreadable.
+    """
+
+    recipe_ids = list({item.recipe_id for item in items if item.recipe_id is not None})
+    dish_ids = list({item.custom_dish_id for item in items if item.custom_dish_id is not None})
+    recipes = await menus_repo.get_recipes_by_ids(session, recipe_ids=recipe_ids)
+    dishes = await menus_repo.get_custom_dishes_by_ids(
+        session, patient_id=menu.patient_id, dish_ids=dish_ids
+    )
+
+    steps: dict[uuid.UUID, str] = {}
+    for item in items:
+        text: str | None = None
+        if item.recipe_id is not None and item.recipe_id in recipes:
+            text = recipes[item.recipe_id].instructions
+        elif item.custom_dish_id is not None and item.custom_dish_id in dishes:
+            text = dishes[item.custom_dish_id].instructions
+        if text is not None and text.strip():
+            steps[item.id] = text.strip()
+    return steps
 
 
 def _product_ids_by_item(

@@ -131,6 +131,10 @@ export function useSaveDishMutation(patientId: string | null) {
       // Ключ попытки (ADR-0035): повтор после потерянного ответа получает
       // прежний ответ, а не создаёт второе такое же блюдо.
       idempotencyKey: string;
+      /** Cooking steps; left out, a dish from a recipe gets the recipe's. */
+      instructions?: string;
+      /** The library recipe the dish is fitted from (ADR-0088). */
+      sourceRecipeId?: string | null;
     }) => {
       if (patientId === null) throw new Error("patientId is required to save");
 
@@ -149,6 +153,12 @@ export function useSaveDishMutation(patientId: string | null) {
               product_id: row.product.id,
               grams: row.grams,
             })),
+            ...(input.instructions === undefined
+              ? {}
+              : { instructions: input.instructions }),
+            ...(input.sourceRecipeId == null
+              ? {}
+              : { source_recipe_id: input.sourceRecipeId }),
           },
         },
       );

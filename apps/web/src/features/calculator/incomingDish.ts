@@ -30,6 +30,15 @@ export function useIncomingComposition(
   rows: DishRow[] | null;
   /** Name of the opened saved dish; absent for recipes and products. */
   dishTitle?: string;
+  /** Name of the opened recipe or dish, for the printed card. */
+  title?: string;
+  /**
+   * Cooking steps of the opened recipe or dish (ADR-0088); `null` — it has
+   * none, `undefined` — nothing is opened or it is still loading.
+   */
+  steps?: string | null;
+  /** The library recipe the composition comes from, if any. */
+  sourceRecipeId?: string | null;
   isPending: boolean;
   isError: boolean;
   /** Повторить то, что отказало: рецепт, список блюд или продукты состава. */
@@ -136,9 +145,16 @@ export function useIncomingComposition(
     })
     .filter((row): row is DishRow => row !== null);
 
+  const opened = incoming.kind === "recipe" ? recipe.data : dish.data;
   return {
     rows,
     dishTitle: incoming.kind === "dish" ? dish.data?.title : undefined,
+    title: opened?.title,
+    steps: opened === undefined ? undefined : (opened.instructions ?? null),
+    sourceRecipeId:
+      incoming.kind === "recipe"
+        ? incoming.id
+        : (dish.data?.source_recipe_id ?? null),
     isPending: false,
     isError: false,
     retry,
