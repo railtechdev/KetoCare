@@ -5,11 +5,21 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { api } from "../../lib/api";
+import { buildWordDocument, downloadBlob } from "../../lib/wordExport";
 import i18n from "../../lib/i18n";
 import menuRu from "../../locales/ru/menu.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { weekStartOf } from "./dates";
 import { WeekGrid } from "./WeekGrid";
+
+vi.mock("../../lib/wordExport", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/wordExport")>();
+  return {
+    ...actual,
+    buildWordDocument: vi.fn(() => Promise.resolve(new Blob(["docx"]))),
+    downloadBlob: vi.fn(),
+  };
+});
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -156,6 +166,27 @@ describe("неделя ребёнка", () => {
     expect(window.print).toHaveBeenCalledTimes(1);
     expect(document.body).toHaveTextContent("Яйцо");
     expect(document.body).toHaveTextContent("40 г");
+  });
+  it("выгружает ту же неделю в Word с именем ребёнка и неделей", async () => {
+    const user = userEvent.setup();
+    renderGrid();
+    await screen.findByText("Омлет");
+
+    await user.click(screen.getByRole("button", { name: "Скачать Word" }));
+
+    await waitFor(() => expect(buildWordDocument).toHaveBeenCalledTimes(1));
+    const model = (buildWordDocument as Mock).mock.calls[0]![0] as {
+      sections: { blocks: { text?: string }[] }[];
+    };
+    expect(model.sections).toHaveLength(1);
+    expect(model.sections[0]!.blocks.map((block) => block.text)).toContain(
+      "Приём 2. Омлет",
+    );
+    expect(downloadBlob).toHaveBeenCalledWith(
+      expect.anything(),
+      // Имя ребёнка в этом тесте не загружено: части без него, без «— —».
+      expect.stringMatching(/^Меню — [\d.–]+\.docx$/),
+    );
   });
 });
 

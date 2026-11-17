@@ -42,6 +42,8 @@ import { usePatientOverview } from "../patients/overview";
 import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
 import { PrintButton } from "../../components/PrintButton";
+import { WordButton } from "../../components/WordButton";
+import { dishWordModel } from "../print/dishWord";
 import { DishPrint } from "./DishPrint";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
@@ -988,6 +990,19 @@ export function CalculatorView({
                       steps={steps}
                     />
                   </PrintButton>
+                  <WordButton
+                    label={t("common:word.button")}
+                    disabled={stale}
+                    fileName={incomingDish.title ?? t("print.untitled")}
+                    build={() =>
+                      dishWordModel(t, {
+                        title: incomingDish.title ?? t("print.untitled"),
+                        rows,
+                        dish,
+                        steps,
+                      })
+                    }
+                  />
                 </div>
               )}
             </Section>

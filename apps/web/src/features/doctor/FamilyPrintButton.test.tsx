@@ -60,6 +60,10 @@ describe("печать для семьи", () => {
     const reason = await screen.findByText(doctorRu.familyPrint.nothing);
     expect(button).toBeDisabled();
     expect(button.getAttribute("aria-describedby")).toBe(reason.id);
+    // «Скачать Word» стоит рядом и молчит по той же причине.
+    const word = screen.getByRole("button", { name: "Скачать Word" });
+    expect(word).toBeDisabled();
+    expect(word.getAttribute("aria-describedby")).toBe(reason.id);
   });
 
   it("с назначением печатается и причины не пишет", async () => {

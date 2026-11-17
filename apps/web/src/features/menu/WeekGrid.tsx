@@ -17,10 +17,12 @@ import { useTranslation } from "react-i18next";
 
 import { PrintButton } from "../../components/PrintButton";
 import { PrintedDish } from "../../components/PrintedDish";
+import { WordButton } from "../../components/WordButton";
 import { errorMessageOf } from "../../lib/api";
 import { queryState } from "../../lib/queryState";
 import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
 import { usePatient } from "../patients/usePatient";
+import { weekFileName, weekWordModel } from "../print/weekWord";
 import {
   formatDayLabel,
   formatWeekday,
@@ -161,6 +163,25 @@ export function WeekGrid({
               />
             )}
           </PrintButton>
+          {/* Тот же лист в файле, чтобы поправить перед отправкой семье или
+              повару (ADR-0088, дополнение). */}
+          <WordButton
+            label={t("common:word.button")}
+            disabled={printBlockedBy !== null || week.data === undefined}
+            describedBy={printBlockedBy === null ? undefined : printReasonId}
+            fileName={weekFileName(
+              t("week.wordFile"),
+              patient.data?.full_name ?? "",
+              start,
+            )}
+            build={() =>
+              weekWordModel(
+                t,
+                week.data as MenuWeek,
+                patient.data?.full_name ?? "",
+              )
+            }
+          />
         </div>
         <ActionReason id={printReasonId} className="w-full sm:text-right">
           {printBlockedBy}
