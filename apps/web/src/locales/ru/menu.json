@@ -22,6 +22,7 @@
     "printTotals": "Итого за день: {{kcal}} ккал",
     "printMacros": "жиры {{fat}} г, белки {{protein}} г, углеводы {{carbs}} г",
     "printDish": "Приём {{number}}. {{title}}",
+    "wordFile": "Меню",
     "errorTitle": "Не удалось загрузить неделю",
     "meal": "Приём",
     "mealNumber": "Приём {{number}}",
