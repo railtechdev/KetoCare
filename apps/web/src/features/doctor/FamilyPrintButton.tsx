@@ -3,11 +3,16 @@ import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PrintButton } from "../../components/PrintButton";
+import { WordButton } from "../../components/WordButton";
+import type { WordSection } from "../../lib/wordExport";
+import { prescriptionWordSection } from "../print/prescriptionWord";
+import { weekFileName, weekWordSections } from "../print/weekWord";
 import { todayIso, weekStartOf } from "../menu/dates";
 import { useWeekQuery } from "../menu/useWeek";
 import { WeekPrint } from "../menu/WeekGrid";
 import { usePatient } from "../patients/usePatient";
 import { activePrescriptionOf, usePrescriptionHistory } from "./doctorQueries";
+import { usePrescriptionGoal } from "./PrescriptionGoalPreview";
 import { PrescriptionSheet } from "./PrescriptionPrint";
 
 /**
@@ -37,6 +42,25 @@ export function FamilyPrintButton({ patientId }: { patientId: string }) {
   // Пока данные едут, причины нет: кнопка ещё не решила, а не отказала.
   const reason =
     !loading && active === null && !hasWeek ? t("familyPrint.nothing") : null;
+  // Тот же запрос, что у листа назначения: в Word он идёт той же таблицей
+  // граммов. Без назначения запрос не уходит (ratio 0 — неполный ввод).
+  const goal = usePrescriptionGoal({
+    ratio: active?.ratio ?? 0,
+    kcalPerDay: active?.kcal_per_day ?? 0,
+    proteinG: active?.protein_g ?? 0,
+    mealsPerDay: active?.meals_per_day ?? 0,
+  });
+
+  function wordSections(): WordSection[] {
+    const sections: WordSection[] = [];
+    if (active !== null) {
+      sections.push(prescriptionWordSection(t, active, name, goal.data));
+    }
+    if (week.data !== undefined && hasWeek) {
+      sections.push(...weekWordSections(t, week.data, name));
+    }
+    return sections;
+  }
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -56,6 +80,20 @@ export function FamilyPrintButton({ patientId }: { patientId: string }) {
           )}
         </div>
       </PrintButton>
+      <WordButton
+        label={t("common:word.button")}
+        disabled={loading || reason !== null}
+        describedBy={reason === null ? undefined : reasonId}
+        fileName={weekFileName(
+          t("familyPrint.wordFile"),
+          name,
+          weekStartOf(todayIso()),
+        )}
+        build={() => ({
+          title: t("familyPrint.wordTitle", { name }),
+          sections: wordSections(),
+        })}
+      />
       {reason !== null && <ActionReason id={reasonId}>{reason}</ActionReason>}
     </div>
   );

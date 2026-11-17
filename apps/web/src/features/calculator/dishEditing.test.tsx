@@ -7,10 +7,20 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import i18n from "../../lib/i18n";
 import { api } from "../../lib/api";
+import { buildWordDocument, downloadBlob } from "../../lib/wordExport";
 import calculatorRu from "../../locales/ru/calculator.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { CalculatorPage } from "./CalculatorPage";
 import { incomingDish } from "./incomingItem";
+
+vi.mock("../../lib/wordExport", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/wordExport")>();
+  return {
+    ...actual,
+    buildWordDocument: vi.fn(() => Promise.resolve(new Blob(["docx"]))),
+    downloadBlob: vi.fn(),
+  };
+});
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -183,6 +193,26 @@ describe("saved dish opened in the calculator", () => {
       { body: { instructions?: string } },
     ];
     expect(options.body.instructions).toBe("Запечь при 180");
+  });
+
+  it("exports the dish card to Word with its steps (ADR-0088)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const word = await screen.findByRole("button", { name: "Скачать Word" });
+    await waitFor(() => expect(word).toBeEnabled(), { timeout: 3000 });
+    await user.click(word);
+
+    await waitFor(() => expect(buildWordDocument).toHaveBeenCalledTimes(1));
+    const model = (buildWordDocument as Mock).mock.calls[0]![0] as {
+      title: string;
+      sections: { blocks: { kind: string; text?: string }[] }[];
+    };
+    expect(model.title).toBe("Омлет");
+    expect(
+      model.sections[0]!.blocks.find((block) => block.kind === "steps"),
+    ).toMatchObject({ text: "Взбить яйца, запечь." });
+    expect(downloadBlob).toHaveBeenCalledWith(expect.anything(), "Омлет.docx");
   });
 
   it("saves a copy and then shows that copy", async () => {
