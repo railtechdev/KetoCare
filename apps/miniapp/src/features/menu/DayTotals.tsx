@@ -47,10 +47,13 @@ export function DayTotals({
   totals,
   targets,
   verdict,
+  composedBy = null,
 }: {
   totals: DayTotalsValues | null | undefined;
   targets: DayTargets | null;
   verdict: DayVerdictInput;
+  /** Специалист, составивший день (`DayVerdictNote`). */
+  composedBy?: string | null;
 }) {
   const { t } = useTranslation();
   if (totals === null || totals === undefined) return null;
@@ -154,6 +157,7 @@ export function DayTotals({
         kcal={totals.kcal}
         targetKcal={targets?.kcalPerDay ?? null}
         kcalHint={targets === null}
+        composedBy={composedBy}
       />
     </Section>
   );

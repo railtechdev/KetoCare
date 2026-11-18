@@ -208,7 +208,38 @@ describe("MenuPage", () => {
     expect(screen.getByText("Омлет на сливках")).toBeVisible();
   });
 
-  it("предупреждает о выходе за допуски по вердикту сервера", async () => {
+  it("день диетолога: вердикт без совета менять состав (Р3 аудита 18.11.2026)", async () => {
+    // Совет «измените состав» под днём, который составил специалист, семья
+    // читала как «вы сделали неправильно, исправляйте сами».
+    renderPage();
+
+    expect(
+      await screen.findByText("Кетосоотношение дня отличается от назначения"),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        /составил\(а\) Анна Петровна — менять его самим не нужно/,
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/Измените состав/)).toBeNull();
+    // Соотношение помечено несоответствующим — вердикт пришёл с сервера.
+    expect(screen.getByLabelText(/отклоняется от назначения/)).toBeVisible();
+  });
+
+  it("свой день семьи — предупреждает о выходе за допуски по вердикту сервера", async () => {
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? {
+              data: {
+                ...MENU,
+                updated_by_name: "Мама",
+                updated_by_role: "parent",
+              },
+            }
+          : respond(path),
+      ),
+    );
     renderPage();
 
     expect(
@@ -216,8 +247,7 @@ describe("MenuPage", () => {
         "Кетосоотношение дня выходит за допуски назначения",
       ),
     ).toBeVisible();
-    // Соотношение помечено несоответствующим — вердикт пришёл с сервера.
-    expect(screen.getByLabelText(/отклоняется от назначения/)).toBeVisible();
+    expect(screen.getByText(/Измените состав/)).toBeVisible();
   });
 
   it("отметка «съедено» уходит на сервер", async () => {

@@ -14,6 +14,7 @@ import {
   isPatientView,
 } from "../features/doctor/patientViews";
 import { FamilyPrintButton } from "../features/doctor/FamilyPrintButton";
+import { weekStartOf } from "../features/menu/dates";
 import { PatientViewLink } from "../features/doctor/PatientViewLink";
 import { usePatient } from "../features/patients/usePatient";
 
@@ -35,7 +36,7 @@ export function PatientViewRoute() {
     from: "/app/patients/$patientId/$view",
   });
   const { session } = useSession();
-  const { item } = useSearch({ strict: false });
+  const { item, date } = useSearch({ strict: false });
   const patient = usePatient(patientId);
 
   // Родительский маршрут не показывает содержимое, пока пациент не загружен,
@@ -70,7 +71,18 @@ export function PatientViewRoute() {
       // Плотность объявляется один раз на экран и наследуется блоками
       // (правило П26 канона).
       density="compact"
-      actions={<FamilyPrintButton patientId={patient.data.id} />}
+      // В разделе «Питание» печатается неделя, открытая в сетке (аудит
+      // интерфейса 18.11.2026, Р4): своей печати у сетки больше нет.
+      actions={
+        <FamilyPrintButton
+          patientId={patient.data.id}
+          weekStart={
+            view === "menu" && typeof date === "string"
+              ? weekStartOf(date)
+              : undefined
+          }
+        />
+      }
     >
       {/* Ключ — пациент. Переключатель в шапке карты меняет пациента в адресе,
           а раздел оставляет, и без ключа React сохранял экран раздела вместе с

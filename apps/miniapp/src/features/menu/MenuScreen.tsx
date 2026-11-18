@@ -398,6 +398,12 @@ function DayPlan({
 }) {
   const { t } = useTranslation();
   const items = menu?.items ?? [];
+  // День, который составил специалист: семья его не перестраивает (Р3 аудита
+  // интерфейса 18.11.2026) — тише «Убрать» и другие слова под итогами.
+  const composedBy =
+    menu?.updated_by_name && menu.updated_by_role !== "parent"
+      ? menu.updated_by_name
+      : null;
 
   return (
     <div className="flex flex-col gap-section">
@@ -468,6 +474,7 @@ function DayPlan({
                               <RemoveButton
                                 label={t("menu.compose.remove")}
                                 disabled={removing}
+                                quiet={composedBy !== null}
                                 aria-label={t("menu.compose.removeAria", {
                                   title: item.title ?? t("menu.unknownDish"),
                                 })}
@@ -476,7 +483,13 @@ function DayPlan({
                             title={t("menu.compose.removeTitle", {
                               title: item.title ?? t("menu.unknownDish"),
                             })}
-                            description={t("menu.compose.removeBody")}
+                            description={
+                              composedBy === null
+                                ? t("menu.compose.removeBody")
+                                : t("menu.compose.removeBodySpecialist", {
+                                    name: composedBy,
+                                  })
+                            }
                             confirmLabel={t("menu.compose.remove")}
                             cancelLabel={t("menu.compose.keep")}
                             onConfirm={() => onRemove(item)}
@@ -507,7 +520,12 @@ function DayPlan({
       })}
 
       {menu !== null && (
-        <DayTotals totals={menu.totals} targets={targets} verdict={verdict} />
+        <DayTotals
+          totals={menu.totals}
+          targets={targets}
+          verdict={verdict}
+          composedBy={composedBy}
+        />
       )}
     </div>
   );

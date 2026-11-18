@@ -15,11 +15,14 @@ import type { ComponentProps } from "react";
 export function RemoveButton({
   label,
   iconOnly = false,
+  quiet = false,
   className,
   ...props
 }: Omit<ComponentProps<typeof Button>, "children" | "variant" | "size"> & {
   label: string;
   iconOnly?: boolean;
+  /** Без красного: убрать можно, но это не главное действие на экране. */
+  quiet?: boolean;
 }) {
   return (
     <Button
@@ -27,7 +30,10 @@ export function RemoveButton({
       variant="ghost"
       size={iconOnly ? "icon" : "sm"}
       className={cn(
-        "min-h-touch shrink-0 text-destructive hover:text-destructive",
+        "min-h-touch shrink-0",
+        quiet
+          ? "text-muted-foreground hover:text-foreground"
+          : "text-destructive hover:text-destructive",
         iconOnly && "min-w-(--spacing-touch)",
         className,
       )}

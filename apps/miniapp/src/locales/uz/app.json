@@ -133,7 +133,8 @@
       "done": "Tayyor",
       "addedTo": "«{{title}}» — {{index}}-ovqatlanishda. Yana qo‘shish mumkin.",
       "portionInvalid": "Porsiyani 0 dan katta son bilan kiriting, masalan 1 yoki 0,5.",
-      "kcalPortion": "porsiyasiga {{value}} kkal"
+      "kcalPortion": "porsiyasiga {{value}} kkal",
+      "removeBodySpecialist": "Bu menyuni {{name}} tuzgan. Agar taom bolaga to‘g‘ri kelmasa, avval mutaxassisga yozgan ma’qul."
     },
     "targets": {
       "kcalLabel": "Kaloriya",
@@ -174,7 +175,12 @@
     "engineChanged": "Bu kun ancha oldin tuzilgan — tayinlov bilan solishtirish ko‘rsatilmaydi.",
     "engineUnknown": "Bu kun ancha oldin tuzilgan — tayinlov bilan solishtirish ko‘rsatilmaydi.",
     "verdictUnavailable": "Tayinlovga moslik hozir ko‘rsatilmaydi — kunning o‘z ko‘rsatkichlari ko‘rsatilgan.",
-    "otherDay": "Tayinlovga moslik faqat bugungi kun uchun ko‘rsatiladi."
+    "otherDay": "Tayinlovga moslik faqat bugungi kun uchun ko‘rsatiladi.",
+    "bySpecialist": {
+      "ratio": "Kunning keto nisbati tayinlovdan farq qiladi",
+      "carbs": "Kunlik uglevodlar tayinlov chegarasidan ko‘p",
+      "body": "Bu kun menyusini {{name}} tuzgan — uni o‘zingiz o‘zgartirishingiz shart emas. Savollar bo‘lsa, mutaxassisga yozing."
+    }
   },
   "charts": {
     "loadError": "Yozuvlarni yuklab bo‘lmadi",

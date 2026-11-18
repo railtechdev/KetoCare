@@ -1181,6 +1181,46 @@ describe("соответствие дня назначению", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("день специалиста: без совета менять состав и с тихим «Убрать»", async () => {
+    // Аудит интерфейса 18.11.2026, Р3: «Измените состав приёмов пищи» под
+    // днём, который составила диетолог, семья читала как «вы сделали
+    // неправильно, исправляйте сами».
+    withVerdict({
+      tolerance: { ratio_within_tolerance: false, kcal_within_tolerance: true },
+      updated_at: "2026-08-31T05:00:00Z",
+      updated_by_name: "Анна Петровна",
+      updated_by_role: "dietitian",
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(
+        "Меню на этот день составил(а) Анна Петровна — менять его самим не нужно. Если есть вопросы, напишите специалисту.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Измените состав/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Итоги дня расходятся с назначением"),
+    ).not.toBeInTheDocument();
+
+    const remove = screen.getAllByRole("button", { name: /Убрать/ })[0]!;
+    expect(remove.className).not.toMatch(/text-destructive/);
+  });
+
+  it("свой день семьи — прежний совет и красное «Убрать»", async () => {
+    withVerdict({
+      tolerance: { ratio_within_tolerance: false, kcal_within_tolerance: true },
+      updated_at: "2026-08-31T05:00:00Z",
+      updated_by_name: "Мама",
+      updated_by_role: "parent",
+    });
+    renderScreen();
+
+    expect(await screen.findByText(/Измените состав/)).toBeInTheDocument();
+    const remove = screen.getAllByRole("button", { name: /Убрать/ })[0]!;
+    expect(remove.className).toMatch(/text-destructive/);
+  });
+
   it.each([
     ["no_prescription", "Сравнивать итоги не с чем: назначения нет."],
     ["engine_changed", /Этот день составлен давно/],

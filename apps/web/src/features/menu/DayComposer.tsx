@@ -208,6 +208,16 @@ export function DayComposer({
     </>
   );
 
+  // День, который составил специалист, семья не перестраивает (аудит
+  // интерфейса 18.11.2026, Р3): совет «измените состав» под ним читался как
+  // «вы сделали неправильно». Специалист видит свои обычные слова.
+  const composedBySpecialist =
+    canMarkEaten &&
+    menu.data?.updated_by_name &&
+    menu.data.updated_by_role !== "parent"
+      ? menu.data.updated_by_name
+      : null;
+
   const content = (
     <>
       <DayNavigator date={date} onChange={setDate} />
@@ -299,6 +309,7 @@ export function DayComposer({
                 // калькулятора, у специалиста они открыли бы общие, без ребёнка.
                 patientId={canMarkEaten ? patientId : null}
                 date={date}
+                composedBy={composedBySpecialist}
               />
             ) : null
           }
@@ -325,6 +336,7 @@ export function DayComposer({
                   titles={titles}
                   withdrawnByItem={withdrawn}
                   lastInDay={items.length === 1}
+                  composedBy={composedBySpecialist}
                   dayLabel={humanDate}
                   pending={upsert.isPending || removal.isPending}
                   onAdd={() => {

@@ -10,14 +10,12 @@ import {
   formatMeasured,
   toast,
 } from "@ketocare/ui";
-import { Download, FileText } from "lucide-react";
+import { Download } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field } from "../../components/Field";
 import { DoctorSummaryPanel } from "./DoctorSummaryPanel";
-import { ReportSheet } from "./ReportSheet";
-import { PrintButton } from "../../components/PrintButton";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { toDateInput } from "../diary/time";
@@ -102,6 +100,7 @@ export function ReportsView({ patientId }: { patientId: string }) {
   // может быть не поднят вовсе (PDF требует системных pango и cairo), и тогда
   // экран бесконечно показывал «Готовим файл», пока открыта вкладка.
   const [requestedAt, setRequestedAt] = useState<number | null>(null);
+  const [downloadOnReady, setDownloadOnReady] = useState<string | null>(null);
 
   const range = useMemo<ReportRange>(() => ({ from, to }), [from, to]);
   const invalidRange = from === "" || to === "" || from > to;
@@ -129,15 +128,21 @@ export function ReportsView({ patientId }: { patientId: string }) {
 
   const isDoctor = session?.role === "doctor";
 
-  function retry() {
+  function requestFile(queuedMessage?: string) {
     requestPdf.mutate(range, {
       onSuccess: (created) => {
         setJobId(created.id);
         setRequestedAt(Date.now());
+        setDownloadOnReady(created.id);
+        if (queuedMessage !== undefined) toast.success(queuedMessage);
       },
       onError: (error) =>
         toast.error(errorMessageOf(error) ?? t("common:errors.unexpected")),
     });
+  }
+
+  function retry() {
+    requestFile();
   }
 
   const csvHref = `/api/v1/patients/${patientId}/report?from=${from}&to=${to}&format=csv`;
@@ -145,6 +150,27 @@ export function ReportsView({ patientId }: { patientId: string }) {
     job.data?.status === "done" && job.data.patient_id === patientId
       ? `/api/v1/reports/jobs/${job.data.id}/file`
       : null;
+  const building =
+    jobId !== null &&
+    !jobLost &&
+    job.data?.status !== "done" &&
+    job.data?.status !== "failed";
+
+  // Файл, заказанный в этот заход, скачивается сам, как только готов: человек
+  // нажал «Скачать PDF» и ждёт файл, а не вторую кнопку. Задача из адреса
+  // (F5, ссылка) сама не скачивается — её открыли, а не заказали.
+  useEffect(() => {
+    if (downloadOnReady === null || pdfHref === null) return;
+    if (job.data?.id !== downloadOnReady) return;
+    const link = document.createElement("a");
+    link.href = pdfHref;
+    link.download = "";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setDownloadOnReady(null);
+    toast.success(t("pdf.downloaded"));
+  }, [downloadOnReady, pdfHref, job.data?.id, t]);
 
   return (
     <>
@@ -156,39 +182,28 @@ export function ReportsView({ patientId }: { patientId: string }) {
            открывается вкладкой карты пациента, и шапка там принадлежит карте
            (правило П31 канона). */
         action={
-          <div className="flex flex-wrap items-center gap-field">
-            {/* Печать со страницы — то, что уже на экране, без ожидания
-                сборки файла (аудит продукта 12.11.2026). PDF — для файла,
-                который уносят или пересылают. */}
-            <PrintButton
-              label={t("print.button")}
-              disabled={invalidRange || report.data === undefined}
-            >
-              {report.data !== undefined && (
-                <ReportSheet report={report.data} />
-              )}
-            </PrintButton>
+          /* Одна кнопка «Скачать PDF» (аудит интерфейса 18.11.2026, Р5):
+             «Печать отчёта» и «Собрать PDF» стояли рядом, и чем они
+             различаются, видно не было. Печатают из скачанного файла.
+             Пока файл собирается, кнопка говорит об этом; готовый файл
+             скачивается сам, а кнопка становится ссылкой на него. */
+          pdfHref !== null && !jobLost ? (
+            <Button asChild>
+              <a href={pdfHref} download>
+                <Download aria-hidden="true" />
+                {t("pdf.download")}
+              </a>
+            </Button>
+          ) : (
             <Button
               type="button"
-              disabled={invalidRange || requestPdf.isPending}
-              onClick={() =>
-                requestPdf.mutate(range, {
-                  onSuccess: (created) => {
-                    setJobId(created.id);
-                    setRequestedAt(Date.now());
-                    toast.success(t("pdf.queued"));
-                  },
-                  onError: (error) =>
-                    toast.error(
-                      errorMessageOf(error) ?? t("common:errors.unexpected"),
-                    ),
-                })
-              }
+              disabled={invalidRange || requestPdf.isPending || building}
+              onClick={() => requestFile(t("pdf.queued"))}
             >
-              <FileText aria-hidden="true" />
-              {t("pdf.request")}
+              <Download aria-hidden="true" />
+              {building ? t("pdf.building") : t("pdf.download")}
             </Button>
-          </div>
+          )
         }
       >
         <FilterBar label={t("period.legend")}>
@@ -228,60 +243,45 @@ export function ReportsView({ patientId }: { patientId: string }) {
         )}
       </Section>
 
-      {jobId !== null && (
-        <Section title={t("pdf.title")}>
-          {jobLost ? (
-            <div className="flex flex-col items-start gap-field">
-              <p className="m-0 text-sm text-destructive">{t("pdf.lost")}</p>
-              <div className="flex flex-wrap gap-field">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="min-h-touch"
-                  disabled={invalidRange || requestPdf.isPending}
-                  onClick={() => retry()}
-                >
-                  {t("pdf.retry")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="min-h-touch"
-                  onClick={() => setJobId(null)}
-                >
-                  {t("pdf.dismiss")}
-                </Button>
+      {/* Блок сборки — только когда нужен выход: файл потерян, сборка не
+          удалась или затянулась. Обычную сборку и готовый файл показывает
+          сама кнопка «Скачать PDF». */}
+      {jobId !== null &&
+        (jobLost ||
+          job.data?.status === "failed" ||
+          (building && takingLong)) && (
+          <Section title={t("pdf.title")}>
+            {jobLost ? (
+              <div className="flex flex-col items-start gap-field">
+                <p className="m-0 text-sm text-destructive">{t("pdf.lost")}</p>
+                <div className="flex flex-wrap gap-field">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-touch"
+                    disabled={invalidRange || requestPdf.isPending}
+                    onClick={() => retry()}
+                  >
+                    {t("pdf.retry")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="min-h-touch"
+                    onClick={() => setJobId(null)}
+                  >
+                    {t("pdf.dismiss")}
+                  </Button>
+                </div>
               </div>
-            </div>
-          ) : job.data?.status === "done" && pdfHref !== null ? (
-            <Button asChild className="min-h-touch self-start">
-              <a href={pdfHref} download>
-                <Download aria-hidden="true" />
-                {t("pdf.download")}
-              </a>
-            </Button>
-          ) : job.data?.status === "failed" ? (
-            /* У отказа обязано быть действие (правило П16 канона): раньше
+            ) : job.data?.status === "failed" ? (
+              /* У отказа обязано быть действие (правило П16 канона): раньше
                здесь была одна красная строка, и дальше человек не мог ничего —
                ни повторить, ни понять, ждать ли. */
-            <div className="flex flex-col items-start gap-field">
-              <p className="m-0 text-sm text-destructive">{t("pdf.failed")}</p>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-touch"
-                disabled={requestPdf.isPending}
-                onClick={() => retry()}
-              >
-                {t("pdf.retry")}
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-start gap-field">
-              <p role="status" className="m-0 text-sm text-muted-foreground">
-                {takingLong ? t("pdf.slow") : t("pdf.building")}
-              </p>
-              {takingLong && (
+              <div className="flex flex-col items-start gap-field">
+                <p className="m-0 text-sm text-destructive">
+                  {t("pdf.failed")}
+                </p>
                 <Button
                   type="button"
                   variant="outline"
@@ -291,11 +291,27 @@ export function ReportsView({ patientId }: { patientId: string }) {
                 >
                   {t("pdf.retry")}
                 </Button>
-              )}
-            </div>
-          )}
-        </Section>
-      )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-start gap-field">
+                <p role="status" className="m-0 text-sm text-muted-foreground">
+                  {takingLong ? t("pdf.slow") : t("pdf.building")}
+                </p>
+                {takingLong && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-touch"
+                    disabled={requestPdf.isPending}
+                    onClick={() => retry()}
+                  >
+                    {t("pdf.retry")}
+                  </Button>
+                )}
+              </div>
+            )}
+          </Section>
+        )}
 
       <AsyncSection
         {...queryState(report)}
