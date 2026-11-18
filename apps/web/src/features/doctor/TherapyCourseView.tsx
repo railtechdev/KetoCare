@@ -179,7 +179,13 @@ export function TherapyCourseView({
                   <EmptyState
                     icon={CalendarClock}
                     title={t("course.visits.empty")}
-                    description={t("course.visits.emptyDescription")}
+                    description={
+                      // Читающему (диетолог) совет «постройте график» обещал
+                      // кнопки, которых у него нет (аудит интерфейса 18.11.2026).
+                      editable
+                        ? t("course.visits.emptyDescription")
+                        : t("course.visits.emptyDescriptionReadOnly")
+                    }
                   />
                 }
               >

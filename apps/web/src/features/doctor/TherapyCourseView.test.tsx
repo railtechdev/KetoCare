@@ -107,6 +107,19 @@ beforeEach(() => {
 });
 
 describe("ход терапии (вопросы 17, 18, 34)", () => {
+  it("без визитов диетологу не советует строить график: кнопок у него нет", async () => {
+    render(<TherapyCourseView patientId={PATIENT_ID} editable={false} />, {
+      wrapper: wrapper(),
+    });
+
+    expect(
+      await screen.findByText(doctorRu.course.visits.emptyDescriptionReadOnly),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(doctorRu.course.visits.emptyDescription),
+    ).toBeNull();
+  });
+
   it("врач завершает терапию: причина обязательна, «другое» — с пояснением", async () => {
     (api.PUT as Mock).mockResolvedValue({ data: {} });
     const user = userEvent.setup();

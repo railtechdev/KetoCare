@@ -37,7 +37,7 @@ test("неверный пароль не пускает и говорит об �
   await page.getByLabel("Пароль", { exact: true }).fill("это не пароль");
   await page.getByRole("button", { name: "Войти" }).click();
 
-  await expect(page.getByText("Неверный email или пароль.")).toBeVisible();
+  await expect(page.getByText("Неверная почта или пароль.")).toBeVisible();
   await expect(page).toHaveURL(/\/login/);
 });
 

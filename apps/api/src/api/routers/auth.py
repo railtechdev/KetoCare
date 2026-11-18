@@ -103,7 +103,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 ROLES_REQUIRING_TOTP = frozenset({UserRole.ADMIN, UserRole.DOCTOR, UserRole.DIETITIAN})
 
-_INVALID_CREDENTIALS = "Неверный email или пароль."
+_INVALID_CREDENTIALS = "Неверная почта или пароль."
 
 
 def _issue_tokens(

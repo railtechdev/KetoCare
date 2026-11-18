@@ -25,6 +25,7 @@ from ..errors import ApiError, ErrorCode
 from ..schemas import Page, PrescriptionCreate, PrescriptionRead
 from ..schemas_menus import DayPrescription
 from ..services.clock import local_today
+from ..services.prescription_change import is_unchanged
 
 logger = structlog.get_logger(__name__)
 
@@ -137,6 +138,27 @@ async def create_prescription(
                 "carbs_limit_g": payload.carbs_limit_g,
                 "max_carbs_limit_g": round(derived, 1),
             },
+        )
+
+    in_force = await prescriptions_repo.get_active_on(
+        session, patient_id=patient_id, day=payload.effective_from
+    )
+    # Ничего не меняется, только если те же значения действуют на дату начала
+    # И ни одна более поздняя версия их потом не сменит: запись прежних
+    # значений поверх будущей версии — штатная отмена (ADR-0078, п. 3).
+    if (
+        in_force is not None
+        and is_unchanged(in_force, payload)
+        and not await prescriptions_repo.has_later_start_after(
+            session, patient_id=patient_id, day=payload.effective_from, version=in_force
+        )
+    ):
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Назначение не изменилось: такие же значения уже действуют с "
+            f"{in_force.effective_from:%d.%m.%Y}. Новая версия не записана, семье "
+            "ничего не отправлено.",
+            details={"reason": "unchanged", "prescription_id": str(in_force.id)},
         )
 
     prescription = await prescriptions_repo.create(

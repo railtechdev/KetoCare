@@ -1370,4 +1370,32 @@ describe("сборка по приёмам (ADR-0075)", () => {
       await screen.findByRole("button", { name: "К списку" }),
     ).toBeInTheDocument();
   });
+
+  it("у блюда ребёнка шаги приготовления раскрываются под блюдом", async () => {
+    // Аудит интерфейса 18.11.2026: шаги блюда, подобранного диетологом из
+    // рецепта, хранились (ADR-0088), но семья в Mini App их не видела.
+    respond({
+      menu: menu({
+        items: [
+          {
+            ...menu().items[0],
+            recipe_id: null,
+            custom_dish_id: "dish-1",
+            title: "Омлет для ребёнка",
+            instructions: "1. Взбить яйцо.\n2. Жарить на масле.",
+          },
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    const button = await screen.findByRole("button", { name: "Как готовить" });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    await user.click(button);
+
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/1\. Взбить яйцо\./)).toBeInTheDocument();
+    expect(screen.getByText(/2\. Жарить на масле\./)).toBeInTheDocument();
+  });
 });

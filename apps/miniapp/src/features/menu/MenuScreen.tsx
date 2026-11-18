@@ -529,9 +529,14 @@ function ItemDetails({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [stepsOpen, setStepsOpen] = useState(false);
   const lines = item.ingredients ?? [];
   const recipeId = item.recipe_id;
-  if (lines.length === 0 && recipeId === null) return null;
+  // Блюдо ребёнка хранит шаги своего рецепта (ADR-0088): у него нет экрана
+  // рецепта, поэтому шаги раскрываются здесь же. Без этого семья не видела, как
+  // готовить блюдо, подобранное диетологом (аудит интерфейса 18.11.2026).
+  const steps = recipeId === null ? (item.instructions ?? "").trim() : "";
+  if (lines.length === 0 && recipeId === null && steps === "") return null;
 
   return (
     <div className="flex flex-col gap-1 pl-8 text-sm">
@@ -561,7 +566,23 @@ function ItemDetails({
             {t("menu.howToCook")}
           </Button>
         )}
+        {steps !== "" && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="min-h-touch px-2 text-muted-foreground"
+            aria-expanded={stepsOpen}
+            onClick={() => setStepsOpen((value) => !value)}
+          >
+            <ChefHat aria-hidden="true" className="size-4" />
+            {t("menu.howToCook")}
+          </Button>
+        )}
       </div>
+      {stepsOpen && (
+        <p className="m-0 whitespace-pre-line break-words">{steps}</p>
+      )}
       {open && (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {lines.map((line) => (

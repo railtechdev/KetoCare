@@ -280,12 +280,15 @@ describe("форма назначения", () => {
     expect(currentAddress()).toMatchObject({ item: "history" });
   });
 
-  it("печать называет, что будет на листе", async () => {
+  it("печать назначения одна — в шапке карты, в разделе второй нет", async () => {
+    // Аудит интерфейса 18.11.2026: «Печать: назначение» здесь и «Печать:
+    // назначение и меню недели» в шапке печатали один и тот же лист.
     renderView();
 
+    await screen.findByRole("button", { name: "Сохранить назначение" });
     expect(
-      await screen.findByRole("button", { name: "Печать: назначение" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Печать: назначение" }),
+    ).toBeNull();
   });
 
   it("после записи назначения предлагает выдать код семье, пока она не подключена", async () => {
