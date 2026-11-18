@@ -317,52 +317,6 @@ export function RecipeDetail({
         </FormError>
       )}
 
-      <Section title={t("detail.photo")}>
-        <RecipePhoto
-          recipeId={data.id}
-          photoPath={data.photo_path}
-          className="h-56 w-full max-w-xl rounded-xl"
-        />
-
-        {canEdit && (
-          <>
-            <FileField
-              id="recipe-photo"
-              width="wide"
-              accept="image/jpeg,image/png,image/webp"
-              label={t("detail.photoUpload")}
-              hint={t("detail.photoHint")}
-              disabled={uploadPhoto.isPending}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                uploadPhoto.mutate(
-                  { recipeId: data.id, file },
-                  { onSuccess: () => toast.success(t("detail.photoSaved")) },
-                );
-                // Поле сбрасывается: иначе повторный выбор того же файла не
-                // вызовет `change`, и починить неудачную загрузку было бы
-                // нечем, кроме перезагрузки страницы.
-                event.target.value = "";
-              }}
-            />
-
-            {uploadPhoto.isPending && (
-              <p role="status" className="m-0 text-sm text-muted-foreground">
-                {t("detail.photoUploading")}
-              </p>
-            )}
-
-            {uploadPhoto.isError && (
-              <FormError>
-                {errorMessageOf(uploadPhoto.error) ??
-                  t("common:errors.unexpected")}
-              </FormError>
-            )}
-          </>
-        )}
-      </Section>
-
       <Section title={t("detail.nutrition")}>
         {computed === null ? (
           <p className="m-0 text-muted-foreground">{t("detail.noComputed")}</p>
@@ -482,6 +436,55 @@ export function RecipeDetail({
           </p>
         </Section>
       )}
+
+      {/* Фото — последним: первым экраном диетолог читает состав и шаги, а
+          пустой блок «Без фото» с выбором файла занимал его целиком (аудит
+          интерфейса 18.11.2026). */}
+      <Section title={t("detail.photo")}>
+        <RecipePhoto
+          recipeId={data.id}
+          photoPath={data.photo_path}
+          className="h-56 w-full max-w-xl rounded-xl"
+        />
+
+        {canEdit && (
+          <>
+            <FileField
+              id="recipe-photo"
+              width="wide"
+              accept="image/jpeg,image/png,image/webp"
+              label={t("detail.photoUpload")}
+              hint={t("detail.photoHint")}
+              disabled={uploadPhoto.isPending}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                uploadPhoto.mutate(
+                  { recipeId: data.id, file },
+                  { onSuccess: () => toast.success(t("detail.photoSaved")) },
+                );
+                // Поле сбрасывается: иначе повторный выбор того же файла не
+                // вызовет `change`, и починить неудачную загрузку было бы
+                // нечем, кроме перезагрузки страницы.
+                event.target.value = "";
+              }}
+            />
+
+            {uploadPhoto.isPending && (
+              <p role="status" className="m-0 text-sm text-muted-foreground">
+                {t("detail.photoUploading")}
+              </p>
+            )}
+
+            {uploadPhoto.isError && (
+              <FormError>
+                {errorMessageOf(uploadPhoto.error) ??
+                  t("common:errors.unexpected")}
+              </FormError>
+            )}
+          </>
+        )}
+      </Section>
     </PageLayout>
   );
 }

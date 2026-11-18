@@ -84,9 +84,7 @@ async function openReview() {
   await user.click(
     await screen.findByRole("checkbox", { name: /Курица с брокколи/ }),
   );
-  await user.click(
-    screen.getByRole("button", { name: /Пересчитать под ребёнка/ }),
-  );
+  await user.click(screen.getByRole("button", { name: /Добавить ребёнку/ }));
   return user;
 }
 

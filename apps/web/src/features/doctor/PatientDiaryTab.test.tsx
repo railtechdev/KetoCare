@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi, type Mock } from "vitest";
 
@@ -7,6 +8,7 @@ import { api } from "../../lib/api";
 import i18n from "../../lib/i18n";
 import diaryRu from "../../locales/ru/diary.json";
 import doctorRu from "../../locales/ru/doctor.json";
+import { nativeSelect } from "../../test/nativeSelect";
 import { PatientRouter } from "../../test/PatientRouter";
 import { PatientDiaryTab } from "./PatientDiaryTab";
 
@@ -42,6 +44,60 @@ describe("дневник в карте пациента", () => {
     expect(
       screen.getByRole("button", { name: doctorRu.nudge.action }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("пустой вид дневника называет виды с записями", () => {
+  it("нет приступов — кнопка открывает кетоны, где записи есть", async () => {
+    // Аудит интерфейса 18.11.2026: «записей нет» при 72 замерах кетонов.
+    (api.GET as Mock).mockImplementation(async (path: string) =>
+      path.endsWith("/logs/ketones")
+        ? {
+            data: {
+              items: [
+                {
+                  id: "k1",
+                  occurred_at: "2026-11-10T08:00:00Z",
+                  value: 2.4,
+                  method: "blood",
+                  source: "web",
+                  author_id: "parent-1",
+                  note: null,
+                },
+              ],
+              total: 1,
+            },
+          }
+        : { data: { items: [], total: 0 } },
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    render(<PatientDiaryTab patientId="p1" />, {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <PatientRouter patientId="p1" view="diary">
+            {children}
+          </PatientRouter>
+        </QueryClientProvider>
+      ),
+    });
+
+    expect(await screen.findByText(doctorRu.diary.empty)).toBeInTheDocument();
+    const ketones = await screen.findByRole("button", {
+      name: "Кетоны — 1 запись",
+    });
+    expect(
+      screen.queryByRole("button", { name: /^Вес —/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(ketones);
+    await waitFor(() =>
+      expect(
+        nativeSelect(screen.getByLabelText(doctorRu.diary.tabsLabel)).value,
+      ).toBe("ketones"),
+    );
   });
 });
 

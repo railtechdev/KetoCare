@@ -8,6 +8,7 @@ import {
   type PrescriptionMarker,
   type TrendPoint,
 } from "@ketocare/ui";
+import { useQueries } from "@tanstack/react-query";
 import { CalendarSearch } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,11 +24,13 @@ import { PeriodPicker } from "../diary/PeriodPicker";
 import {
   CHART_KINDS,
   DIARY_KINDS,
+  fetchDiaryLogs,
   type DiaryKind,
   type DiaryLog,
 } from "../diary/diaryApi";
-import { formatChartDate } from "../diary/time";
+import { formatChartDate, type DiaryRange } from "../diary/time";
 import {
+  diaryLogsKey,
   useDiaryLogs,
   useDiaryMutations,
   usePrescriptionVersions,
@@ -85,7 +88,12 @@ export function PatientDiaryTab({ patientId }: { patientId: string }) {
 
       {/* Ключ по виду записей: у каждого вида свой период и свои запросы, и
           переключение не должно переносить состояние прошлого вида. */}
-      <DiaryKindView key={kind} kind={kind} patientId={patientId} />
+      <DiaryKindView
+        key={kind}
+        kind={kind}
+        patientId={patientId}
+        onPickKind={setKind}
+      />
     </div>
   );
 }
@@ -105,9 +113,11 @@ const VISIT_KINDS: readonly DiaryKind[] = [
 function DiaryKindView({
   kind,
   patientId,
+  onPickKind,
 }: {
   kind: DiaryKind;
   patientId: string;
+  onPickKind: (kind: DiaryKind) => void;
 }) {
   const { t } = useTranslation("doctor");
 
@@ -354,7 +364,15 @@ function DiaryKindView({
               // уходит ей в Telegram (ADR-0046), сервер сам держит предел
               // «раз в сутки» и называет, если чата нет.
               action={
-                <NudgeFamilyButton patientId={patientId} size="default" />
+                <div className="flex flex-col items-center gap-field">
+                  <KindsWithRecords
+                    patientId={patientId}
+                    current={kind}
+                    range={range}
+                    onPick={onPickKind}
+                  />
+                  <NudgeFamilyButton patientId={patientId} size="default" />
+                </div>
               }
             />
           }
@@ -387,6 +405,68 @@ function DiaryKindView({
           />
         </AsyncSection>
       )}
+    </div>
+  );
+}
+
+/**
+ * Виды записей, в которых за тот же период что-то есть.
+ *
+ * Аудит интерфейса 18.11.2026: дневник открывался видом «Приступы», и у
+ * ребёнка без приступов врач видел «записей нет» при 72 замерах кетонов. Пустой
+ * вид не тупик: здесь же названо, где записи есть, и они открываются одним
+ * нажатием. Запросы — те же, что у самих видов (общий ключ кэша), и уходят
+ * только когда выбранный вид пуст.
+ */
+function KindsWithRecords({
+  patientId,
+  current,
+  range,
+  onPick,
+}: {
+  patientId: string;
+  current: DiaryKind;
+  range: DiaryRange | null;
+  onPick: (kind: DiaryKind) => void;
+}) {
+  const { t } = useTranslation("doctor");
+  const others = DIARY_KINDS.filter((value) => value !== current);
+  const results = useQueries({
+    queries: others.map((value) => ({
+      queryKey: diaryLogsKey(patientId, value, range),
+      enabled: range !== null,
+      queryFn: () => {
+        if (range === null) throw new Error("range is required");
+        return fetchDiaryLogs(patientId, value, range);
+      },
+    })),
+  });
+  const found = others.flatMap((value, index) => {
+    const total = results[index]?.data?.total ?? 0;
+    return total > 0 ? [{ kind: value, total }] : [];
+  });
+  if (found.length === 0) return null;
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <p className="m-0 text-sm text-muted-foreground">
+        {t("diary.otherKinds")}
+      </p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {found.map(({ kind, total }) => (
+          <Button
+            key={kind}
+            type="button"
+            variant="outline"
+            onClick={() => onPick(kind)}
+          >
+            {t("diary.otherKind", {
+              kind: t(`diary.kinds.${kind}`),
+              count: total,
+            })}
+          </Button>
+        ))}
+      </div>
     </div>
   );
 }
