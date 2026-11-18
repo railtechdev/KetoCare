@@ -14,6 +14,7 @@ from core.models import Patient, WeightLog
 from core.models.enums import UserRole
 from core.repositories import access_codes as access_codes_repo
 from core.repositories import audit as audit_repo
+from core.repositories import medical_profiles as profiles_repo
 from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
 from core.repositories import therapy as therapy_repo
@@ -36,6 +37,7 @@ from ..schemas import (
     Page,
     PatientCreate,
     PatientDoctorAdd,
+    PatientIdentityCorrection,
     PatientRead,
     PatientUpdate,
 )
@@ -43,6 +45,7 @@ from ..schemas_logs import WeightLogCreate, WeightLogRead
 from ..services import family as family_service
 from ..services import family_nudge as family_nudge_service
 from ..services import logs as logs_service
+from ..services.clock import local_today
 
 CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
 
@@ -256,6 +259,71 @@ async def update_patient(
         entity_id=patient_id,
         before=before,
         after=after,
+        ip=client_address(request),
+    )
+    return await _read(session, updated)
+
+
+@router.put(
+    "/{patient_id}/identity",
+    response_model=PatientRead,
+    summary="Исправить дату рождения и пол",
+    dependencies=[Depends(require_roles(UserRole.DOCTOR))],
+)
+async def correct_patient_identity(
+    patient_id: Annotated[uuid.UUID, Path()],
+    payload: PatientIdentityCorrection,
+    request: Request,
+    user: PatientAccessDep,
+    session: SessionDep,
+) -> PatientRead:
+    """Только лечащий врач (ADR-0090, аудит интерфейса 18.11.2026, Р1).
+
+    Опечатка в дате рождения была тупиком: карту не удалить, а неверный возраст
+    шёл во все расчёты. Возраст считается при чтении, поэтому исправление сразу
+    видно везде; записанные версии назначения не меняются (append-only) — их
+    врач проверяет сам, об этом говорит кабинет. Каждое исправление — в журнал
+    с прежними значениями.
+    """
+
+    if payload.birth_date > local_today():
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            "Дата рождения не может быть в будущем — проверьте год.",
+        )
+
+    patient = await patients_repo.get(session, patient_id)
+    if patient is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Пациент не найден.")
+
+    # Therapy cannot start before birth (`services/therapy.py`): a corrected date
+    # past the recorded start would leave the medical profile unsavable.
+    profile = await profiles_repo.get_for_patient(session, patient_id=patient_id)
+    started = None if profile is None else profile.therapy_started_on
+    if started is not None and payload.birth_date > started:
+        raise ApiError(
+            ErrorCode.VALIDATION_ERROR,
+            f"Дата рождения позже начала диетотерапии ({started:%d.%m.%Y}) — "
+            "проверьте обе даты. Если неверна дата начала, сначала исправьте её "
+            "в медицинском профиле.",
+        )
+
+    if patient.birth_date == payload.birth_date and patient.sex == payload.sex:
+        # Nothing to correct: no audit entry for a change that did not happen.
+        return await _read(session, patient)
+
+    before = {"birth_date": patient.birth_date.isoformat(), "sex": str(patient.sex)}
+    updated = await patients_repo.update(
+        session, patient=patient, birth_date=payload.birth_date, sex=payload.sex
+    )
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="correct_identity",
+        entity="patients",
+        entity_id=patient_id,
+        before=before,
+        after={"birth_date": updated.birth_date.isoformat(), "sex": str(updated.sex)},
         ip=client_address(request),
     )
     return await _read(session, updated)

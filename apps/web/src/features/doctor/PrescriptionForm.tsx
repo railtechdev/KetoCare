@@ -92,6 +92,8 @@ export function PrescriptionForm({
   error,
   onSubmit,
   kcalHint,
+  cancelLabel,
+  onCancel,
 }: {
   defaultValues: DefaultValues<PrescriptionFormValues>;
   /** Подсказка под калорийностью; получает функцию, ставящую число в поле */
@@ -100,6 +102,9 @@ export function PrescriptionForm({
   /** Ошибка мутации: сообщение приходит от сервера уже на русском */
   error: unknown;
   onSubmit: (values: PrescriptionFormValues) => void;
+  /** Closes the form without saving; absent for the first prescription */
+  cancelLabel?: string;
+  onCancel?: () => void;
 }) {
   const { t } = useTranslation("doctor");
   const ids = useId();
@@ -483,6 +488,8 @@ export function PrescriptionForm({
         submitLabel={t("prescription.submit")}
         pendingLabel={t("prescription.submitPending")}
         pending={pending}
+        cancelLabel={cancelLabel}
+        onCancel={onCancel}
       />
     </form>
   );
