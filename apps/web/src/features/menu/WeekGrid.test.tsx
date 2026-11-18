@@ -5,21 +5,11 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { api } from "../../lib/api";
-import { buildWordDocument, downloadBlob } from "../../lib/wordExport";
 import i18n from "../../lib/i18n";
 import menuRu from "../../locales/ru/menu.json";
 import { SectionRouter } from "../../test/SectionRouter";
 import { weekStartOf } from "./dates";
 import { WeekGrid } from "./WeekGrid";
-
-vi.mock("../../lib/wordExport", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../lib/wordExport")>();
-  return {
-    ...actual,
-    buildWordDocument: vi.fn(() => Promise.resolve(new Blob(["docx"]))),
-    downloadBlob: vi.fn(),
-  };
-});
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -156,37 +146,14 @@ describe("неделя ребёнка", () => {
     );
   });
 
-  it("печатает граммы блюд", async () => {
-    const user = userEvent.setup();
+  it("своей печати и Word у сетки нет — они в шапке карты", async () => {
+    // Аудит интерфейса 18.11.2026, Р4: на странице меню стояли четыре кнопки
+    // печати и Word, и две пары читались как два разных листа.
     renderGrid();
     await screen.findByText("Омлет");
 
-    await user.click(screen.getByRole("button", { name: "Печать недели" }));
-
-    expect(window.print).toHaveBeenCalledTimes(1);
-    expect(document.body).toHaveTextContent("Яйцо");
-    expect(document.body).toHaveTextContent("40 г");
-  });
-  it("выгружает ту же неделю в Word с именем ребёнка и неделей", async () => {
-    const user = userEvent.setup();
-    renderGrid();
-    await screen.findByText("Омлет");
-
-    await user.click(screen.getByRole("button", { name: "Скачать Word" }));
-
-    await waitFor(() => expect(buildWordDocument).toHaveBeenCalledTimes(1));
-    const model = (buildWordDocument as Mock).mock.calls[0]![0] as {
-      sections: { blocks: { text?: string }[] }[];
-    };
-    expect(model.sections).toHaveLength(1);
-    expect(model.sections[0]!.blocks.map((block) => block.text)).toContain(
-      "Приём 2. Омлет",
-    );
-    expect(downloadBlob).toHaveBeenCalledWith(
-      expect.anything(),
-      // Имя ребёнка в этом тесте не загружено: части без него, без «— —».
-      expect.stringMatching(/^Меню — [\d.–]+\.docx$/),
-    );
+    expect(screen.queryByRole("button", { name: /Печать/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Скачать Word" })).toBeNull();
   });
 });
 
@@ -479,30 +446,6 @@ describe("ячейка недели", () => {
     expect(
       screen.queryByRole("button", { name: "Убрать из меню" }),
     ).not.toBeInTheDocument();
-  });
-});
-
-describe("печать недели", () => {
-  it("без блюд недоступна и называет причину", async () => {
-    (api.GET as Mock).mockImplementation((path: string) =>
-      Promise.resolve(
-        path.endsWith("/week")
-          ? {
-              data: {
-                start: "2026-11-09",
-                days: [{ date: "2026-11-09", menu: null }],
-              },
-            }
-          : { data: { prescription: { meals_per_day: 3 } } },
-      ),
-    );
-    renderGrid();
-
-    const print = await screen.findByRole("button", { name: "Печать недели" });
-    await waitFor(() => expect(print).toBeDisabled());
-    expect(print).toHaveAccessibleDescription(
-      "На этой неделе нет блюд — печатать нечего.",
-    );
   });
 });
 

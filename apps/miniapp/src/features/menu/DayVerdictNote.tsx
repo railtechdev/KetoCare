@@ -30,6 +30,7 @@ export function DayVerdictNote({
   kcal,
   targetKcal,
   kcalHint = true,
+  composedBy = null,
 }: {
   tolerance: DayTolerance | null | undefined;
   gap: ToleranceGap | null | undefined;
@@ -42,6 +43,13 @@ export function DayVerdictNote({
    * шум, а не забота.
    */
   kcalHint?: boolean;
+  /**
+   * Имя специалиста, составившего день, — или `null`, если день собирала
+   * семья. День специалиста семья не перестраивает: совет «измените состав»
+   * читался как «вы сделали неправильно, исправляйте сами» (аудит интерфейса
+   * 18.11.2026, Р3).
+   */
+  composedBy?: string | null;
 }) {
   const { t } = useTranslation();
 
@@ -62,9 +70,18 @@ export function DayVerdictNote({
           {t(`verdict.${toleranceGapKey(verdict.unavailableReason)}`)}
         </p>
       ) : verdict.ratioOffTolerance ? (
-        <WarningBanner level="warning" title={t("verdict.offTolerance.title")}>
-          {t("verdict.offTolerance.body")}
-        </WarningBanner>
+        composedBy !== null ? (
+          <WarningBanner level="info" title={t("verdict.bySpecialist.ratio")}>
+            {t("verdict.bySpecialist.body", { name: composedBy })}
+          </WarningBanner>
+        ) : (
+          <WarningBanner
+            level="warning"
+            title={t("verdict.offTolerance.title")}
+          >
+            {t("verdict.offTolerance.body")}
+          </WarningBanner>
+        )
       ) : verdict.ratioUnknown ? (
         // Соотношения у дня нет — ни тревоги, ни похвалы: сказать нечего.
         <p role="status" className="m-0 text-sm text-muted-foreground">
@@ -80,11 +97,16 @@ export function DayVerdictNote({
 
       {/* Лимит углеводов — граница: превышение верно в любой момент дня
           (аудит расчётов 13.11.2026). */}
-      {verdict.carbsOverLimit && (
-        <WarningBanner level="warning" title={t("verdict.carbsOver.title")}>
-          {t("verdict.carbsOver.body")}
-        </WarningBanner>
-      )}
+      {verdict.carbsOverLimit &&
+        (composedBy !== null ? (
+          <WarningBanner level="info" title={t("verdict.bySpecialist.carbs")}>
+            {t("verdict.bySpecialist.body", { name: composedBy })}
+          </WarningBanner>
+        ) : (
+          <WarningBanner level="warning" title={t("verdict.carbsOver.title")}>
+            {t("verdict.carbsOver.body")}
+          </WarningBanner>
+        ))}
 
       {verdict.kcalBelowTarget && kcalHint && (
         <p className="m-0 text-sm text-muted-foreground">

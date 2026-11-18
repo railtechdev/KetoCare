@@ -31,6 +31,8 @@ interface Props {
    * ошибочно составленный день из одного блюда так и оставался в итогах.
    */
   lastInDay: boolean;
+  /** Специалист, составивший день семьи: подтверждение «Убрать» его называет */
+  composedBy?: string | null;
   /** День словами — для подтверждения «меню на … удалится». */
   dayLabel: string;
   pending: boolean;
@@ -62,6 +64,7 @@ export function MealGroup({
   titles,
   withdrawnByItem,
   lastInDay,
+  composedBy = null,
   dayLabel,
   pending,
   onAdd,
@@ -193,11 +196,16 @@ export function MealGroup({
                         ? t("item.removeLastTitle", { name: title })
                         : t("item.removeTitle", { name: title })
                     }
-                    description={
+                    description={[
                       lastInDay
                         ? t("item.removeLastDescription", { date: dayLabel })
-                        : t("item.removeDescription", { meal: mealName })
-                    }
+                        : t("item.removeDescription", { meal: mealName }),
+                      composedBy === null
+                        ? null
+                        : t("item.removeBySpecialist", { name: composedBy }),
+                    ]
+                      .filter((part) => part !== null)
+                      .join(" ")}
                     confirmLabel={
                       lastInDay
                         ? t("item.removeLastConfirm")

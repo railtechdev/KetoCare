@@ -1,5 +1,4 @@
 import {
-  ActionReason,
   AsyncSection,
   Button,
   ConfirmDialog,
@@ -12,17 +11,12 @@ import {
   toast,
 } from "@ketocare/ui";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
-import { PrintButton } from "../../components/PrintButton";
 import { PrintedDish } from "../../components/PrintedDish";
-import { WordButton } from "../../components/WordButton";
 import { errorMessageOf } from "../../lib/api";
 import { queryState } from "../../lib/queryState";
 import { useAddressPatch, useAddressState } from "../../routes/useSectionTab";
-import { usePatient } from "../patients/usePatient";
-import { weekFileName, weekWordModel } from "../print/weekWord";
 import {
   formatDayLabel,
   formatWeekday,
@@ -60,7 +54,6 @@ export function WeekGrid({
   // Без назначения — то же число приёмов, что у сборки дня под сеткой:
   // иначе сетка пустела и ставить блюдо было некуда.
   const mealsPerDay = useMealsPerDay(patientId) ?? DEFAULT_MEAL_COUNT;
-  const patient = usePatient(patientId);
 
   const select = (date: string) =>
     patchAddress({ date: date === todayIso() ? undefined : date });
@@ -79,15 +72,6 @@ export function WeekGrid({
   );
   const mealCount = Math.max(mealsPerDay, 0, ...plannedMeals);
   const meals = Array.from({ length: mealCount }, (_, index) => index + 1);
-  const hasPlan = plannedMeals.length > 0;
-  // Печать недели серела без слова (аудит, «Тупики»): причина — рядом.
-  const printBlockedBy =
-    week.data === undefined
-      ? t("week.printWaiting")
-      : hasPlan
-        ? null
-        : t("week.printEmpty");
-  const printReasonId = useId();
 
   return (
     <Section title={t("week.title")} description={t("week.intro")}>
@@ -151,41 +135,10 @@ export function WeekGrid({
               );
             }}
           />
-          <PrintButton
-            label={t("week.print")}
-            disabled={printBlockedBy !== null}
-            describedBy={printBlockedBy === null ? undefined : printReasonId}
-          >
-            {week.data !== undefined && (
-              <WeekPrint
-                week={week.data}
-                patientName={patient.data?.full_name ?? ""}
-              />
-            )}
-          </PrintButton>
-          {/* Тот же лист в файле, чтобы поправить перед отправкой семье или
-              повару (ADR-0088, дополнение). */}
-          <WordButton
-            label={t("common:word.button")}
-            disabled={printBlockedBy !== null || week.data === undefined}
-            describedBy={printBlockedBy === null ? undefined : printReasonId}
-            fileName={weekFileName(
-              t("week.wordFile"),
-              patient.data?.full_name ?? "",
-              start,
-            )}
-            build={() =>
-              weekWordModel(
-                t,
-                week.data as MenuWeek,
-                patient.data?.full_name ?? "",
-              )
-            }
-          />
+          {/* Печать и Word недели — в шапке карты, одной парой с листом
+              назначения: две пары кнопок на одной странице читались как два
+              разных листа (аудит интерфейса 18.11.2026, Р4). */}
         </div>
-        <ActionReason id={printReasonId} className="w-full sm:text-right">
-          {printBlockedBy}
-        </ActionReason>
       </div>
 
       <AsyncSection

@@ -24,11 +24,19 @@ import { PrescriptionSheet } from "./PrescriptionPrint";
  * недоступная кнопка называет причину рядом (правило П44): прежде она гасла
  * молча, и врач решал, что печать сломана.
  */
-export function FamilyPrintButton({ patientId }: { patientId: string }) {
+export function FamilyPrintButton({
+  patientId,
+  weekStart,
+}: {
+  patientId: string;
+  /** Неделя на листе; по умолчанию текущая. В разделе «Питание» — открытая в сетке. */
+  weekStart?: string;
+}) {
   const { t } = useTranslation("doctor");
   const patient = usePatient(patientId);
   const history = usePrescriptionHistory(patientId);
-  const week = useWeekQuery(patientId, weekStartOf(todayIso()));
+  const start = weekStart ?? weekStartOf(todayIso());
+  const week = useWeekQuery(patientId, start);
   const active = activePrescriptionOf(history.data);
   const name = patient.data?.full_name ?? "";
   const hasWeek = (week.data?.days ?? []).some(
@@ -84,11 +92,7 @@ export function FamilyPrintButton({ patientId }: { patientId: string }) {
         label={t("common:word.button")}
         disabled={loading || reason !== null}
         describedBy={reason === null ? undefined : reasonId}
-        fileName={weekFileName(
-          t("familyPrint.wordFile"),
-          name,
-          weekStartOf(todayIso()),
-        )}
+        fileName={weekFileName(t("familyPrint.wordFile"), name, start)}
         build={() => ({
           title: t("familyPrint.wordTitle", { name }),
           sections: wordSections(),

@@ -34,6 +34,8 @@ interface Props {
   patientId?: string | null;
   /** День этих итогов: подобранное на остаток блюдо ставится в него */
   date: string;
+  /** Специалист, составивший день семьи; `null` — день собирала семья */
+  composedBy?: string | null;
 }
 
 /** Числа в русской записи: «12,5 г», а не «12.5 г» (правило П22 канона). */
@@ -49,6 +51,7 @@ export function DayTotalsPanel({
   targets,
   patientId = null,
   date,
+  composedBy = null,
 }: Props) {
   const { t } = useTranslation("menu");
 
@@ -111,19 +114,29 @@ export function DayTotalsPanel({
           />
         )}
 
-      {verdict.ratioOffTolerance && (
-        <WarningBanner level="warning" title={t("offTolerance.title")}>
-          {t("offTolerance.body")}
-        </WarningBanner>
-      )}
+      {verdict.ratioOffTolerance &&
+        (composedBy !== null ? (
+          <WarningBanner level="info" title={t("bySpecialist.ratio")}>
+            {t("bySpecialist.body", { name: composedBy })}
+          </WarningBanner>
+        ) : (
+          <WarningBanner level="warning" title={t("offTolerance.title")}>
+            {t("offTolerance.body")}
+          </WarningBanner>
+        ))}
 
       {/* Лимит углеводов — граница, а не допуск: превышение верно в любой
           момент дня (аудит расчётов 13.11.2026). */}
-      {verdict.carbsOverLimit && (
-        <WarningBanner level="warning" title={t("offTolerance.carbsTitle")}>
-          {t("offTolerance.carbsBody")}
-        </WarningBanner>
-      )}
+      {verdict.carbsOverLimit &&
+        (composedBy !== null ? (
+          <WarningBanner level="info" title={t("bySpecialist.carbs")}>
+            {t("bySpecialist.body", { name: composedBy })}
+          </WarningBanner>
+        ) : (
+          <WarningBanner level="warning" title={t("offTolerance.carbsTitle")}>
+            {t("offTolerance.carbsBody")}
+          </WarningBanner>
+        ))}
 
       {verdict.kcalBelowTarget && (
         <p className="m-0 text-sm text-muted-foreground">

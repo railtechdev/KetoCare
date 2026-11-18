@@ -90,4 +90,25 @@ describe("печать для семьи", () => {
     await waitFor(() => expect(button).toBeEnabled());
     expect(screen.queryByText(doctorRu.familyPrint.nothing)).toBeNull();
   });
+
+  it("в разделе «Питание» берёт неделю, открытую в сетке", async () => {
+    // Аудит интерфейса 18.11.2026, Р4: своей печати у сетки больше нет, и
+    // печать в шапке обязана печатать ту неделю, которую врач видит.
+    answer([]);
+    render(
+      <FamilyPrintButton patientId={PATIENT_ID} weekStart="2026-12-07" />,
+      {
+        wrapper,
+      },
+    );
+
+    await waitFor(() =>
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/menus/week",
+        expect.objectContaining({
+          params: expect.objectContaining({ query: { start: "2026-12-07" } }),
+        }),
+      ),
+    );
+  });
 });

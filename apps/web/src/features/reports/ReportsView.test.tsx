@@ -88,7 +88,7 @@ describe("сборка PDF-отчёта", () => {
     renderView();
 
     await user.click(
-      await screen.findByRole("button", { name: /Собрать PDF/ }),
+      await screen.findByRole("button", { name: "Скачать PDF" }),
     );
 
     const retry = await screen.findByRole("button", { name: "Собрать заново" });
@@ -105,7 +105,7 @@ describe("сборка PDF-отчёта", () => {
     renderView();
 
     await user.click(
-      await screen.findByRole("button", { name: /Собрать PDF/ }),
+      await screen.findByRole("button", { name: "Скачать PDF" }),
     );
 
     expect(await screen.findByText(reportsRu.pdf.building)).toBeInTheDocument();
@@ -185,7 +185,7 @@ describe("период отчёта — в адресе", () => {
     renderView({ from: "2026-08-01", to: "2026-08-31" });
 
     await user.click(
-      await screen.findByRole("button", { name: /Собрать PDF/ }),
+      await screen.findByRole("button", { name: "Скачать PDF" }),
     );
 
     await waitFor(() =>
@@ -208,51 +208,50 @@ describe("период отчёта — в адресе", () => {
   });
 });
 
-describe("печать отчёта со страницы", () => {
-  it("печатает то, что на экране, без сборки файла", async () => {
-    // Аудит продукта 12.11.2026: за бумагой на приёме ждали сборки PDF.
-    const print = vi.spyOn(window, "print").mockImplementation(() => {});
-    (api.GET as Mock).mockResolvedValue({
-      data: {
-        generated_at: "2026-08-31T10:00:00Z",
-        period: { from_date: "2026-08-01", to_date: "2026-08-31" },
-        patient: { full_name: "Аня Иванова" },
-        prescriptions: [
-          {
-            ratio: 4,
-            kcal_per_day: 1200,
-            protein_g: 26,
-            carbs_limit_g: 10,
-            meals_per_day: 4,
-            effective_from: "2026-08-01",
-            created_at: "2026-08-01T09:00:00Z",
-          },
-        ],
-        seizures: { count: 3, entries: 2, by_type: [], by_day: {} },
-        ketones_blood: { points: [], min: null, max: null, mean: null },
-        ketones_urine: { points: [], min: null, max: null, mean: null },
-        weight: { points: [], min: null, max: null, mean: null },
-        medications: [],
-        side_effects: [],
-        menu: { days_planned: 0, items_planned: 0, items_eaten: 0 },
-        summaries: [],
-      },
-    });
+describe("одна кнопка «Скачать PDF» (аудит интерфейса 18.11.2026, Р5)", () => {
+  it("второй кнопки печати рядом нет", async () => {
+    renderView();
+
+    await screen.findByRole("button", { name: "Скачать PDF" });
+    expect(screen.queryByRole("button", { name: /Печать/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Собрать PDF/ })).toBeNull();
+  });
+
+  it("заказанный файл скачивается сам, как только готов", async () => {
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    jobStatus = "done";
     const user = userEvent.setup();
     renderView();
 
-    const button = await screen.findByRole("button", {
-      name: reportsRu.print.button,
-    });
-    await waitFor(() => expect(button).toBeEnabled());
-    await user.click(button);
+    await user.click(
+      await screen.findByRole("button", { name: "Скачать PDF" }),
+    );
 
-    expect(print).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+    expect(click.mock.contexts[0]).toHaveProperty(
+      "href",
+      expect.stringContaining("/api/v1/reports/jobs/job1/file"),
+    );
+    // Готовый файл — ссылкой на месте кнопки, без второй такой же ниже.
+    expect(screen.getAllByRole("link", { name: "Скачать PDF" })).toHaveLength(
+      1,
+    );
+    click.mockRestore();
+  });
+
+  it("задача из адреса сама не скачивается — её открыли, а не заказали", async () => {
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    jobStatus = "done";
+    renderView({ job: "job1" });
+
     expect(
-      await screen.findByRole("heading", { name: "Отчёт: Аня Иванова" }),
+      await screen.findByRole("link", { name: "Скачать PDF" }),
     ).toBeInTheDocument();
-    // Числа — помощниками кита, как на экране (правило П45).
-    expect(screen.getByText(/1 200 ккал в сутки/)).toBeInTheDocument();
-    print.mockRestore();
+    expect(click).not.toHaveBeenCalled();
+    click.mockRestore();
   });
 });
