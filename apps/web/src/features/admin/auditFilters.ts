@@ -151,6 +151,8 @@ export const AUDIT_ACTIONS = [
   "family_nudge",
   // Завершение терапии и его снятие (вопрос 18, ADR-0050).
   "therapy_ended",
+  // Врач исправил дату рождения и пол (ADR-0090).
+  "correct_identity",
   "therapy_resumed",
   // Правка и удаление записи дневника её автором (ADR-0044, находка Н1).
   "diary_entry_updated",

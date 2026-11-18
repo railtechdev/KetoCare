@@ -1,12 +1,10 @@
 import {
   dayVerdict,
   toleranceGapKey,
-  formatGrams,
   AsyncSection,
   Button,
   Columns,
   EmptyState,
-  FactList,
   MacroBar,
   Metric,
   MetricRow,
@@ -16,7 +14,6 @@ import {
   formatKcal,
   formatOccurredAt,
   formatMeasured,
-  formatNumber,
   formatWeight,
   formatDayMonth,
   formatRatio,
@@ -27,7 +24,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
-import { formatIsoDate } from "./dates";
 import { toDateInput } from "../diary/time";
 import { useReport } from "../reports/useReports";
 import { firstAndLast, periodStart, seizuresByWeek } from "./lastDays";
@@ -35,6 +31,7 @@ import { ACCESS_CODE_ITEM } from "./patientViews";
 import { usePatientOverview } from "../patients/overview";
 import { DayTargetBars } from "../menu/DayTargetBars";
 import { PatientViewLink } from "./PatientViewLink";
+import { PrescriptionFacts } from "./PrescriptionFacts";
 import { LinesSkeleton } from "./skeletons";
 import type { Patient, PatientOverview } from "./types";
 import { queryState } from "../../lib/queryState";
@@ -335,68 +332,7 @@ function OverviewPanels({
               />
             ))
           ) : (
-            <FactList>
-              <dt className="text-muted-foreground">{t("fields.ratio")}</dt>
-              <dd className="m-0">
-                {/* Вердикт о допуске здесь не показывается: это сама цель
-                    назначения, а не измерение, которое с ней сравнивают. */}
-                <RatioBadge ratio={prescription.ratio} />
-              </dd>
-
-              <dt className="text-muted-foreground">{t("fields.kcal")}</dt>
-              <dd className="m-0 tabular-nums">
-                {t("units.kcalPerDay", {
-                  value: formatKcal(prescription.kcal_per_day),
-                })}
-              </dd>
-
-              <dt className="text-muted-foreground">{t("fields.protein")}</dt>
-              <dd className="m-0 tabular-nums">
-                {t("units.gramsPerDay", {
-                  value: formatGrams(prescription.protein_g),
-                })}
-              </dd>
-
-              <dt className="text-muted-foreground">
-                {t("fields.carbsLimit")}
-              </dt>
-              <dd className="m-0 tabular-nums">
-                {t("units.gramsPerDay", {
-                  value: formatGrams(prescription.carbs_limit_g),
-                })}
-              </dd>
-
-              <dt className="text-muted-foreground">{t("fields.meals")}</dt>
-              <dd className="m-0 tabular-nums">{prescription.meals_per_day}</dd>
-
-              {/* Жидкость необязательна (ADR-0069): не задана — строки нет. */}
-              {prescription.fluid_ml_per_day != null && (
-                <>
-                  <dt className="text-muted-foreground">{t("fields.fluid")}</dt>
-                  <dd className="m-0 tabular-nums">
-                    {t("units.mlPerDay", {
-                      value: formatNumber(prescription.fluid_ml_per_day, 0),
-                    })}
-                  </dd>
-                </>
-              )}
-
-              <dt className="text-muted-foreground">
-                {t("fields.effectiveFrom")}
-              </dt>
-              <dd className="m-0 tabular-nums">
-                {formatIsoDate(prescription.effective_from) ?? "—"}
-              </dd>
-
-              {prescription.restrictions !== null && (
-                <>
-                  <dt className="text-muted-foreground">
-                    {t("fields.restrictions")}
-                  </dt>
-                  <dd className="m-0">{prescription.restrictions}</dd>
-                </>
-              )}
-            </FactList>
+            <PrescriptionFacts prescription={prescription} />
           )}
           {prescription !== null && upcomingNote}
           {prescription !== null && (

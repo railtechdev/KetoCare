@@ -88,6 +88,13 @@ function renderView() {
   });
 }
 
+/** Р2 аудита 18.11.2026: поля назначения открывает кнопка, а не видны сразу. */
+async function openForm(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await screen.findByRole("button", { name: "Изменить назначение" }),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   history = { items: [ACTIVE, OLD] };
@@ -96,6 +103,11 @@ beforeEach(() => {
     if (path === "/api/v1/patients/{patient_id}/prescriptions") {
       return Promise.resolve({
         data: { items: history.items, total: history.items.length },
+      });
+    }
+    if (path === "/api/v1/patients/{patient_id}/overview") {
+      return Promise.resolve({
+        data: { prescription: history.items[0], upcoming_prescription: null },
       });
     }
     // Справочники отдают массив, списки — `{items}`: ответ выбирается по
@@ -127,6 +139,7 @@ describe("форма назначения", () => {
     // проверяется здесь именно она.
     const user = userEvent.setup();
     renderView();
+    await openForm(user);
 
     // Форма пересоздаётся по ключу, когда приходит действующее назначение
     // (`key={active?.id}` в `PrescriptionTab`), поэтому поле берётся заново
@@ -209,6 +222,7 @@ describe("форма назначения", () => {
     // записанное можно только новой версией, поэтому проверка до записи.
     const user = userEvent.setup();
     renderView();
+    await openForm(user);
 
     const field = () => nativeSelect(screen.getByLabelText("Кетосоотношение"));
     await waitFor(() => expect(field().value).toBe("4"));
@@ -269,6 +283,7 @@ describe("форма назначения", () => {
     // «Сохранить» за нижний край экрана.
     const user = userEvent.setup();
     renderView();
+    await openForm(user);
 
     await screen.findByRole("button", { name: "Сохранить назначение" });
     expect(screen.queryByRole("table")).toBeNull();
@@ -285,7 +300,7 @@ describe("форма назначения", () => {
     // назначение и меню недели» в шапке печатали один и тот же лист.
     renderView();
 
-    await screen.findByRole("button", { name: "Сохранить назначение" });
+    await screen.findByRole("button", { name: "Изменить назначение" });
     expect(
       screen.queryByRole("button", { name: "Печать: назначение" }),
     ).toBeNull();
@@ -300,7 +315,11 @@ describe("форма назначения", () => {
       }
       if (path === "/api/v1/patients/{patient_id}/overview") {
         return Promise.resolve({
-          data: { family_activated: false, last_weight: null },
+          data: {
+            family_activated: false,
+            last_weight: null,
+            prescription: history.items[0],
+          },
         });
       }
       if (path === "/api/v1/patients/{patient_id}/custom-dish-review") {
@@ -315,6 +334,7 @@ describe("форма назначения", () => {
     });
     const user = userEvent.setup();
     renderView();
+    await openForm(user);
 
     const field = () => nativeSelect(screen.getByLabelText("Кетосоотношение"));
     await waitFor(() => expect(field().value).toBe("4"));
@@ -333,6 +353,128 @@ describe("форма назначения", () => {
     expect(next.getAttribute("href")).toBe(
       `/app/patients/${PATIENT_ID}/profile?item=access-code`,
     );
+  });
+
+  it("действующее назначение показано на чтение, поля — по кнопке «Изменить назначение»", async () => {
+    // Аудит интерфейса 18.11.2026, Р2: форма, открытая всегда, позволяла
+    // поменять число случайно, и такая версия уходила семье.
+    const user = userEvent.setup();
+    renderView();
+
+    expect(
+      await screen.findByRole("heading", { name: "Действующее назначение" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("1 200 ккал в сутки")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Кетосоотношение")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Сохранить назначение" }),
+    ).toBeNull();
+
+    await openForm(user);
+    expect(
+      await screen.findByRole("button", { name: "Сохранить назначение" }),
+    ).toBeInTheDocument();
+
+    // «Отменить» закрывает поля и ничего не пишет.
+    await user.click(screen.getByRole("button", { name: "Отменить" }));
+    expect(
+      await screen.findByRole("button", { name: "Изменить назначение" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Кетосоотношение")).toBeNull();
+    expect(api.POST).not.toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/prescriptions",
+      expect.anything(),
+    );
+  });
+
+  it("первое назначение открыто сразу, без «Отменить»", async () => {
+    history = { items: [] };
+    renderView();
+
+    expect(
+      await screen.findByRole("button", { name: "Сохранить назначение" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Отменить" })).toBeNull();
+  });
+
+  it("будущая версия названа строкой под действующей", async () => {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/patients/{patient_id}/prescriptions") {
+        return Promise.resolve({
+          data: { items: history.items, total: history.items.length },
+        });
+      }
+      if (path === "/api/v1/patients/{patient_id}/overview") {
+        return Promise.resolve({
+          data: {
+            prescription: ACTIVE,
+            upcoming_prescription: { ...CREATED, effective_from: "2099-03-01" },
+          },
+        });
+      }
+      return Promise.resolve({ data: { items: [], total: 0 } });
+    });
+    renderView();
+
+    expect(
+      await screen.findByText(
+        /^С 01\.03 — новое назначение: 3\.5 : 1, 1 200 ккал/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("правка строится от действующего назначения, а не от записанного на будущее", async () => {
+    // Ревью безопасности 18.11.2026: форма бралась из последней записанной
+    // версии — будущей, — а на экране стояло действующее.
+    const future = { ...CREATED, effective_from: "2099-03-01" };
+    history = { items: [future, ACTIVE, OLD] };
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/patients/{patient_id}/prescriptions") {
+        return Promise.resolve({
+          data: { items: history.items, total: history.items.length },
+        });
+      }
+      if (path === "/api/v1/patients/{patient_id}/overview") {
+        return Promise.resolve({
+          data: { prescription: ACTIVE, upcoming_prescription: future },
+        });
+      }
+      return Promise.resolve({ data: { items: [], total: 0 } });
+    });
+    const user = userEvent.setup();
+    renderView();
+    await openForm(user);
+
+    const field = () => nativeSelect(screen.getByLabelText("Кетосоотношение"));
+    await waitFor(() => expect(field().value).toBe("4"));
+    expect(
+      screen.getByText(/С 01\.03\.2099 уже записано новое назначение/),
+    ).toBeInTheDocument();
+  });
+
+  it("пока действующее не загрузилось, «Изменить назначение» не предлагается", async () => {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path === "/api/v1/patients/{patient_id}/prescriptions") {
+        return Promise.resolve({
+          data: { items: history.items, total: history.items.length },
+        });
+      }
+      if (path === "/api/v1/patients/{patient_id}/overview") {
+        return Promise.resolve({
+          error: { error: { code: "internal", message: "сбой" } },
+        });
+      }
+      return Promise.resolve({ data: { items: [], total: 0 } });
+    });
+    renderView();
+
+    await screen.findByRole("heading", { name: "Действующее назначение" });
+    await waitFor(() =>
+      expect(screen.queryByText(/загрузить не удалось/)).not.toBeNull(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Изменить назначение" }),
+    ).toBeNull();
   });
 
   it("без истории формы нет — новая версия строится от действующей", async () => {

@@ -10,12 +10,15 @@ import {
   formatKcal,
   formatNumber,
   formatWeight,
+  formatDayMonth,
+  formatRatio,
+  parseDateInput,
   RatioBadge,
   Section,
   toast,
 } from "@ketocare/ui";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ClipboardList, History, KeyRound } from "lucide-react";
+import { ClipboardList, History, KeyRound, Pencil } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -36,7 +39,8 @@ import {
   toPrescriptionBody,
   type PrescriptionFormValues,
 } from "./prescriptionSchema";
-import { TableSkeleton } from "./skeletons";
+import { LinesSkeleton, TableSkeleton } from "./skeletons";
+import { PrescriptionFacts } from "./PrescriptionFacts";
 import { canWritePrescriptions, type PrescriptionVersion } from "./types";
 import { queryState } from "../../lib/queryState";
 import { useSectionItem } from "../../routes/useSectionTab";
@@ -77,6 +81,12 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
 
   const versions = useMemo(() => history.data?.versions ?? [], [history.data]);
   const active = activePrescriptionOf(history.data);
+  // Правка строится от того, что показано как действующее (`/overview`,
+  // ADR-0078), а не от последней записанной версии: та бывает будущей, и врач
+  // правил бы не то, что видит (ревью безопасности 18.11.2026).
+  const inForce = overview.data?.prescription ?? null;
+  const upcoming = overview.data?.upcoming_prescription ?? null;
+  const base = inForce ?? active;
   const savedVersion =
     createdId === null
       ? null
@@ -96,6 +106,12 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
   }, [savedVersion, t]);
 
   const canWrite = canWritePrescriptions(session?.role);
+  // Действующее назначение показывается на чтение, поля открывает кнопка
+  // «Изменить назначение» (аудит интерфейса 18.11.2026, Р2): форма, открытая
+  // всегда, позволяла поменять число случайно — и такая версия уходила семье.
+  const [editing, setEditing] = useState(false);
+  const hasVersions = (history.data?.total ?? 0) > 0;
+  const formOpen = canWrite && (editing || !hasVersions);
 
   const columns = useMemo<ColumnDef<PrescriptionVersion, unknown>[]>(
     () => [
@@ -265,49 +281,82 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
         </p>
       )}
 
-      {canWrite && (
-        <Section
-          title={
-            // Первое назначение не «изменяется»: менять ещё нечего.
-            active === null || active === undefined
-              ? t("prescription.formTitleFirst")
-              : t("prescription.formTitle")
-          }
-        >
-          {/* Форма — только после истории: новая версия строится от
-              действующей. Пока история не пришла (или не пришла вовсе),
-              форма открывалась пустой как «первое назначение», и врач мог
-              записать версию, не видя действующей. */}
-          {history.data === undefined ? (
-            history.isError ? (
-              <ErrorState
-                title={t("prescription.loadError")}
-                description={
-                  errorMessageOf(history.error) ?? t("common:errors.unexpected")
-                }
-                retryLabel={t("common:actions.retry")}
-                onRetry={() => void history.refetch()}
-              />
-            ) : (
-              <p className="m-0 text-sm text-muted-foreground" role="status">
-                {t("prescription.formWaiting")}
-              </p>
-            )
+      <Section
+        title={
+          !hasVersions
+            ? // Первое назначение не «изменяется»: менять ещё нечего.
+              t("prescription.formTitleFirst")
+            : formOpen
+              ? t("prescription.formTitle")
+              : t("prescription.currentTitle")
+        }
+      >
+        {/* Форма — только после истории: новая версия строится от
+            действующей. Пока история не пришла (или не пришла вовсе),
+            форма открывалась пустой как «первое назначение», и врач мог
+            записать версию, не видя действующей. */}
+        {history.data === undefined ? (
+          history.isError ? (
+            <ErrorState
+              title={t("prescription.loadError")}
+              description={
+                errorMessageOf(history.error) ?? t("common:errors.unexpected")
+              }
+              retryLabel={t("common:actions.retry")}
+              onRetry={() => void history.refetch()}
+            />
           ) : (
+            <p className="m-0 text-sm text-muted-foreground" role="status">
+              {t("prescription.formWaiting")}
+            </p>
+          )
+        ) : formOpen ? (
+          <>
+            {upcoming !== null && hasVersions && (
+              <p className="m-0" role="note">
+                {t("prescription.upcomingReplaced", {
+                  date: formatIsoDate(upcoming.effective_from) ?? "",
+                  ratio: formatRatio(upcoming.ratio),
+                  kcal: formatKcal(upcoming.kcal_per_day),
+                })}
+              </p>
+            )}
             <PrescriptionForm
               // Ключ по идентификатору действующей версии: после сохранения
               // форма пересоздаётся уже с новыми значениями, иначе врач увидел
               // бы в ней предыдущее назначение.
-              key={active?.id ?? "first"}
-              defaultValues={prescriptionFormValues(active, new Date())}
+              key={base?.id ?? "first"}
+              defaultValues={prescriptionFormValues(base, new Date())}
               pending={create.isPending}
               error={create.error}
               onSubmit={setPendingValues}
+              // Отказаться от правки можно всегда, кроме первого назначения:
+              // там закрывать форму не во что.
+              cancelLabel={
+                hasVersions ? t("prescription.cancelEdit") : undefined
+              }
+              onCancel={
+                hasVersions
+                  ? () => {
+                      create.reset();
+                      setEditing(false);
+                    }
+                  : undefined
+              }
               kcalHint={(apply) => (
                 <EnergyHint patientId={patientId} onApply={apply} />
               )}
             />
-          )}
+          </>
+        ) : hasVersions ? (
+          <CurrentPrescription
+            patientId={patientId}
+            onEdit={canWrite ? () => setEditing(true) : undefined}
+          />
+        ) : (
+          <EmptyState icon={ClipboardList} title={t("prescription.empty")} />
+        )}
+        {canWrite && (
           <ConfirmDialog
             open={pendingValues !== null}
             onOpenChange={(open) => {
@@ -326,17 +375,20 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
             onConfirm={() => {
               if (pendingValues === null) return;
               create.mutate(toPrescriptionBody(pendingValues), {
-                onSuccess: (created) => setCreatedId(created.id),
+                onSuccess: (created) => {
+                  setCreatedId(created.id);
+                  setEditing(false);
+                },
               });
               setPendingValues(null);
             }}
           >
             {pendingValues !== null && (
-              <PrescriptionConfirm values={pendingValues} previous={active} />
+              <PrescriptionConfirm values={pendingValues} previous={base} />
             )}
           </ConfirmDialog>
-        </Section>
-      )}
+        )}
+      </Section>
 
       <FormSheet
         closeLabel={t("common:actions.close")}
@@ -390,6 +442,80 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
           )}
         </AsyncSection>
       </FormSheet>
+    </div>
+  );
+}
+
+/**
+ * The prescription in force today, read-only, and the one queued for a later
+ * date.
+ *
+ * Which version is in force decides the server (`/overview`, ADR-0078): the
+ * newest saved version may start tomorrow, and calling it «current» here would
+ * contradict the card overview.
+ */
+function CurrentPrescription({
+  patientId,
+  onEdit,
+}: {
+  patientId: string;
+  /** Absent for a role that may only read the prescription. */
+  onEdit?: () => void;
+}) {
+  const { t } = useTranslation("doctor");
+  const overview = usePatientOverview(patientId);
+  const inForce = overview.data?.prescription ?? null;
+  const upcoming = overview.data?.upcoming_prescription ?? null;
+  const upcomingStarts =
+    upcoming === null ? null : parseDateInput(upcoming.effective_from);
+
+  return (
+    <div className="flex flex-col gap-field">
+      <AsyncSection
+        {...queryState(overview)}
+        skeleton={<LinesSkeleton label={t("prescription.loading")} lines={4} />}
+        error={
+          overview.isError
+            ? {
+                title: t("prescription.loadError"),
+                description:
+                  errorMessageOf(overview.error) ??
+                  t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void overview.refetch()}
+        isEmpty={overview.data === undefined}
+        empty={null}
+      >
+        {overview.data !== undefined && (
+          <>
+            {inForce === null ? (
+              <p className="m-0">{t("prescription.notYetInForce")}</p>
+            ) : (
+              <PrescriptionFacts prescription={inForce} />
+            )}
+            {upcoming !== null && upcomingStarts !== null && (
+              <p className="m-0 text-sm">
+                {t("prescription.upcoming", {
+                  date: formatDayMonth(upcomingStarts),
+                  ratio: formatRatio(upcoming.ratio),
+                  kcal: formatKcal(upcoming.kcal_per_day),
+                })}
+              </p>
+            )}
+          </>
+        )}
+      </AsyncSection>
+      {/* Кнопка — только когда действующее назначение на экране: иначе при
+          сбое сводки форма открылась бы, не показав его. */}
+      {onEdit !== undefined && overview.data !== undefined && (
+        <Button type="button" className="self-start" onClick={onEdit}>
+          <Pencil aria-hidden="true" />
+          {t("prescription.edit")}
+        </Button>
+      )}
     </div>
   );
 }

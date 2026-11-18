@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -9,6 +15,7 @@ import i18n from "../../lib/i18n";
 import childRu from "../../locales/ru/child.json";
 import doctorRu from "../../locales/ru/doctor.json";
 import { PatientRouter } from "../../test/PatientRouter";
+import { nativeSelect } from "../../test/nativeSelect";
 import { todayIso } from "../menu/dates";
 import { PatientProfileView } from "./PatientProfileView";
 import type { Patient } from "./types";
@@ -75,6 +82,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
         });
       }),
       PATCH: vi.fn(),
+      PUT: vi.fn(),
     },
   };
 });
@@ -307,6 +315,84 @@ describe("правка профиля ребёнка специалистом", 
         }),
       );
     });
+  });
+});
+
+describe("исправление даты рождения и пола (ADR-0090)", () => {
+  it("врач исправляет дату после подтверждения, где названо прежнее значение", async () => {
+    // Аудит интерфейса 18.11.2026, Р1: опечатка в дате была тупиком — карту
+    // не удалить, а неверный возраст шёл во все расчёты.
+    (api.PUT as Mock).mockResolvedValue({
+      data: { ...PATIENT, birth_date: "2020-04-12" },
+    });
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole("button", { name: "Изменить" }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Исправить дату рождения или пол",
+      }),
+    );
+
+    // Пока ничего не поменяно, исправлять нечего — и сказано почему.
+    const submit = await screen.findByRole("button", { name: "Исправить" });
+    expect(submit).toBeDisabled();
+    expect(
+      screen.getByText("Дата и пол такие же, как в карте — исправлять нечего."),
+    ).toBeInTheDocument();
+
+    // Дата ставится событием: набор по знаку в `type="date"` jsdom не понимает.
+    fireEvent.change(screen.getByLabelText("Дата рождения"), {
+      target: { value: "2020-04-12" },
+    });
+    await user.click(screen.getByRole("button", { name: "Исправить" }));
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Исправить дату рождения и пол?",
+    });
+    expect(dialog).toHaveTextContent("(было 12.04.2019)");
+    expect(dialog).toHaveTextContent("проверьте его");
+    expect(api.PUT).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Исправить" }));
+    await waitFor(() =>
+      expect(api.PUT).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/identity",
+        expect.objectContaining({
+          body: { birth_date: "2020-04-12", sex: "f" },
+        }),
+      ),
+    );
+  });
+
+  it("пол выбирается из списка, прежний назван в подтверждении", async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await user.click(await screen.findByRole("button", { name: "Изменить" }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Исправить дату рождения или пол",
+      }),
+    );
+    const sex = nativeSelect(await screen.findByLabelText("Пол"));
+    fireEvent.change(sex, { target: { value: "m" } });
+    await user.click(screen.getByRole("button", { name: "Исправить" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent(/было/);
+  });
+
+  it("диетологу исправление не предлагается — его делает лечащий врач", async () => {
+    const user = userEvent.setup();
+    renderProfile({}, { clinicalAllowed: true, clinicalEditable: false });
+
+    await user.click(await screen.findByRole("button", { name: "Изменить" }));
+    await screen.findByRole("button", { name: "Сохранить" });
+    expect(
+      screen.queryByRole("button", { name: "Исправить дату рождения или пол" }),
+    ).toBeNull();
   });
 });
 

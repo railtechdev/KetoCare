@@ -31,6 +31,7 @@ import { usePatientOverview } from "../patients/overview";
 import { useUpdateChildMutation } from "../patients/useChildren";
 import { CareTeamPanel } from "./CareTeamPanel";
 import { FamilyPanel } from "./FamilyPanel";
+import { IdentityCorrection } from "./IdentityCorrection";
 import { ACCESS_CODE_ITEM } from "./patientViews";
 import { useSectionItem } from "../../routes/useSectionTab";
 import { MedicalProfileForm } from "./MedicalProfileForm";
@@ -101,6 +102,9 @@ export function PatientProfileView({
     errorCodeOf(medicalProfile.error) === "not_found";
   const profileFailed = medicalProfile.isError && !profileNotFilled;
   const [editOpen, setEditOpen] = useState(false);
+  // Дата рождения и пол — отдельной панелью и только врачу (ADR-0090, Р1
+  // аудита интерфейса 18.11.2026): опечатка в них была тупиком.
+  const [identityOpen, setIdentityOpen] = useState(false);
   const update = useUpdateChildMutation(patient.id);
   const navigate = useNavigate();
   // Панель кода семье — в адресе: на неё ведут «Выдать код семье» из
@@ -260,7 +264,31 @@ export function PatientProfileView({
             });
           }}
         />
+        {clinicalEditable && (
+          <div className="flex flex-col items-start gap-field border-t pt-section">
+            <p className="m-0 text-sm text-muted-foreground">
+              {t("identity.offer")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEditOpen(false);
+                setIdentityOpen(true);
+              }}
+            >
+              {t("identity.open")}
+            </Button>
+          </div>
+        )}
       </FormSheet>
+      {clinicalEditable && (
+        <IdentityCorrection
+          patient={patient}
+          open={identityOpen}
+          onOpenChange={setIdentityOpen}
+        />
+      )}
 
       {/* На широком экране анамнез и «кто и что вокруг ребёнка» стоят рядом:
           шесть блоков столбиком давали 1424 px прокрутки при пустой правой
