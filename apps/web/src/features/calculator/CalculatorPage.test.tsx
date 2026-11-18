@@ -1166,6 +1166,8 @@ describe("калькулятор", () => {
       act(() => {
         onlineManager.setOnline(false);
       });
+      // Порция больше не вписана заранее (аудит интерфейса 18.11.2026).
+      await user.type(screen.getByLabelText(/Порция/), "2");
       await user.click(
         screen.getByRole("button", { name: /Пересчитать порции/ }),
       );
@@ -1253,6 +1255,8 @@ describe("калькулятор", () => {
       act(() => {
         onlineManager.setOnline(false);
       });
+      // Порция больше не вписана заранее (аудит интерфейса 18.11.2026).
+      await user.type(screen.getByLabelText(/Порция/), "2");
       await user.click(
         screen.getByRole("button", { name: /Пересчитать порции/ }),
       );
@@ -1333,6 +1337,8 @@ describe("калькулятор", () => {
       });
       await user.click(retry);
       await screen.findAllByText(WAITING);
+      // Порция больше не вписана заранее (аудит интерфейса 18.11.2026).
+      await user.type(screen.getByLabelText(/Порция/), "2");
       await user.click(
         screen.getByRole("button", { name: /Пересчитать порции/ }),
       );
@@ -1903,6 +1909,8 @@ describe("калькулятор без выбранного ребёнка", ()
       act(() => {
         onlineManager.setOnline(false);
       });
+      // Порция больше не вписана заранее (аудит интерфейса 18.11.2026).
+      await user.type(screen.getByLabelText(/Порция/), "2");
       await user.click(
         screen.getByRole("button", { name: /Пересчитать порции/ }),
       );
@@ -2143,6 +2151,23 @@ describe("приправы в калькуляторе (ADR-0054)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("порция пустая, пока её не ввели, и пересчёт до ввода недоступен", async () => {
+    // Аудит интерфейса 18.11.2026: заранее вписанная «2» удваивала состав
+    // одним нажатием.
+    (api.POST as Mock).mockImplementation(async () => ({
+      data: SOLVED,
+      error: undefined,
+    }));
+    const user = userEvent.setup();
+    renderCalculator();
+    await addButter(user);
+
+    expect(screen.getByLabelText(/Порция/)).toHaveValue(null);
+    expect(
+      screen.getByRole("button", { name: /Пересчитать порции/ }),
+    ).toBeDisabled();
+  });
+
   it("пересчёт порций переносит в состав и массу приправы", async () => {
     const user = userEvent.setup();
     renderCalculator();
@@ -2152,6 +2177,8 @@ describe("приправы в калькуляторе (ADR-0054)", () => {
       timeout: AUTO_CALC_TIMEOUT_MS,
     });
 
+    // Порция больше не вписана заранее (аудит интерфейса 18.11.2026).
+    await user.type(screen.getByLabelText(/Порция/), "2");
     await user.click(
       screen.getByRole("button", { name: /Пересчитать порции/ }),
     );

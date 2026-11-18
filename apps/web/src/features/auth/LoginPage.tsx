@@ -405,6 +405,12 @@ export function LoginPage({
                 <p className="m-0 mt-1 text-sm text-muted-foreground leading-relaxed">
                   {t("login.noAccount")}
                 </p>
+                {/* Сброса пароля по почте в продукте нет: путь называется словами,
+                    иначе забывший пароль упирается в форму без выхода (аудит
+                    интерфейса 18.11.2026). */}
+                <p className="m-0 mt-2 text-sm text-muted-foreground leading-relaxed">
+                  {t("login.forgotPassword")}
+                </p>
                 <div className="mt-4">
                   <a
                     href="/join"

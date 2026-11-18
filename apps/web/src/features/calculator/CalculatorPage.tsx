@@ -163,7 +163,9 @@ export function CalculatorView({
   const [kcal, setKcal] = useState<number | null>(null);
   const [proteinMin, setProteinMin] = useState<number | null>(null);
   const [carbsMax, setCarbsMax] = useState<number | null>(null);
-  const [factor, setFactor] = useState(2);
+  // Поле пустое, а не «2»: заранее вписанная двойная порция удваивала состав
+  // одним нажатием «Пересчитать» (аудит интерфейса 18.11.2026).
+  const [factor, setFactor] = useState<number | null>(null);
 
   const overview = usePatientOverview(patientId ?? null);
   const prescription = overview.data?.prescription ?? null;
@@ -499,7 +501,7 @@ export function CalculatorView({
     ? t("blocked.noRows")
     : tooHeavyReason !== null
       ? tooHeavyReason
-      : factor > 0
+      : factor !== null && factor > 0
         ? null
         : t("blocked.noFactor");
   // Показывается причина того действия, ради которого экран открывают: подбор
@@ -946,9 +948,11 @@ export function CalculatorView({
                         inputMode="decimal"
                         min={0.1}
                         step={0.1}
-                        value={factor}
+                        placeholder={t("factorPlaceholder")}
+                        value={factor ?? ""}
                         onChange={(event) => {
-                          setFactor(Number(event.target.value));
+                          const raw = event.target.value;
+                          setFactor(raw === "" ? null : Number(raw));
                           scale.reset();
                         }}
                         className="tabular-nums"
@@ -966,7 +970,7 @@ export function CalculatorView({
                         }
                         onClick={() => {
                           solve.reset();
-                          scale.mutate({ rows, factor });
+                          if (factor !== null) scale.mutate({ rows, factor });
                         }}
                       >
                         {scale.isPending
