@@ -6,42 +6,11 @@ import {
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import { PrintButton } from "../../components/PrintButton";
-import { usePatient } from "../patients/usePatient";
 import { formatIsoDate } from "./dates";
 import { usePrescriptionGoal } from "./PrescriptionGoalPreview";
 import type { Prescription } from "./types";
 
-/** Лист назначения на руки семье: значения и то, что они дают в граммах. */
-export function PrescriptionPrintButton({
-  patientId,
-  active,
-}: {
-  patientId: string;
-  active: Prescription;
-}) {
-  const { t } = useTranslation("doctor");
-  const patient = usePatient(patientId);
-  const goal = usePrescriptionGoal({
-    ratio: active.ratio,
-    kcalPerDay: active.kcal_per_day,
-    proteinG: active.protein_g,
-    mealsPerDay: active.meals_per_day,
-  });
-  return (
-    <PrintButton
-      label={t("prescription.print.button")}
-      disabled={goal.data === undefined || patient.data === undefined}
-    >
-      <PrescriptionSheet
-        active={active}
-        patientName={patient.data?.full_name ?? ""}
-      />
-    </PrintButton>
-  );
-}
-
-/** Лист назначения: печатается один и в составе «Печать для семьи». */
+/** Лист назначения: печатается в составе «Печать для семьи» (FamilyPrintButton). */
 export function PrescriptionSheet({
   active,
   patientName,

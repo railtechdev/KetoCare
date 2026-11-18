@@ -83,7 +83,11 @@ export function PatientPicker({
             className,
           )}
         >
-          <span className="truncate">{trigger}</span>
+          {/* Значок и слова — одной строкой: в блочном span значок вставал
+              над текстом (аудит интерфейса 18.11.2026). */}
+          <span className="flex min-w-0 items-center gap-2 truncate">
+            {trigger}
+          </span>
           <ChevronsUpDown
             aria-hidden="true"
             className="ml-auto size-4 shrink-0 text-muted-foreground"

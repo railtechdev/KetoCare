@@ -26,7 +26,6 @@ import { PatientViewLink } from "./PatientViewLink";
 import { usePatientOverview } from "../patients/overview";
 import { RecordWeight } from "./RecordWeight";
 import { PrescriptionConfirm } from "./PrescriptionConfirm";
-import { PrescriptionPrintButton } from "./PrescriptionPrint";
 import { EnergyHint } from "./EnergyHint";
 import { PrescriptionForm } from "./PrescriptionForm";
 import { formatIsoDate, formatTimestamp } from "./dates";
@@ -212,9 +211,9 @@ export function PrescriptionTab({ patientId }: { patientId: string }) {
         </span>
         <RecordWeight patientId={patientId} />
         <div className="flex flex-wrap items-center gap-field ml-auto">
-          {active !== null && active !== undefined && (
-            <PrescriptionPrintButton patientId={patientId} active={active} />
-          )}
+          {/* Печать назначения — в шапке карты («Печать: назначение и меню
+              недели», FamilyPrintButton): вторая кнопка здесь печатала тот же
+              лист без меню и читалась как дубль (аудит интерфейса 18.11.2026). */}
           {/* История — по кнопке, а не колонкой рядом с формой: колонка
               отнимала у формы половину ширины и выталкивала «Сохранить» за
               край экрана. Панель — в адресе (`?item=history`, П1). */}

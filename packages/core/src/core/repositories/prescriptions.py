@@ -5,8 +5,8 @@
 Какое назначение действует в день D — одно правило на весь продукт
 (`active_on` / `get_active_on`): из версий, начавшихся не позже D
 (`effective_from <= D`), — последняя записанная. На сегодня это и есть
-«последняя по created_at» раздела 4.2 ТЗ: будущую дату начала сервер не
-принимает. Разные правила у сводки семьи и у сводки врача судили один и тот же
+«последняя по created_at» раздела 4.2 ТЗ, если будущих версий нет; будущую
+дату начала сервер принимает с 14.11.2026 (ADR-0078). Разные правила у сводки семьи и у сводки врача судили один и тот же
 день по разным назначениям (аудит расчётов 13.11.2026).
 """
 
@@ -108,6 +108,29 @@ async def get_upcoming(
     if upcoming is None or (active is not None and upcoming.created_at <= active.created_at):
         return None
     return upcoming
+
+
+async def has_later_start_after(
+    session: AsyncSession, *, patient_id: uuid.UUID, day: date, version: Prescription
+) -> bool:
+    """Есть версия, которая начинается позже `day` и записана позже `version`.
+
+    Такая версия сменит `version` в один из дней после `day`, поэтому запись тех
+    же значений с `day` — это изменение: она отменяет будущую версию или
+    поправку (ADR-0078, п. 3). Версии, записанные раньше `version`, уже
+    перекрыты ею.
+    """
+
+    found = await session.scalar(
+        select(Prescription.id)
+        .where(
+            Prescription.patient_id == patient_id,
+            Prescription.effective_from > day,
+            Prescription.created_at > version.created_at,
+        )
+        .limit(1)
+    )
+    return found is not None
 
 
 async def get_active(session: AsyncSession, *, patient_id: uuid.UUID) -> Prescription | None:
