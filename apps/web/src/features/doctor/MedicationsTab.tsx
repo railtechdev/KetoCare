@@ -14,6 +14,15 @@ import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FormError } from "../../components/FormError";
+import { PrintButton } from "../../components/PrintButton";
+import { PrintedSheets } from "../../components/print/PrintedSheets";
+import { useDocumentFrame } from "../letterhead/useDocumentFrame";
+import { usePatient } from "../patients/usePatient";
+import { todayIso } from "../menu/dates";
+import {
+  MedicationScheduleSheet,
+  scheduledMedications,
+} from "./MedicationScheduleSheet";
 import { errorMessageOf } from "../../lib/api";
 import { useSession } from "../auth/useSession";
 import { MedicationForm } from "./MedicationForm";
@@ -57,6 +66,11 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
 
   const canWrite = isDoctor(session?.role);
   const items = medications.data ?? [];
+  // Лист семьи: схема и неделя отметок (ADR-0092, этап 6).
+  const frame = useDocumentFrame();
+  const patient = usePatient(patientId);
+  const today = todayIso();
+  const scheduled = scheduledMedications(items, today);
 
   // Препараты, названные семьёй в анкете и ещё не попавшие в схему.
   //
@@ -149,12 +163,35 @@ export function MedicationsTab({ patientId }: { patientId: string }) {
       title={t("medications.title")}
       density="compact"
       action={
-        canWrite && (
-          <Button type="button" onClick={() => openForm({ mode: "create" })}>
-            <Plus aria-hidden="true" />
-            {t("medications.add")}
-          </Button>
-        )
+        <div className="flex flex-wrap gap-field">
+          {scheduled.length > 0 && (
+            <PrintButton label={t("medications.sheet.button")}>
+              <PrintedSheets
+                frame={frame}
+                sheets={[
+                  {
+                    key: "medications",
+                    title: t("medications.sheet.sheetTitle"),
+                    aside: patient.data?.full_name,
+                    code: "KC-MEDS-1",
+                    content: (
+                      <MedicationScheduleSheet
+                        medications={scheduled}
+                        today={today}
+                      />
+                    ),
+                  },
+                ]}
+              />
+            </PrintButton>
+          )}
+          {canWrite && (
+            <Button type="button" onClick={() => openForm({ mode: "create" })}>
+              <Plus aria-hidden="true" />
+              {t("medications.add")}
+            </Button>
+          )}
+        </div>
       }
     >
       <AsyncSection

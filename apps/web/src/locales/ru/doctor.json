@@ -461,7 +461,36 @@
     "drugNameFound_one": "Подсказка: {{count}} препарат из справочника",
     "drugNameFound_few": "Подсказка: {{count}} препарата из справочника",
     "drugNameFound_many": "Подсказка: {{count}} препаратов из справочника",
-    "drugNameApplied": "Подставлено название из справочника: {{name}}"
+    "drugNameApplied": "Подставлено название из справочника: {{name}}",
+    "sheet": {
+      "button": "Распечатать схему для семьи",
+      "sheetTitle": "Схема приёма препаратов",
+      "title": "Схема приёма препаратов",
+      "asOf": "Действует на {{date}}. Если врач изменит схему, вы получите новый лист.",
+      "drug": "Препарат",
+      "dose": "Разовая доза",
+      "how": "Как принимать",
+      "from": "Когда",
+      "ongoing": "принимается",
+      "startsOn": "с {{date}}",
+      "gridTitle": "Отметки приёма",
+      "gridHint": "Ставьте галочку в клетке сразу после приёма.",
+      "days": [
+        "Пн",
+        "Вт",
+        "Ср",
+        "Чт",
+        "Пт",
+        "Сб",
+        "Вс"
+      ],
+      "intake": "приём {{number}}",
+      "asNeededCell": "по требованию — время",
+      "cell": "Отметка за {{day}}",
+      "warningTitle": "Не меняйте дозу сами.",
+      "warning": "Схему меняет только лечащий врач. Пропустили приём — сообщите врачу.",
+      "uz": "Dori miqdorini oʻzingiz oʻzgartirmang: sxemani faqat davolovchi shifokor oʻzgartiradi. Har bir qabuldan keyin katakka belgi qoʻying."
+    }
   },
   "diary": {
     "tabsLabel": "Виды записей дневника",
