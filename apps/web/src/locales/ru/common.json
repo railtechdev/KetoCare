@@ -165,5 +165,20 @@
   "excel": {
     "pending": "Собираем файл…",
     "failed": "Не удалось собрать файл Excel. Попробуйте ещё раз."
+  },
+  "printFrame": {
+    "roles": {
+      "doctor": "врач",
+      "dietitian": "диетолог",
+      "parent": "родитель",
+      "admin": "администратор"
+    },
+    "familyPhone": "Вопросы по диете: {{phone}}",
+    "generatedBy": "сформировал(а) {{who}}, {{when}}",
+    "generated": "сформировано {{when}}",
+    "code": "KetoCare · {{code}}",
+    "page": "Стр. {{page}} из {{total}}",
+    "pageWord": "Стр.",
+    "ofWord": "из"
   }
 }

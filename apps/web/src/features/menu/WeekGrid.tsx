@@ -334,6 +334,82 @@ function DayMacroTotals({
  * dish a block — the composition as a table, then how to cook it — and the
  * day's numbers under its date.
  */
+/** Дни недели, которые есть что печатать: пустой день листа не получает. */
+export function printableDays(week: MenuWeek): MenuWeek["days"] {
+  return (week.days ?? []).filter((day) => (day.menu?.items ?? []).length > 0);
+}
+
+/**
+ * Один день меню на бумаге — содержимое листа (ADR-0088, ADR-0092): шапку и
+ * подвал даёт `PrintedSheets`, здесь только день.
+ */
+export function WeekDayPrint({
+  day,
+  patientName,
+}: {
+  day: MenuWeek["days"][number];
+  patientName: string;
+}) {
+  const { t } = useTranslation("menu");
+
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <header className="flex flex-col gap-0.5 border-b border-black pb-1">
+        <p className="m-0 text-xs">
+          {t("week.printTitle", { name: patientName })}
+        </p>
+        <h1 className="m-0 text-lg font-semibold">
+          {formatDayLabel(day.date)}
+        </h1>
+        {day.menu?.totals != null && (
+          <p className="m-0">
+            {day.menu.totals.ratio !== null && (
+              <>{formatRatio(day.menu.totals.ratio)} · </>
+            )}
+            {t("week.printTotals", {
+              kcal: formatKcal(day.menu.totals.kcal),
+            })}
+            {" · "}
+            {t("week.printMacros", {
+              fat: formatGrams(day.menu.totals.fat),
+              protein: formatGrams(day.menu.totals.protein),
+              carbs: formatGrams(day.menu.totals.carbs),
+            })}
+          </p>
+        )}
+      </header>
+      {(day.menu?.excluded_products ?? []).length > 0 && (
+        <p className="m-0 font-semibold">
+          {t("week.printExcluded", {
+            names: (day.menu?.excluded_products ?? [])
+              .map((product) => product.name_ru)
+              .join(", "),
+          })}
+        </p>
+      )}
+      {[...(day.menu?.items ?? [])]
+        .sort((a, b) => a.meal_index - b.meal_index)
+        .map((item) => (
+          <PrintedDish
+            key={item.id}
+            level={2}
+            heading={t("week.printDish", {
+              number: item.meal_index,
+              title: item.title ?? t("week.untitled"),
+            })}
+            lines={(item.ingredients ?? []).map((row) => ({
+              key: row.product_id,
+              name: row.name_ru,
+              grams: row.grams,
+            }))}
+            steps={item.instructions}
+          />
+        ))}
+    </div>
+  );
+}
+
+/** Неделя целиком: каждый день со своей страницы. */
 export function WeekPrint({
   week,
   patientName,
@@ -341,73 +417,16 @@ export function WeekPrint({
   week: MenuWeek;
   patientName: string;
 }) {
-  const { t } = useTranslation("menu");
-
   return (
     <div className="flex flex-col gap-4 text-sm">
-      {week.days
-        .filter((day) => (day.menu?.items ?? []).length > 0)
-        .map((day, index) => (
-          <section
-            key={day.date}
-            className={cn(
-              "flex flex-col gap-3",
-              index > 0 && "break-before-page",
-            )}
-          >
-            <header className="flex flex-col gap-0.5 border-b border-black pb-1">
-              <p className="m-0 text-xs">
-                {t("week.printTitle", { name: patientName })}
-              </p>
-              <h1 className="m-0 text-lg font-semibold">
-                {formatDayLabel(day.date)}
-              </h1>
-              {day.menu?.totals != null && (
-                <p className="m-0">
-                  {day.menu.totals.ratio !== null && (
-                    <>{formatRatio(day.menu.totals.ratio)} · </>
-                  )}
-                  {t("week.printTotals", {
-                    kcal: formatKcal(day.menu.totals.kcal),
-                  })}
-                  {" · "}
-                  {t("week.printMacros", {
-                    fat: formatGrams(day.menu.totals.fat),
-                    protein: formatGrams(day.menu.totals.protein),
-                    carbs: formatGrams(day.menu.totals.carbs),
-                  })}
-                </p>
-              )}
-            </header>
-            {(day.menu?.excluded_products ?? []).length > 0 && (
-              <p className="m-0 font-semibold">
-                {t("week.printExcluded", {
-                  names: (day.menu?.excluded_products ?? [])
-                    .map((product) => product.name_ru)
-                    .join(", "),
-                })}
-              </p>
-            )}
-            {[...(day.menu?.items ?? [])]
-              .sort((a, b) => a.meal_index - b.meal_index)
-              .map((item) => (
-                <PrintedDish
-                  key={item.id}
-                  level={2}
-                  heading={t("week.printDish", {
-                    number: item.meal_index,
-                    title: item.title ?? t("week.untitled"),
-                  })}
-                  lines={(item.ingredients ?? []).map((row) => ({
-                    key: row.product_id,
-                    name: row.name_ru,
-                    grams: row.grams,
-                  }))}
-                  steps={item.instructions}
-                />
-              ))}
-          </section>
-        ))}
+      {printableDays(week).map((day, index) => (
+        <section
+          key={day.date}
+          className={cn(index > 0 && "break-before-page")}
+        >
+          <WeekDayPrint day={day} patientName={patientName} />
+        </section>
+      ))}
     </div>
   );
 }

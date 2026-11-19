@@ -1,0 +1,47 @@
+/* Листы кабинета на печать — единый стандарт документов (ADR-0092). */
+@import "@fontsource/noto-sans/400.css";
+@import "@fontsource/noto-sans/600.css";
+@import "@fontsource/noto-sans/700.css";
+
+@media print {
+  /* Поля страницы — ноль: браузер печатает в полях адрес страницы (в нём
+     идентификатор пациента), заголовок вкладки и дату, а без полей им негде
+     встать. Отступы даёт сам лист. */
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}
+
+.print-sheet {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 5mm;
+  width: 210mm;
+  min-height: 297mm;
+  /* 14 мм сверху и снизу, 18 мм по бокам: шире непечатаемой кромки любого
+     принтера и не меньше полей прежней печати. */
+  padding: 14mm 18mm 12mm;
+  font-family: "Noto Sans", system-ui, sans-serif;
+  font-size: 11pt;
+  line-height: 1.4;
+  color: #1a1f2e;
+  background: #ffffff;
+  font-variant-numeric: tabular-nums;
+  /* Лист длиннее страницы переходит на следующую с теми же отступами. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  break-after: page;
+}
+
+.print-sheet:last-child {
+  break-after: auto;
+}
+
+.print-sheet-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4mm;
+}

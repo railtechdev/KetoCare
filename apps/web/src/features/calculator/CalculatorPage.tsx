@@ -46,6 +46,9 @@ import { PrintButton } from "../../components/PrintButton";
 import { WordButton } from "../../components/WordButton";
 import { dishWordModel } from "../print/dishWord";
 import { DishPrint } from "./DishPrint";
+import { PrintedSheets } from "../../components/print/PrintedSheets";
+import { useDocumentFrame } from "../letterhead/useDocumentFrame";
+import { wordFrame } from "../../lib/wordExport";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
 import { SaveDishForm } from "./SaveDishForm";
@@ -182,6 +185,8 @@ export function CalculatorView({
   const [factor, setFactor] = useState<number | null>(null);
 
   const overview = usePatientOverview(patientId ?? null);
+  // Шапка и подвал карточки на печать и в Word (ADR-0092).
+  const frame = useDocumentFrame();
   const prescription = overview.data?.prescription ?? null;
   const suggested = useMemo(
     () => mealTargetsFrom(prescription),
@@ -1015,25 +1020,41 @@ export function CalculatorView({
                   {/* Версия расчёта — в печатной форме, не на экране (правило 6
                       PLAN_UI_TEXT_2026-11). */}
                   <PrintButton label={t("print.button")} disabled={stale}>
-                    <DishPrint
-                      title={incomingDish.title ?? t("print.untitled")}
-                      rows={rows}
-                      dish={dish}
-                      steps={steps}
+                    <PrintedSheets
+                      frame={frame}
+                      sheets={[
+                        {
+                          key: "dish",
+                          title: t("print.sheet"),
+                          code: "KC-DISH-1",
+                          content: (
+                            <DishPrint
+                              title={incomingDish.title ?? t("print.untitled")}
+                              rows={rows}
+                              dish={dish}
+                              steps={steps}
+                            />
+                          ),
+                        },
+                      ]}
                     />
                   </PrintButton>
                   <WordButton
                     label={t("common:word.button")}
                     disabled={stale}
                     fileName={incomingDish.title ?? t("print.untitled")}
-                    build={() =>
-                      dishWordModel(t, {
+                    build={() => ({
+                      ...dishWordModel(t, {
                         title: incomingDish.title ?? t("print.untitled"),
                         rows,
                         dish,
                         steps,
-                      })
-                    }
+                      }),
+                      frame: wordFrame(t, frame, {
+                        title: t("print.sheet"),
+                        code: "KC-DISH-1",
+                      }),
+                    })}
                   />
                 </div>
               )}
