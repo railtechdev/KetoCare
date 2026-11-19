@@ -20,6 +20,7 @@ const VALID = {
   allergies: "орехи, молоко",
   excludedProductIds: [],
   notes: "",
+  cardNumber: "",
 };
 
 describe("форма ребёнка", () => {
@@ -83,7 +84,22 @@ describe("toChildBody", () => {
       weight_kg: null,
       allergies: ["орехи", "молоко"],
       notes: null,
+      clinic_card_number: null,
     });
+  });
+
+  it("номер карты клиники — без лишних пробелов, пустой — «не указан» (ADR-0092)", () => {
+    expect(
+      toChildBody(
+        childSchema.parse({ ...VALID, cardNumber: "  А-2026/  015 " }),
+      ).clinic_card_number,
+    ).toBe("А-2026/ 015");
+    expect(
+      childSchema.safeParse({ ...VALID, cardNumber: "<script>" }).success,
+    ).toBe(false);
+    expect(
+      childSchema.safeParse({ ...VALID, cardNumber: "x".repeat(33) }).success,
+    ).toBe(false);
   });
 
   it("пустой рост уходит как «не указано», а не как ноль", () => {
@@ -96,6 +112,8 @@ describe("toChildBody", () => {
     const body = toChildUpdateBody(childSchema.parse(VALID));
     expect(body).not.toHaveProperty("birth_date");
     expect(body).not.toHaveProperty("sex");
+    // Номер ставит специалист отдельно: форма семьи его не знает и не стирает.
+    expect(body).not.toHaveProperty("clinic_card_number");
     expect(body.height_cm).toBe(121.5);
   });
 });

@@ -22,6 +22,28 @@ export const HEIGHT_MAX_CM = 250;
  */
 /** Границы те же, что у записи веса в API (`WEIGHT_MIN_KG`, `WEIGHT_MAX_KG`). */
 const WEIGHT_MIN_KG = 2;
+
+/**
+ * Номер карты клиники (ADR-0092): как его пишет клиника — цифры, буквы, дефис,
+ * точка, косая черта, до 32 знаков. Те же границы, что у сервера
+ * (`ClinicCardNumber` в `api/schemas.py`).
+ */
+export const CARD_NUMBER_PATTERN =
+  /^[0-9A-Za-zА-Яа-яЁё][0-9A-Za-zА-Яа-яЁё .\-/№]*$/;
+export const CARD_NUMBER_MAX = 32;
+
+export function normalizeCardNumber(value: string): string | null {
+  const text = value.split(/\s+/).filter(Boolean).join(" ");
+  return text === "" ? null : text;
+}
+
+export function isValidCardNumber(value: string): boolean {
+  const text = normalizeCardNumber(value);
+  return (
+    text === null ||
+    (text.length <= CARD_NUMBER_MAX && CARD_NUMBER_PATTERN.test(text))
+  );
+}
 const WEIGHT_MAX_KG = 150;
 
 export const childSchema = z.object({
@@ -48,6 +70,8 @@ export const childSchema = z.object({
    */
   excludedProductIds: z.array(z.string()),
   notes: z.string(),
+  /** Только при заведении карты; дальше номер правится отдельно. */
+  cardNumber: z.string().refine(isValidCardNumber),
 });
 
 /**
@@ -143,6 +167,7 @@ export function toChildBody(values: ChildValues) {
       ...parseAllergies(values.allergies),
     ],
     notes: optional(values.notes),
+    clinic_card_number: normalizeCardNumber(values.cardNumber),
   };
 }
 

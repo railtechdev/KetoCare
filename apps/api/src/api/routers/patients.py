@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Path, Query, Request, Response
+from sqlalchemy.exc import IntegrityError
 
 from core import exclusions
 from core.models import Patient, WeightLog
@@ -35,6 +36,7 @@ from ..schemas import (
     FamilyMemberRead,
     FamilyNudgeRead,
     Page,
+    PatientClinicCard,
     PatientCreate,
     PatientDoctorAdd,
     PatientIdentityCorrection,
@@ -50,6 +52,25 @@ from ..services.clock import local_today
 CARE_ROLES = (UserRole.DOCTOR, UserRole.DIETITIAN)
 
 router = APIRouter(prefix="/patients", tags=["patients"])
+
+
+CARD_NUMBER_TAKEN = "Этот номер карты уже записан у другого пациента. Проверьте номер."
+
+
+async def _set_card_number(session: SessionDep, patient: Patient, number: str | None) -> None:
+    """Номер уникален среди всех карт (частичный индекс): занятый — 409, а не 500.
+
+    Чей это номер, ответ не говорит — у специалиста может не быть доступа к той карте.
+    """
+
+    try:
+        async with session.begin_nested():
+            patient.clinic_card_number = number
+            await session.flush()
+    except IntegrityError:
+        raise ApiError(ErrorCode.CONFLICT, CARD_NUMBER_TAKEN) from None
+    # `updated_at` is set by the database; read it back before the response does.
+    await session.refresh(patient)
 
 
 async def _read(session: SessionDep, patient: Patient) -> PatientRead:
@@ -186,6 +207,8 @@ async def create_patient(
         allergies=payload.allergies,
         notes=payload.notes,
     )
+    if payload.clinic_card_number is not None:
+        await _set_card_number(session, patient, payload.clinic_card_number)
     # Ведение возникает из происхождения записи: карту завёл этот специалист,
     # значит он её и ведёт. Иначе он не прошёл бы `require_patient_access` и не
     # смог бы прочитать только что заведённую карту.
@@ -210,7 +233,11 @@ async def create_patient(
         action="create",
         entity="patients",
         entity_id=patient.id,
-        after={"full_name": patient.full_name, "birth_date": patient.birth_date.isoformat()},
+        after={
+            "full_name": patient.full_name,
+            "birth_date": patient.birth_date.isoformat(),
+            "clinic_card_number": patient.clinic_card_number,
+        },
     )
 
     return await _read(session, patient)
@@ -262,6 +289,48 @@ async def update_patient(
         ip=client_address(request),
     )
     return await _read(session, updated)
+
+
+@router.put(
+    "/{patient_id}/clinic-card",
+    response_model=PatientRead,
+    summary="Номер карты клиники",
+)
+async def set_clinic_card_number(
+    patient_id: Annotated[uuid.UUID, Path()],
+    payload: PatientClinicCard,
+    request: Request,
+    user: PatientAccessDep,
+    session: SessionDep,
+) -> PatientRead:
+    """Ставит и исправляет ведущий специалист — врач или диетолог (ADR-0092).
+
+    Номер — второй идентификатор пациента на каждой странице клинического
+    документа рядом с датой рождения; семья его не меняет. Пустое значение
+    снимает номер. Каждая правка — в журнал с прежним значением.
+    """
+
+    if user.role not in CARE_ROLES:
+        raise ApiError(ErrorCode.FORBIDDEN, "Номер карты ставит лечащий врач или диетолог.")
+
+    patient = await patients_repo.get(session, patient_id)
+    if patient is None:
+        raise ApiError(ErrorCode.NOT_FOUND, "Пациент не найден.")
+
+    before = patient.clinic_card_number
+    if before != payload.clinic_card_number:
+        await _set_card_number(session, patient, payload.clinic_card_number)
+        await audit_repo.write_audit_log(
+            session,
+            user_id=user.id,
+            action="update",
+            entity="patients",
+            entity_id=patient_id,
+            before={"clinic_card_number": before},
+            after={"clinic_card_number": payload.clinic_card_number},
+            ip=client_address(request),
+        )
+    return await _read(session, patient)
 
 
 @router.put(
