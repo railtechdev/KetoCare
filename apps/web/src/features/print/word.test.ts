@@ -4,7 +4,12 @@ import i18n from "../../lib/i18n";
 import calculatorRu from "../../locales/ru/calculator.json";
 import doctorRu from "../../locales/ru/doctor.json";
 import menuRu from "../../locales/ru/menu.json";
-import type { WordBlock } from "../../lib/wordExport";
+import {
+  buildWordDocument,
+  wordFrame,
+  type WordBlock,
+} from "../../lib/wordExport";
+import commonRu from "../../locales/ru/common.json";
 import type { MenuWeek } from "../menu/useWeek";
 import type { Prescription } from "../doctor/types";
 import { dishWordModel } from "./dishWord";
@@ -14,6 +19,7 @@ import { weekFileName, weekRangeLabel, weekWordModel } from "./weekWord";
 i18n.addResourceBundle("ru", "menu", menuRu, true, true);
 i18n.addResourceBundle("ru", "calculator", calculatorRu, true, true);
 i18n.addResourceBundle("ru", "doctor", doctorRu, true, true);
+i18n.addResourceBundle("ru", "common", commonRu, true, true);
 const t = i18n.t.bind(i18n);
 
 function item(meal: number, title: string, instructions: string | null) {
@@ -175,5 +181,53 @@ describe("prescription in Word — the same as PrescriptionSheet", () => {
   it("leaves the table out while the grams are not known", () => {
     const section = prescriptionWordSection(t, ACTIVE, "Пациент", undefined);
     expect(section.blocks.some((block) => block.kind === "table")).toBe(false);
+  });
+});
+
+describe("Word frame — the same header and footer as the printed sheet (ADR-0092)", () => {
+  const FRAME = {
+    shortName: "ДНЦ «Образец»",
+    logoBlob: undefined,
+    familyPhone: "+998 71 000-00-00",
+    author: "Иванова Анна Петровна, диетолог",
+    generatedAt: "20.11.2026, 14:05",
+  };
+
+  it("names the clinic, the sheet, who made it and the family phone", () => {
+    const frame = wordFrame(t, FRAME, {
+      title: "Карточка блюда",
+      aside: "Мария О.",
+      code: "KC-DISH-1",
+    });
+
+    expect(frame.header).toBe("ДНЦ «Образец» · Карточка блюда");
+    expect(frame.aside).toBe("Мария О.");
+    expect(frame.footer).toBe(
+      "Вопросы по диете: +998 71 000-00-00 · сформировал(а) Иванова Анна Петровна, диетолог, 20.11.2026, 14:05 · KetoCare · KC-DISH-1",
+    );
+    expect([frame.pageWord, frame.ofWord]).toEqual(["Стр.", "из"]);
+  });
+
+  it("leaves the family phone off a sheet for the staff", () => {
+    const frame = wordFrame(t, FRAME, {
+      title: "Справочник",
+      code: "KC-LIST-1",
+      staff: true,
+    });
+
+    expect(frame.footer).not.toContain("+998");
+  });
+
+  it("builds a file with the frame", async () => {
+    const blob = await buildWordDocument({
+      title: "Карточка",
+      sections: [{ blocks: [{ kind: "heading", text: "Омлет", level: 1 }] }],
+      frame: wordFrame(t, FRAME, {
+        title: "Карточка блюда",
+        code: "KC-DISH-1",
+      }),
+    });
+
+    expect(blob.size).toBeGreaterThan(1000);
   });
 });

@@ -4,12 +4,17 @@ import { useTranslation } from "react-i18next";
 
 import { PrintButton } from "../../components/PrintButton";
 import { WordButton } from "../../components/WordButton";
-import type { WordSection } from "../../lib/wordExport";
+import { wordFrame, type WordSection } from "../../lib/wordExport";
 import { prescriptionWordSection } from "../print/prescriptionWord";
 import { weekFileName, weekWordSections } from "../print/weekWord";
-import { todayIso, weekStartOf } from "../menu/dates";
+import { formatDayLabel, todayIso, weekStartOf } from "../menu/dates";
 import { useWeekQuery } from "../menu/useWeek";
-import { WeekPrint } from "../menu/WeekGrid";
+import { printableDays, WeekDayPrint } from "../menu/WeekGrid";
+import { useDocumentFrame } from "../letterhead/useDocumentFrame";
+import {
+  PrintedSheets,
+  type PrintedSheetSpec,
+} from "../../components/print/PrintedSheets";
 import { usePatient } from "../patients/usePatient";
 import { activePrescriptionOf, usePrescriptionHistory } from "./doctorQueries";
 import { usePrescriptionGoal } from "./PrescriptionGoalPreview";
@@ -43,6 +48,7 @@ export function FamilyPrintButton({
     (day) => (day.menu?.items ?? []).length > 0,
   );
   const reasonId = useId();
+  const frame = useDocumentFrame();
   const loading =
     patient.data === undefined ||
     history.data === undefined ||
@@ -58,6 +64,32 @@ export function FamilyPrintButton({
     proteinG: active?.protein_g ?? 0,
     mealsPerDay: active?.meals_per_day ?? 0,
   });
+
+  /** Назначение и каждый день недели — по листу (ADR-0092). */
+  function printSheets(): PrintedSheetSpec[] {
+    const sheets: PrintedSheetSpec[] = [];
+    if (active !== null) {
+      sheets.push({
+        key: "prescription",
+        title: t("familyPrint.sheet.prescription"),
+        aside: name,
+        code: "KC-RX-1",
+        content: <PrescriptionSheet active={active} patientName={name} />,
+      });
+    }
+    if (week.data !== undefined) {
+      for (const day of printableDays(week.data)) {
+        sheets.push({
+          key: day.date,
+          title: t("familyPrint.sheet.day", { day: formatDayLabel(day.date) }),
+          aside: name,
+          code: "KC-WEEK-1",
+          content: <WeekDayPrint day={day} patientName={name} />,
+        });
+      }
+    }
+    return sheets;
+  }
 
   function wordSections(): WordSection[] {
     const sections: WordSection[] = [];
@@ -77,16 +109,7 @@ export function FamilyPrintButton({
         disabled={loading || reason !== null}
         describedBy={reason === null ? undefined : reasonId}
       >
-        <div className="flex flex-col gap-6">
-          {active !== null && (
-            <PrescriptionSheet active={active} patientName={name} />
-          )}
-          {week.data !== undefined && hasWeek && (
-            <div className="break-before-page">
-              <WeekPrint week={week.data} patientName={name} />
-            </div>
-          )}
-        </div>
+        <PrintedSheets frame={frame} sheets={printSheets()} />
       </PrintButton>
       <WordButton
         label={t("common:word.button")}
@@ -96,6 +119,11 @@ export function FamilyPrintButton({
         build={() => ({
           title: t("familyPrint.wordTitle", { name }),
           sections: wordSections(),
+          frame: wordFrame(t, frame, {
+            title: t("familyPrint.sheet.word"),
+            aside: name,
+            code: "KC-FAMILY-1",
+          }),
         })}
       />
       {reason !== null && <ActionReason id={reasonId}>{reason}</ActionReason>}

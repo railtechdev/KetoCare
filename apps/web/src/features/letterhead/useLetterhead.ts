@@ -26,13 +26,15 @@ export function useLetterhead() {
 }
 
 /**
- * Адрес логотипа для `<img>`. Картинка берётся запросом с токеном и отдаётся
- * как `blob:` — сессия живёт в памяти вкладки, и голый `src` пришёл бы без
- * авторизации. Ключ — отпечаток файла: новый логотип не прячется за кэшем.
+ * Логотип для документов: адрес для `<img>` и сам файл для Word. Картинка
+ * берётся запросом с токеном и отдаётся как `blob:` — сессия живёт в памяти
+ * вкладки, и голый `src` пришёл бы без авторизации. Ключ — отпечаток файла:
+ * новый логотип не прячется за кэшем.
  */
-export function useLetterheadLogoUrl(
-  sha256: string | undefined,
-): string | undefined {
+export function useLetterheadLogo(sha256: string | undefined): {
+  url: string | undefined;
+  blob: Blob | undefined;
+} {
   const logo = useQuery({
     queryKey: [...KEY, "logo", sha256],
     enabled: sha256 !== undefined,
@@ -55,7 +57,13 @@ export function useLetterheadLogoUrl(
     setUrl(next);
     return () => URL.revokeObjectURL(next);
   }, [logo.data]);
-  return url;
+  return { url, blob: sha256 === undefined ? undefined : logo.data };
+}
+
+export function useLetterheadLogoUrl(
+  sha256: string | undefined,
+): string | undefined {
+  return useLetterheadLogo(sha256).url;
 }
 
 function useLetterheadMutation<Input>(

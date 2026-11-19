@@ -30,12 +30,77 @@ export interface WordSection {
   blocks: readonly WordBlock[];
 }
 
+/**
+ * Колонтитулы файла (ADR-0092): знак и короткое название клиники, документ и
+ * ребёнок сверху; кто и когда сформировал и «Стр. X из Y» снизу.
+ */
+export interface WordFrame {
+  /** «ДНЦ «Образец» · Карточка блюда». */
+  header: string;
+  /** Справа сверху: ребёнок. */
+  aside?: string;
+  /** Подвал слева; номер страницы встаёт справа сам. */
+  footer: string;
+  /** «Стр.» и «из» — словарём, как на бумаге. */
+  pageWord: string;
+  ofWord: string;
+  logo?: Blob;
+}
+
 export interface WordDocumentModel {
   title: string;
   sections: readonly WordSection[];
+  frame?: WordFrame;
 }
 
-const FONT = "Arial";
+/** То, что `wordFrame` берёт у рамки документа кабинета. */
+interface FrameSource {
+  shortName: string;
+  logoBlob: Blob | undefined;
+  familyPhone: string | null;
+  author: string | null;
+  generatedAt: string;
+}
+
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+/** Колонтитулы Word из рамки документа — те же строки, что на печатном листе. */
+export function wordFrame(
+  t: Translate,
+  frame: FrameSource,
+  sheet: { title: string; aside?: string; code: string; staff?: boolean },
+): WordFrame {
+  const footer = [
+    !sheet.staff && frame.familyPhone
+      ? t("common:printFrame.familyPhone", { phone: frame.familyPhone })
+      : null,
+    frame.author
+      ? t("common:printFrame.generatedBy", {
+          who: frame.author,
+          when: frame.generatedAt,
+        })
+      : t("common:printFrame.generated", { when: frame.generatedAt }),
+    t("common:printFrame.code", { code: sheet.code }),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    header: `${frame.shortName} · ${sheet.title}`,
+    aside: sheet.aside,
+    footer,
+    pageWord: t("common:printFrame.pageWord"),
+    ofWord: t("common:printFrame.ofWord"),
+    logo: frame.logoBlob,
+  };
+}
+
+/** Размер PNG по заголовку IHDR — чтобы вписать логотип в 5 мм, не искажая. */
+async function pngSize(blob: Blob): Promise<{ width: number; height: number }> {
+  const head = new DataView(await blob.slice(16, 24).arrayBuffer());
+  return { width: head.getUint32(0), height: head.getUint32(4) };
+}
+
+const FONT = "Noto Sans";
 const BODY_SIZE = 22; // half-points: 11 pt
 const SMALL_SIZE = 18; // 9 pt
 
@@ -48,12 +113,18 @@ export async function buildWordDocument(
     AlignmentType,
     BorderStyle,
     Document,
+    Footer,
+    Header,
     HeadingLevel,
+    ImageRun,
     Packer,
+    PageNumber,
     Paragraph,
     Table,
     TableCell,
     TableRow,
+    TabStopPosition,
+    TabStopType,
     TextRun,
     WidthType,
   } = docx;
@@ -173,6 +244,88 @@ export async function buildWordDocument(
     ),
   );
 
+  const rightTab = [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }];
+  const grey = "4A5263";
+
+  async function frameParts(frame: WordFrame) {
+    const logo =
+      frame.logo === undefined
+        ? []
+        : await (async () => {
+            const size = await pngSize(frame.logo as Blob);
+            // 5 мм в шапке — около 19 точек при 96 dpi.
+            const height = 19;
+            const width = Math.round((size.width / size.height) * height);
+            return [
+              new ImageRun({
+                type: "png",
+                data: await (frame.logo as Blob).arrayBuffer(),
+                transformation: { width, height },
+              }),
+              new TextRun({ text: "  " }),
+            ];
+          })();
+    const header = new Header({
+      children: [
+        new Paragraph({
+          tabStops: rightTab,
+          border: { bottom: { ...line, space: 4 } },
+          children: [
+            ...logo,
+            new TextRun({
+              text: frame.header,
+              size: SMALL_SIZE,
+              color: grey,
+              font: FONT,
+            }),
+            ...(frame.aside
+              ? [
+                  new TextRun({ text: "\t", size: SMALL_SIZE }),
+                  new TextRun({
+                    text: frame.aside,
+                    size: SMALL_SIZE,
+                    color: grey,
+                    font: FONT,
+                  }),
+                ]
+              : []),
+          ],
+        }),
+      ],
+    });
+    const footer = new Footer({
+      children: [
+        new Paragraph({
+          tabStops: rightTab,
+          border: { top: { ...line, space: 4 } },
+          children: [
+            new TextRun({
+              text: frame.footer,
+              size: 16,
+              color: grey,
+              font: FONT,
+            }),
+            new TextRun({
+              size: 16,
+              color: grey,
+              font: FONT,
+              children: [
+                "\t",
+                `${frame.pageWord} `,
+                PageNumber.CURRENT,
+                ` ${frame.ofWord} `,
+                PageNumber.TOTAL_PAGES,
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    return { headers: { default: header }, footers: { default: footer } };
+  }
+
+  const framed = model.frame === undefined ? {} : await frameParts(model.frame);
+
   const document = new Document({
     title: model.title,
     creator: "KetoCare",
@@ -180,10 +333,12 @@ export async function buildWordDocument(
     sections: [
       {
         properties: {
+          // Поля 20 мм (1134 твипа) — стандарт документов (ADR-0092).
           page: {
-            margin: { top: 1000, bottom: 1000, left: 1100, right: 1100 },
+            margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 },
           },
         },
+        ...framed,
         children,
       },
     ],

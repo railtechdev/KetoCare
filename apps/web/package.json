@@ -14,6 +14,7 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "@fontsource/noto-sans": "5.2.10",
     "@hookform/resolvers": "^5",
     "@ketocare/api-client": "workspace:*",
     "@ketocare/ui": "workspace:*",
