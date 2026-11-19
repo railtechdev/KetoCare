@@ -42,9 +42,11 @@ async def test_file_is_removed_when_the_job_row_vanished(tmp_path, monkeypatch) 
     monkeypatch.setattr(
         task,
         "Settings",
-        lambda: SimpleNamespace(reports_dir=str(tmp_path), report_link_ttl_hours=1),
+        lambda: SimpleNamespace(
+            reports_dir=str(tmp_path), report_link_ttl_hours=1, tz="Asia/Tashkent"
+        ),
     )
-    monkeypatch.setattr(task, "render_html", lambda report, title: "<html></html>")
+    monkeypatch.setattr(task, "render_html", lambda report, **kwargs: "<html></html>")
     monkeypatch.setattr(task, "html_to_pdf", lambda html: b"%PDF")
 
     result = await task.render_report({}, job_id, {})

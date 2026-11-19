@@ -25,12 +25,15 @@ from fastapi import APIRouter, Path, Query, Response
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
+from core import letterhead
 from core.config import Settings
 from core.models import ReportJob
 from core.models.enums import ReportJobStatus, UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
 from core.repositories import report_jobs as jobs_repo
+from core.repositories import users as users_repo
+from keto_engine import ENGINE_VERSION
 
 from ..deps.auth import CurrentUserDep, PatientAccessDep, SessionDep, assert_patient_access
 from ..errors import ApiError, ErrorCode
@@ -157,6 +160,17 @@ async def request_pdf_report(
         period_from=period_from,
         period_to=period_to,
     )
+    # Бланк клиники и автор — на момент заказа (ADR-0092): выданный PDF не
+    # меняется, если завтра сменят логотип.
+    author = await users_repo.get(session, user.id)
+    document = {
+        "letterhead": (await letterhead.snapshot(session)).model_dump(),
+        "author": {
+            "name": author.full_name if author is not None else None,
+            "role": user.role.value,
+        },
+        "engine_version": ENGINE_VERSION,
+    }
     # Строка задачи коммитится до постановки в очередь: воркер, взявший задачу
     # раньше коммита, не нашёл бы её (`render_report` молча выходит на пустом
     # `get`), и отчёт навсегда остался бы «в очереди».
@@ -165,7 +179,9 @@ async def request_pdf_report(
     # Данные отчёта уезжают в задачу готовыми: воркер не собирает их заново,
     # иначе отчёт на экране и отчёт в PDF однажды разойдутся (ADR-0008).
     try:
-        await queue_service.enqueue("render_report", str(job.id), report.model_dump(mode="json"))
+        await queue_service.enqueue(
+            "render_report", str(job.id), report.model_dump(mode="json"), document
+        )
     except Exception:  # noqa: BLE001 — недоступная очередь не оставляет задачу в «очереди»
         # Строка уже записана: без этой ветки недоступный Redis оставил бы её
         # `queued` навсегда, и кабинет ждал бы файл, которого не будет.

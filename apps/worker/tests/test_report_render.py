@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from worker.reports.render import render_html
+from worker.reports.render import FONTS, age_text, format_number, html_to_pdf, render_html
 from worker.reports.task import report_path
 
 REPORT = {
@@ -80,6 +80,99 @@ def test_report_contains_key_numbers():
     assert "Леветирацетам" in html
 
 
+LETTERHEAD = {
+    "name_uz": "«Namuna» bolalar nevrologiya markazi",
+    "name_ru": "Детский неврологический центр «Образец»",
+    "short_name": "ДНЦ «Образец»",
+    "department": None,
+    "address": "г. Ташкент, ул. Образцовая, 1",
+    "family_phone": None,
+    "contact": None,
+    "license": "№ 00000 от 01.02.2023",
+    "stir": None,
+    "logo_data_uri": None,
+}
+DOCUMENT = {
+    "letterhead": LETTERHEAD,
+    "author": {"name": "Иванова Анна Петровна", "role": "doctor"},
+    "engine_version": "1.12.0",
+}
+
+
+def test_numbers_and_dates_are_written_the_russian_way():
+    """Правило П45 и ADR-0092: «1 200», «3,2», «05.08.2026» — а не «1200», «3.2», ISO."""
+
+    html = render_html(REPORT, title="Отчёт", document=DOCUMENT)
+
+    assert "1\u00a0200" in html
+    assert "3,2" in html
+    assert "05.08.2026" in html
+    assert "2026-08-05" not in html.split("<body>")[1]
+    assert "Отчёт за 1–31 августа 2026 г." in html
+    # Соотношение — исключение раздела 8.2 ТЗ: точка.
+    assert "4.0 : 1" in html
+
+
+def test_letterhead_author_and_footer():
+    html = render_html(REPORT, title="Отчёт", document=DOCUMENT)
+
+    assert "«Namuna» bolalar nevrologiya markazi" in html
+    assert "Лицензия № 00000 от 01.02.2023" in html
+    assert "ДНЦ «Образец»" in html
+    assert "сформировал(а) Иванова Анна Петровна, врач" in html
+    assert "Медицинские сведения, конфиденциально" in html
+    assert "KC-REPORT-2" in html
+    assert "расчёт 1.12.0" in html
+    # 10:00 UTC — 15:00 в Ташкенте: время подписывается по времени клиники.
+    assert "01.09.2026 в 15:00 (Ташкент)" in html
+
+
+def test_without_a_letterhead_the_product_signs_it():
+    """Задача, поставленная прежней версией API, приходит без бланка."""
+
+    html = render_html(REPORT, title="Отчёт")
+
+    assert "KetoCare" in html
+    assert "сформировал(а)" not in html
+
+
+def test_card_number_is_on_every_page():
+    """Номер карты — второй идентификатор рядом с датой рождения (RCP, ADR-0092):
+    в блоке пациента и в колонтитуле, который повторяется на каждой странице."""
+
+    with_card = {**REPORT, "patient": {**REPORT["patient"], "clinic_card_number": "0142"}}
+
+    html = render_html(with_card, title="Отчёт", document=DOCUMENT)
+
+    assert "№ карты клиники 0142" in html
+    assert "12.04.2019 · № 0142" in html
+
+
+def test_ketone_chart_only_with_blood_readings():
+    html = render_html(REPORT, title="Отчёт")
+    assert "Кетоны в крови по дням и приступы" in html
+
+    no_readings = {
+        **REPORT,
+        "ketones_blood": {"points": [], "min": None, "max": None, "mean": None},
+    }
+    assert "Кетоны в крови по дням и приступы" not in render_html(no_readings, title="Отчёт")
+
+
+@pytest.mark.parametrize(
+    ("value", "digits", "expected"),
+    [(1300, 0, "1\u00a0300"), (3.45, 1, "3,5"), (None, 1, "—"), (12345.678, 2, "12\u00a0345,68")],
+)
+def test_format_number(value, digits, expected):
+    assert format_number(value, digits) == expected
+
+
+def test_age_text():
+    assert age_text("2025-01-15", "2026-11-18") == "22 месяца"
+    assert age_text("2020-03-12", "2026-11-18") == "6 лет"
+    assert age_text("2024-11-19", "2026-11-18") == "23 месяца"
+
+
 def test_empty_sections_say_so_instead_of_disappearing():
     """Пустой раздел объясняет себя: «данных нет» и «раздела нет» — разные
     сообщения, и врач не должен гадать, какое перед ним."""
@@ -137,8 +230,10 @@ def test_file_name_cannot_escape_the_volume():
         report_path("./var/reports", "../../etc/passwd")
 
 
-def test_report_renders_to_one_a4_page():
-    """Печатный лист, а не экран: A4 и один лист на обычный отчёт.
+def test_report_renders_to_a4_without_running_away():
+    """Печатный лист, а не экран: A4, а отчёт за месяц с одним препаратом — не
+    больше двух листов. С бланком клиники, сводными числами и графиком (ADR-0092)
+    первая страница занята обзором, таблицы уходят на вторую.
 
     Проверка идёт через weasyprint и требует системных pango и cairo — на машине
     без них тест пропускается, а не падает: его отсутствие ничего не говорит о
@@ -156,9 +251,63 @@ def test_report_renders_to_one_a4_page():
             pytest.fail(reason)
         pytest.skip(reason)
 
-    document = weasyprint.HTML(string=render_html(REPORT, title="Отчёт по пациенту")).render()
+    document = weasyprint.HTML(
+        string=render_html(REPORT, title="Отчёт по пациенту", document=DOCUMENT),
+        base_url=str(FONTS.parent) + "/",
+    ).render()
 
-    assert len(document.pages) == 1
+    assert 1 <= len(document.pages) <= 2
     # A4 в пикселях CSS: 210 x 297 мм при 96 dpi
     assert round(document.pages[0].width * 25.4 / 96) == 210
     assert round(document.pages[0].height * 25.4 / 96) == 297
+
+
+def _inflated(pdf: bytes) -> bytes:
+    """PDF с распакованными потоками: имена шрифтов лежат в сжатых объектах."""
+
+    import re
+    import zlib
+
+    parts = [pdf]
+    for match in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.S):
+        try:
+            parts.append(zlib.decompress(match.group(1)))
+        except zlib.error:
+            continue
+    return b"".join(parts)
+
+
+def _require_weasyprint():
+    try:
+        import weasyprint  # noqa: F401
+    except (ImportError, OSError) as error:
+        reason = f"weasyprint без системных библиотек: {error}"
+        if os.environ.get("KETOCARE_REQUIRE_PDF"):
+            pytest.fail(reason)
+        pytest.skip(reason)
+
+
+def test_pdf_embeds_the_package_font_and_metadata():
+    """Шрифт — из пакета, не из системы (ADR-0092): на сервере без Noto Sans
+    отчёт иначе набирался бы чем придётся."""
+
+    _require_weasyprint()
+
+    pdf = html_to_pdf(render_html(REPORT, title="Отчёт по пациенту", document=DOCUMENT))
+
+    assert pdf.startswith(b"%PDF")
+    assert b"Noto" in _inflated(pdf)
+
+
+def test_pdf_refuses_outside_resources():
+    """Отчёт несёт ввод человека: ни одна строка не должна увести weasyprint
+    в сеть или к чужому файлу. Чужой ресурс не загружается, документ собирается."""
+
+    _require_weasyprint()
+    from worker.reports.render import _fetcher
+
+    fetcher = _fetcher()
+    for url in ("https://example.com/x.png", "file:///etc/passwd"):
+        with pytest.raises(ValueError):
+            fetcher.fetch(url)
+    fetcher.fetch((FONTS / "NotoSans-Regular.ttf").as_uri())

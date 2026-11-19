@@ -145,6 +145,7 @@ async def build_report(
             birth_date=patient.birth_date,
             sex=patient.sex.value,
             height_cm=float(patient.height_cm) if patient.height_cm is not None else None,
+            clinic_card_number=patient.clinic_card_number,
         ),
         # Назначения, действовавшие в периоде: те, что начались не позже его
         # конца. Более раннее назначение тоже действовало — оно и есть то, по
@@ -222,17 +223,27 @@ async def build_report(
     )
 
 
+def _decimal(value: float) -> str:
+    """Дробное число для русского Excel: «3,4», а не «3.4»."""
+
+    return f"{value:g}".replace(".", ",")
+
+
 def report_to_csv(report: PatientReport) -> str:
     """Отчёт в CSV — для переноса в статистику и в чужие инструменты.
 
     Один файл с колонкой «раздел»: несколько таблиц разной формы в одном CSV
     иначе не помещаются, а отдавать архив из пяти файлов ради выгрузки за
-    неделю — избыточно. Разделитель — запятая, кодировка UTF-8 с BOM: без BOM
-    Excel открывает кириллицу как мусор.
+    неделю — избыточно.
+
+    Файл открывают в русском Excel (ADR-0092): разделитель — «;», дробная
+    часть — через запятую, кодировка UTF-8 с BOM. С запятой-разделителем
+    Excel видел одну колонку, а «3.4» с точкой он читает как дату «03.апр».
+    Даты — ISO, их Excel понимает в любой локали.
     """
 
     buffer = io.StringIO()
-    writer = csv.writer(buffer)
+    writer = csv.writer(buffer, delimiter=";")
     writer.writerow(["section", "key", "value", "extra"])
 
     writer.writerow(["patient", "full_name", report.patient.full_name, ""])
@@ -245,9 +256,9 @@ def report_to_csv(report: PatientReport) -> str:
             [
                 "prescription",
                 prescription.effective_from.isoformat(),
-                f"{prescription.ratio}:1",
-                f"{prescription.kcal_per_day} ккал, белок {prescription.protein_g} г, "
-                f"углеводы до {prescription.carbs_limit_g} г, "
+                f"{_decimal(prescription.ratio)}:1",
+                f"{prescription.kcal_per_day} ккал, белок {_decimal(prescription.protein_g)} г, "
+                f"углеводы до {_decimal(prescription.carbs_limit_g)} г, "
                 f"приёмов {prescription.meals_per_day}",
             ]
         )
@@ -262,9 +273,9 @@ def report_to_csv(report: PatientReport) -> str:
     # Метод — в последней колонке: строка «ketones» без него смешивала кровь и мочу.
     for method, series in (("blood", report.ketones_blood), ("urine", report.ketones_urine)):
         for point in series.points:
-            writer.writerow(["ketones", point.at.isoformat(), point.value, method])
+            writer.writerow(["ketones", point.at.isoformat(), _decimal(point.value), method])
     for point in report.weight.points:
-        writer.writerow(["weight", point.at.isoformat(), point.value, ""])
+        writer.writerow(["weight", point.at.isoformat(), _decimal(point.value), ""])
 
     for medication in report.medications:
         stopped = f" по {medication.stopped_at.isoformat()}" if medication.stopped_at else ""
