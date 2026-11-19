@@ -347,6 +347,56 @@ class TestPdfJob:
         # Данные отчёта уезжают в задачу готовыми: воркер не собирает их заново.
         assert enqueued[0][1][1]["patient"]["id"] == str(patient.id)
 
+    async def test_job_is_committed_before_it_is_queued(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        """Воркер, взявший задачу раньше коммита, не нашёл бы её строку и
+        молча вышел бы — отчёт навсегда остался бы «в очереди»."""
+        from api.services import queue as queue_service
+
+        steps: list[str] = []
+        commit = session.commit
+
+        async def recording_commit():
+            steps.append("commit")
+            await commit()
+
+        async def fake_enqueue(task: str, *args):
+            steps.append(task)
+
+        monkeypatch.setattr(session, "commit", recording_commit)
+        monkeypatch.setattr(queue_service, "enqueue", fake_enqueue)
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        response = await client.post(_pdf_url(patient.id), headers=auth_headers(doctor))
+
+        assert response.status_code == 202, response.text
+        assert "render_report" in steps
+        assert "commit" in steps[: steps.index("render_report")]
+
+    async def test_queue_failure_marks_the_job_failed(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        """Недоступная очередь не оставляет задачу «в очереди» навсегда."""
+        from api.services import queue as queue_service
+        from core.models import ReportJob
+        from core.models.enums import ReportJobStatus
+
+        async def broken_enqueue(task: str, *args):
+            raise ConnectionError("redis down")
+
+        monkeypatch.setattr(queue_service, "enqueue", broken_enqueue)
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        response = await client.post(_pdf_url(patient.id), headers=auth_headers(doctor))
+
+        assert response.status_code == 500
+        assert response.json()["error"]["code"] == "internal"
+        job = await session.scalar(select(ReportJob).where(ReportJob.patient_id == patient.id))
+        assert job is not None
+        assert job.status == ReportJobStatus.FAILED
+        assert job.error
+
     async def test_pdf_request_is_audited(
         self, client, session, make_user, make_patient, auth_headers, monkeypatch
     ):
