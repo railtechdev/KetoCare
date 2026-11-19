@@ -156,6 +156,10 @@ describe("week cell item", () => {
       `/app/patients/${PATIENT_ID}/calculator`,
     );
     expect(link.getAttribute("href")).toContain("item=dish%3Ad1");
+    // The day it came from goes along: the calculator offers to apply the
+    // saved correction there (ADR-0091).
+    expect(link.getAttribute("href")).toContain("menuItem=i1");
+    expect(link.getAttribute("href")).toMatch(/date=\d{4}-\d{2}-\d{2}/);
   });
 
   it("opens a library recipe the same way", async () => {

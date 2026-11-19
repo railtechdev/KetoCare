@@ -122,6 +122,7 @@ export function WeekCellItem({
               patientId={patientId}
               view="calculator"
               item={opensAs}
+              menuItem={{ id: item.id, date }}
               onClick={() => setOpen(false)}
             >
               {t("week.openItem")}
@@ -140,12 +141,15 @@ export function WeekCellItem({
               disabled={pending}
               aria-busy={refresh.isPending || undefined}
               onClick={() =>
-                refresh.mutate(item.id, {
-                  onSuccess: () => {
-                    setOpen(false);
-                    toast.success(t("item.refreshed", { title }));
+                refresh.mutate(
+                  { itemId: item.id },
+                  {
+                    onSuccess: () => {
+                      setOpen(false);
+                      toast.success(t("item.refreshed", { title }));
+                    },
                   },
-                })
+                )
               }
             >
               {t("item.refresh")}

@@ -259,6 +259,11 @@ export interface PatientSearch extends ViewStateSearch {
    */
   item?: string;
   /**
+   * Позиция меню, из которой блюдо открыто в калькуляторе (вместе с `date` —
+   * её днём): после сохранения новый состав ставится в этот день (ADR-0091).
+   */
+  menuItem?: string;
+  /**
    * Задача сборки PDF-отчёта. В адресе по той же причине, что и в разделах:
    * сборка идёт в воркере секундами, а ручки «мои задачи» у API нет — потеряв
    * идентификатор, готовый файл достать нечем.
@@ -273,8 +278,10 @@ export function validatePatientSearch(
   const kind = text(search.kind);
   const item = text(search.item);
   const job = text(search.job);
+  const menuItem = matching(search.menuItem, UUID);
   if (kind !== undefined) result.kind = kind;
   if (item !== undefined) result.item = item;
   if (job !== undefined) result.job = job;
+  if (menuItem !== undefined) result.menuItem = menuItem;
   return result;
 }

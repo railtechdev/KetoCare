@@ -20,6 +20,7 @@ import {
   formatRatio,
 } from "@ketocare/ui";
 import { onlineManager, useQueryClient } from "@tanstack/react-query";
+import { useSearch } from "@tanstack/react-router";
 import {
   useCallback,
   useEffect,
@@ -48,6 +49,7 @@ import { DishPrint } from "./DishPrint";
 import { DishRows } from "./DishRows";
 import { ProductPicker } from "./ProductPicker";
 import { SaveDishForm } from "./SaveDishForm";
+import { ApplyToDay, type SavedDish } from "./ApplyToDay";
 import type { DishRow } from "./types";
 import { productQuery, useProduct } from "./useProducts";
 import { clearDraft, draftKey, readDraft, writeDraft } from "./draft";
@@ -117,6 +119,18 @@ export function CalculatorView({
   // идентификатор, состав на 100 г нужно дочитать.
   const [incomingId, setIncomingId] = useSectionItem();
   const incoming = parseIncoming(incomingId);
+  // The menu day the dish was opened from (ADR-0091): `?menuItem=` + `?date=`.
+  const search: { menuItem?: string; date?: string } = useSearch({
+    strict: false,
+  });
+  const fromDay =
+    inCard &&
+    patientId !== undefined &&
+    search.menuItem !== undefined &&
+    search.date !== undefined
+      ? { menuItemId: search.menuItem, date: search.date }
+      : null;
+  const [savedDish, setSavedDish] = useState<SavedDish | null>(null);
 
   // Черновик состава переживает обновление страницы и уход в справочник
   // (`draft.ts`). Читается один раз, при открытии экрана.
@@ -728,10 +742,14 @@ export function CalculatorView({
                         ? { id: incoming.id, title: incomingDish.dishTitle }
                         : null
                     }
-                    onSaved={() => {
+                    onSaved={(dishId) => {
                       // Сохранённый состав — уже не черновик.
                       cleanRows.current = rows;
                       clearDraft(currentDraftKey);
+                      setSavedDish({
+                        id: dishId,
+                        sourceRecipeId: incomingDish.sourceRecipeId ?? null,
+                      });
                     }}
                     onSavedAsNew={(dishId) => {
                       // The copy has the rows already on screen; applying it
@@ -742,6 +760,16 @@ export function CalculatorView({
                   />
                 )}
               </>
+            )}
+
+            {fromDay !== null && patientId !== undefined && (
+              <ApplyToDay
+                patientId={patientId}
+                date={fromDay.date}
+                menuItemId={fromDay.menuItemId}
+                saved={savedDish}
+                onApplied={() => setSavedDish(null)}
+              />
             )}
           </>
         }

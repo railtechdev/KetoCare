@@ -80,6 +80,20 @@ class MenuWrite(BaseModel):
     items: list[MenuItemWrite] = Field(min_length=1, max_length=MAX_MENU_ITEMS)
 
 
+class MenuItemRefreshWrite(BaseModel):
+    """What the item takes on refresh (ADR-0091).
+
+    Empty — the same recipe or dish as it is now. `custom_dish_id` — the
+    child's dish fitted from the item's recipe takes its place: the dietitian
+    opened the day's recipe in the calculator, corrected the grams and saved
+    them as the child's dish, and the day has to get exactly that dish.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    custom_dish_id: uuid.UUID | None = None
+
+
 class MenuItemEatenWrite(BaseModel):
     """Отметка «съедено». Снятие отметки нужно так же, как и простановка:
     ошибочное нажатие иначе осталось бы в данных навсегда — отдельной ручки
