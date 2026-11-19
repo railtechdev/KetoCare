@@ -373,6 +373,9 @@ export function useDeleteMenuMutation(patientId: string | null) {
 /**
  * «Взять новый состав»: позиция дня получает блюдо таким, какое оно сейчас
  * (ADR-0089). Та же позиция — отметки и ссылки дневника на неё сохраняются.
+ *
+ * `customDishId` — блюдо ребёнка, подобранное из рецепта позиции, встаёт на
+ * место этого рецепта (ADR-0091).
  */
 export function useRefreshMenuItemMutation(patientId: string | null) {
   const queryClient = useQueryClient();
@@ -380,12 +383,24 @@ export function useRefreshMenuItemMutation(patientId: string | null) {
   return useMutation({
     networkMode: "always",
     retry: false,
-    mutationFn: async (itemId: string) => {
+    mutationFn: async ({
+      itemId,
+      customDishId,
+    }: {
+      itemId: string;
+      customDishId?: string;
+    }) => {
       if (patientId === null)
         throw new Error("patientId is required to refresh an item");
       const { data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/menus/items/{item_id}/refresh",
-        { params: { path: { patient_id: patientId, item_id: itemId } } },
+        {
+          params: { path: { patient_id: patientId, item_id: itemId } },
+          body:
+            customDishId === undefined
+              ? undefined
+              : { custom_dish_id: customDishId },
+        },
       );
       if (error || !data) throw error ?? new Error("Empty menu response");
       return data;

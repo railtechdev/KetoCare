@@ -52,7 +52,7 @@ interface Props {
   /** A copy was saved while editing: the calculator now shows the copy. */
   onSavedAsNew?: (dishId: string) => void;
   /** The dish was written: the composition on screen is no longer a draft. */
-  onSaved?: () => void;
+  onSaved?: (dishId: string) => void;
   /**
    * Cooking steps, held by the calculator: its printed card shows them too
    * (ADR-0088). Absent — the form has no steps field.
@@ -128,7 +128,7 @@ export function SaveDishForm({
         });
         if (!quiet) toast.success(t("save.savedChanges"));
         setSaved(true);
-        onSaved?.();
+        onSaved?.(editing.id);
         return editing.id;
       }
       return await saveAsNew(quiet);
@@ -158,7 +158,7 @@ export function SaveDishForm({
       );
       onSavedAsNew?.(created.id);
       setSaved(true);
-      onSaved?.();
+      onSaved?.(created.id);
       void queryClient.invalidateQueries({
         queryKey: ["patient", patientId, "custom-dishes"],
       });

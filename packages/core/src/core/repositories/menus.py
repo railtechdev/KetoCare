@@ -435,6 +435,27 @@ async def set_snapshot(
     return item
 
 
+async def set_source(
+    session: AsyncSession,
+    *,
+    item: MenuItem,
+    recipe_id: uuid.UUID | None,
+    custom_dish_id: uuid.UUID | None,
+    portion_factor: float,
+) -> MenuItem:
+    """Point one item at another source — only on an explicit ask (ADR-0091).
+
+    The item stays the same row: its marks and the food diary's links to it
+    survive. The caller writes the new snapshot right after.
+    """
+
+    item.recipe_id = recipe_id
+    item.custom_dish_id = custom_dish_id
+    item.portion_factor = portion_factor
+    await session.flush()
+    return item
+
+
 async def get_recipes_by_ids(
     session: AsyncSession, *, recipe_ids: Sequence[uuid.UUID]
 ) -> dict[uuid.UUID, Recipe]:

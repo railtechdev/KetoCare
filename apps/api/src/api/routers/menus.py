@@ -12,14 +12,16 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Path, Query, Request
+from fastapi import APIRouter, Body, Path, Query, Request
 
 from core.clock import local_today
 from core.models import Menu, MenuItem
 from core.models.enums import UserRole
 from core.repositories import audit as audit_repo
+from core.repositories import custom_dishes as custom_dishes_repo
 from core.repositories import menus as menus_repo
 from core.repositories import products as products_repo
+from core.repositories import recipes as recipes_repo
 
 from ..client_address import client_address
 from ..deps.auth import CurrentUser, PatientAccessDep, SessionDep
@@ -29,6 +31,7 @@ from ..schemas_menus import (
     DishUsageRead,
     MenuItemEatenWrite,
     MenuItemRead,
+    MenuItemRefreshWrite,
     MenuItemWrite,
     MenuRead,
     MenuWeekCopyRead,
@@ -437,6 +440,54 @@ def _frozen_part(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
     return {key: snapshot.get(key) for key in ("title", "servings", "ingredients")}
 
 
+async def _fitted_dish_in_place_of_recipe(
+    session: SessionDep, *, item: MenuItem, patient_id: uuid.UUID, dish_id: uuid.UUID
+) -> MenuItemWrite:
+    """The item as it will stand with the child's dish fitted from its recipe.
+
+    Only where the amount of food is not open to reading: a recipe for one
+    serving standing in the day at ×1. A child's dish is one meal — «Сохранить
+    и добавить в меню» puts it at ×1 — but the calculator saves whatever is on
+    screen: the whole recipe for all its servings if the grams were edited by
+    hand, one meal after «Подобрать». The server cannot tell the two apart, and
+    a guessed portion would silently feed the child a quarter or four times the
+    meal (safety review, 19.11.2026). Any other case is refused with the way
+    round: take the recipe out of the day and put the dish in.
+    """
+
+    if item.recipe_id is None:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "В этом дне стоит блюдо ребёнка, а не рецепт из базы, — заменять нечего. "
+            "Возьмите новый состав без замены.",
+            details={"reason": "not_a_recipe"},
+        )
+    dish = await custom_dishes_repo.get(session, dish_id)
+    if dish is None or dish.patient_id != patient_id:
+        raise ApiError(ErrorCode.NOT_FOUND, "Блюдо не найдено.")
+    if dish.source_recipe_id != item.recipe_id:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "Это блюдо подобрано не из рецепта, который стоит в дне. Чтобы поставить "
+            "другое блюдо, измените день.",
+            details={"reason": "other_recipe"},
+        )
+    recipe = await recipes_repo.get(session, item.recipe_id)
+    if recipe is None or recipe.servings != 1 or float(item.portion_factor) != 1:
+        raise ApiError(
+            ErrorCode.CONFLICT,
+            "В дне рецепт стоит не одной порцией, и сколько еды окажется в блюде, "
+            "однозначно не сказать. Уберите рецепт из этого приёма и добавьте блюдо "
+            "ребёнка, проверив порцию.",
+            details={"reason": "portion_ambiguous"},
+        )
+    return MenuItemWrite(
+        meal_index=item.meal_index,
+        custom_dish_id=dish.id,
+        portion_factor=1.0,
+    )
+
+
 @router.post(
     "/items/{item_id}/refresh",
     response_model=MenuRead,
@@ -448,6 +499,7 @@ async def refresh_item(
     request: Request,
     session: SessionDep,
     user: PatientAccessDep,
+    payload: Annotated[MenuItemRefreshWrite | None, Body()] = None,
 ) -> MenuRead:
     """Позиция дня получает состав блюда или рецепта таким, какой он сейчас.
 
@@ -457,6 +509,11 @@ async def refresh_item(
     прежней (17.11.2026). Съеденное не обновляется: это уже запись о том, что
     ребёнок ел. Отказ снимка (рецепт снят с публикации, блюдо удалено) — тот
     же, что у сохранения дня.
+
+    С `custom_dish_id` место рецепта из базы занимает блюдо ребёнка, подобранное
+    из него (ADR-0091): диетолог открыла рецепт дня в калькуляторе и сохранила
+    граммы своим блюдом. Только это блюдо и только вместо его рецепта — заменить
+    позицию чем-то другим по-прежнему можно лишь сохранением дня.
     """
 
     item = await _owned_item(session, item_id, patient_id)
@@ -478,24 +535,36 @@ async def refresh_item(
             details={"reason": "eaten"},
         )
 
+    source = MenuItemWrite(
+        meal_index=item.meal_index,
+        recipe_id=item.recipe_id,
+        custom_dish_id=item.custom_dish_id,
+        portion_factor=float(item.portion_factor),
+    )
+    dish_id = payload.custom_dish_id if payload is not None else None
+    if dish_id is not None and dish_id != item.custom_dish_id:
+        source = await _fitted_dish_in_place_of_recipe(
+            session, item=item, patient_id=patient_id, dish_id=dish_id
+        )
+    replaced = source.custom_dish_id != item.custom_dish_id
+
     (snapshot,) = await menus_service.build_snapshots(
-        session,
-        patient_id=patient_id,
-        items=[
-            MenuItemWrite(
-                meal_index=item.meal_index,
-                recipe_id=item.recipe_id,
-                custom_dish_id=item.custom_dish_id,
-                portion_factor=float(item.portion_factor),
-            )
-        ],
+        session, patient_id=patient_id, items=[source]
     )
     # Состав уже тот же — день не трогается: ни «Составил(а)», ни аудита, ни
     # второго сообщения семье (то же правило, что у `PUT` дня, `plan_changed`).
     # Кнопку экран показывает только при расхождении, но держит это сервер.
-    if _frozen_part(snapshot) == _frozen_part(item.snapshot):
+    if not replaced and _frozen_part(snapshot) == _frozen_part(item.snapshot):
         return await _read(session, menu)
 
+    if replaced:
+        await menus_repo.set_source(
+            session,
+            item=item,
+            recipe_id=source.recipe_id,
+            custom_dish_id=source.custom_dish_id,
+            portion_factor=source.portion_factor,
+        )
     await menus_repo.set_snapshot(
         session, menu=menu, item=item, snapshot=snapshot, updated_by=user.id
     )

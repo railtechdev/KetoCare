@@ -24,6 +24,7 @@ export function PatientViewLink({
   patientId,
   view = DEFAULT_PATIENT_VIEW,
   item,
+  menuItem,
   children,
   className,
   current,
@@ -34,6 +35,11 @@ export function PatientViewLink({
   view?: PatientView;
   /** Предмет, который нужно открыть в разделе: блюдо в калькуляторе карты */
   item?: string;
+  /**
+   * The menu day the dish was opened from: after saving, the calculator puts
+   * the new composition into that very day (ADR-0091).
+   */
+  menuItem?: { id: string; date: string };
   children: ReactNode;
   className?: string;
   "aria-label"?: string;
@@ -52,7 +58,12 @@ export function PatientViewLink({
     <Link
       to="/app/patients/$patientId/$view"
       params={{ patientId, view }}
-      search={(previous) => ({ job: previous.job, item })}
+      search={(previous) => ({
+        job: previous.job,
+        item,
+        menuItem: menuItem?.id,
+        date: menuItem?.date,
+      })}
       className={className}
       aria-label={ariaLabel}
       aria-current={current ? "page" : undefined}

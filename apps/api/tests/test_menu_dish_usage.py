@@ -405,3 +405,198 @@ class TestRefreshItem:
         )
         assert response.status_code == 200
         assert [task for task, _ in enqueued if task == "notify_family_menu_composed"] == []
+
+
+class TestReplaceRecipeWithFittedDish:
+    """«Применить в этот день» from the calculator (ADR-0091)."""
+
+    async def _day_with_recipe(self, client, session, make_user, make_patient, auth_headers):
+        parent, dietitian, patient, product = await _setup(session, make_user, make_patient)
+        recipe = await _recipe(session, dietitian, product)
+        headers = auth_headers(dietitian)
+        saved = await _save(
+            client,
+            headers,
+            patient,
+            "2026-11-20",
+            [{"meal_index": 2, "recipe_id": str(recipe.id)}],
+        )
+        return parent, dietitian, patient, product, recipe, headers, saved
+
+    async def test_fitted_dish_takes_the_recipe_place(
+        self, client, session, make_user, make_patient, auth_headers, enqueued
+    ):
+        _, dietitian, patient, product, recipe, headers, saved = await self._day_with_recipe(
+            client, session, make_user, make_patient, auth_headers
+        )
+        fitted = await _dish(session, patient, product, grams=45, source=recipe)
+        item_id = saved["items"][0]["id"]
+        enqueued.clear()
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{item_id}/refresh",
+            json={"custom_dish_id": str(fitted.id)},
+            headers=headers,
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        (item,) = body["items"]
+        # Та же позиция, тот же приём — теперь блюдо ребёнка с его граммами.
+        assert item["id"] == item_id
+        assert item["meal_index"] == 2
+        assert item["recipe_id"] is None
+        assert item["custom_dish_id"] == str(fitted.id)
+        assert item["portion_factor"] == 1
+        assert item["ingredients"][0]["grams"] == 45
+        assert body["totals"]["fat"] == pytest.approx(saved["totals"]["fat"] * 1.5, rel=1e-3)
+        assert body["updated_by_role"] == "dietitian"
+        notices = [args for task, args in enqueued if task == "notify_family_menu_composed"]
+        assert len(notices) == 1
+
+    @pytest.mark.parametrize(("servings", "portion"), [(4, 1), (4, 2), (1, 2), (3, 1)])
+    async def test_ambiguous_portion_is_refused(
+        self, client, session, make_user, make_patient, auth_headers, servings, portion
+    ):
+        """A dish fitted to one meal from a recipe for four must not become ×0.25."""
+
+        _, dietitian, patient, product = await _setup(session, make_user, make_patient)
+        recipe = await _recipe(session, dietitian, product)
+        recipe.servings = servings
+        await session.flush()
+        headers = auth_headers(dietitian)
+        saved = await _save(
+            client,
+            headers,
+            patient,
+            "2026-11-20",
+            [{"meal_index": 1, "recipe_id": str(recipe.id), "portion_factor": portion}],
+        )
+        fitted = await _dish(session, patient, product, source=recipe)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{saved['items'][0]['id']}/refresh",
+            json={"custom_dish_id": str(fitted.id)},
+            headers=headers,
+        )
+
+        assert response.status_code == 409
+        assert response.json()["error"]["details"]["reason"] == "portion_ambiguous"
+        item = await session.get(MenuItem, uuid.UUID(saved["items"][0]["id"]))
+        assert item is not None
+        assert item.recipe_id == recipe.id
+        assert float(item.portion_factor) == portion
+
+    async def test_deleted_fitted_dish_is_not_found(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, _, patient, product, recipe, headers, saved = await self._day_with_recipe(
+            client, session, make_user, make_patient, auth_headers
+        )
+        fitted = await _dish(session, patient, product, source=recipe)
+        await client.delete(
+            f"/api/v1/patients/{patient.id}/custom-dishes/{fitted.id}", headers=headers
+        )
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{saved['items'][0]['id']}/refresh",
+            json={"custom_dish_id": str(fitted.id)},
+            headers=headers,
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize(
+        "body", [{"custom_dish_id": "not-a-uuid"}, {"custom_dish_id": None, "extra": 1}]
+    )
+    async def test_malformed_body_is_rejected(
+        self, client, session, make_user, make_patient, auth_headers, body
+    ):
+        _, _, patient, _, _, headers, saved = await self._day_with_recipe(
+            client, session, make_user, make_patient, auth_headers
+        )
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{saved['items'][0]['id']}/refresh",
+            json=body,
+            headers=headers,
+        )
+        assert response.status_code == 422
+
+    async def test_dish_from_another_recipe_is_refused(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, dietitian, patient, product, _, headers, saved = await self._day_with_recipe(
+            client, session, make_user, make_patient, auth_headers
+        )
+        other_recipe = await _recipe(session, dietitian, product)
+        unrelated = await _dish(session, patient, product, source=other_recipe)
+        plain = await _dish(session, patient, product)
+        url = f"/api/v1/patients/{patient.id}/menus/items/{saved['items'][0]['id']}/refresh"
+
+        for dish in (unrelated, plain):
+            response = await client.post(
+                url, json={"custom_dish_id": str(dish.id)}, headers=headers
+            )
+            assert response.status_code == 409
+            assert response.json()["error"]["details"]["reason"] == "other_recipe"
+
+    async def test_dish_of_another_child_is_not_found(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, _, patient, product, recipe, headers, saved = await self._day_with_recipe(
+            client, session, make_user, make_patient, auth_headers
+        )
+        other = await make_patient()
+        foreign = await _dish(session, other, product, source=recipe)
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{saved['items'][0]['id']}/refresh",
+            json={"custom_dish_id": str(foreign.id)},
+            headers=headers,
+        )
+        assert response.status_code == 404
+
+    async def test_child_dish_item_is_not_replaced(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, dietitian, patient, product = await _setup(session, make_user, make_patient)
+        recipe = await _recipe(session, dietitian, product)
+        first = await _dish(session, patient, product, source=recipe)
+        second = await _dish(session, patient, product, source=recipe)
+        headers = auth_headers(dietitian)
+        saved = await _save(
+            client,
+            headers,
+            patient,
+            "2026-11-20",
+            [{"meal_index": 1, "custom_dish_id": str(first.id)}],
+        )
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{saved['items'][0]['id']}/refresh",
+            json={"custom_dish_id": str(second.id)},
+            headers=headers,
+        )
+        assert response.status_code == 409
+        assert response.json()["error"]["details"]["reason"] == "not_a_recipe"
+
+    async def test_eaten_recipe_is_not_replaced(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, _, patient, product, recipe, _, saved = await self._day_with_recipe(
+            client, session, make_user, make_patient, auth_headers
+        )
+        fitted = await _dish(session, patient, product, source=recipe)
+        item_id = saved["items"][0]["id"]
+        item = await session.get(MenuItem, uuid.UUID(item_id))
+        assert item is not None
+        item.eaten = True
+        await session.flush()
+
+        response = await client.post(
+            f"/api/v1/patients/{patient.id}/menus/items/{item_id}/refresh",
+            json={"custom_dish_id": str(fitted.id)},
+            headers=auth_headers(parent),
+        )
+        assert response.status_code == 409
+        assert response.json()["error"]["details"]["reason"] == "eaten"
