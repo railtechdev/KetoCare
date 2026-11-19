@@ -31,6 +31,7 @@ import { usePatientOverview } from "../patients/overview";
 import { useUpdateChildMutation } from "../patients/useChildren";
 import { CareTeamPanel } from "./CareTeamPanel";
 import { FamilyPanel } from "./FamilyPanel";
+import { ClinicCardNumber } from "./ClinicCardNumber";
 import { IdentityCorrection } from "./IdentityCorrection";
 import { ACCESS_CODE_ITEM } from "./patientViews";
 import { useSectionItem } from "../../routes/useSectionTab";
@@ -141,6 +142,12 @@ export function PatientProfileView({
             столько столбцов, сколько влезает в САМ блок, и потому одинаково
             верен и во всю ширину, и в узкой колонке. */}
         <MetricRow min="wide" label={t("card.passportTitle")}>
+          {/* Второй идентификатор на документах рядом с датой рождения
+              (ADR-0092); ставит ведущий специалист. */}
+          <Metric
+            label={t("card.clinicCard.label")}
+            value={<ClinicCardNumber patient={patient} />}
+          />
           <Metric
             label={t("card.birthDate")}
             value={

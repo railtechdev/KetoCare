@@ -65,6 +65,7 @@ export function ChildForm({
       allergies: splitExclusions(child?.allergies ?? []).labels.join(", "),
       excludedProductIds: splitExclusions(child?.allergies ?? []).productIds,
       notes: child?.notes ?? "",
+      cardNumber: "",
     },
   });
 
@@ -73,6 +74,7 @@ export function ChildForm({
   const sexError = errors.sex && t("child.errors.sex");
   const heightError = errors.heightCm && t("child.errors.heightCm");
   const weightError = errors.weightKg && t("child.errors.weightKg");
+  const cardError = errors.cardNumber && t("child.errors.cardNumber");
 
   return (
     <form
@@ -86,6 +88,7 @@ export function ChildForm({
           [`${ids}-birth`, birthDateError],
           [`${ids}-sex`, sexError],
           [`${ids}-height`, heightError],
+          [`${ids}-card`, cardError],
         ])}
         focusKey={submitCount}
       />
@@ -120,6 +123,16 @@ export function ChildForm({
             <option value="m">{t("child.sex.m")}</option>
             <option value="f">{t("child.sex.f")}</option>
           </SelectField>
+          {/* Карту заводит только специалист: номер — из карты клиники. */}
+          <Field
+            id={`${ids}-card`}
+            width="medium"
+            optional
+            label={t("child.fields.cardNumber")}
+            hint={t("child.fields.cardNumberHint")}
+            error={cardError}
+            {...register("cardNumber")}
+          />
         </>
       )}
 

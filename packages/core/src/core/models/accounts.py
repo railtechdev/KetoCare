@@ -215,6 +215,16 @@ class UserBackupCode(Base, UUIDPkMixin, CreatedAtMixin):
 
 class Patient(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     __tablename__ = "patients"
+    __table_args__ = (
+        # One number — one child. Many children have none yet: the index is
+        # partial, so NULLs do not collide (ADR-0092).
+        Index(
+            "uq_patients_clinic_card_number",
+            "clinic_card_number",
+            unique=True,
+            postgresql_where=text("clinic_card_number IS NOT NULL"),
+        ),
+    )
 
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     birth_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -222,6 +232,9 @@ class Patient(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
     height_cm: Mapped[float | None] = mapped_column(Numeric(5, 1))
     allergies: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     notes: Mapped[str | None]
+    #: The clinic's own medical record number (ADR-0092): the second identifier,
+    #: next to the birth date, on every page of a clinical document.
+    clinic_card_number: Mapped[str | None] = mapped_column(String(32))
 
 
 class ParentPatient(Base, UUIDPkMixin, CreatedAtMixin):

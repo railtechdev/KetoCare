@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     EmailStr,
     Field,
@@ -235,6 +236,24 @@ class TotpVerifyRequest(BaseModel):
 # --- patients -------------------------------------------------------------
 
 
+def _card_number(value: Any) -> Any:
+    """Пробелы по краям и двойные внутри — шум ввода, пустая строка — «номера нет»."""
+
+    if isinstance(value, str):
+        value = " ".join(value.split())
+        return value or None
+    return value
+
+
+#: Номер карты клиники (ADR-0092): как его пишет клиника — цифры, буквы, дефис,
+#: точка, косая черта; до 32 знаков.
+_CardText = Annotated[
+    str,
+    StringConstraints(max_length=32, pattern=r"^[0-9A-Za-zА-Яа-яЁё][0-9A-Za-zА-Яа-яЁё .\-/№]*$"),
+]
+ClinicCardNumber = Annotated[_CardText | None, BeforeValidator(_card_number)]
+
+
 class PatientCreate(BaseModel):
     full_name: RequiredName
     birth_date: date
@@ -244,6 +263,8 @@ class PatientCreate(BaseModel):
     weight_kg: WeightKg | None = None
     allergies: list[str] = Field(default_factory=list)
     notes: str | None = None
+    #: Номер карты клиники; ставит специалист, заводящий карту (ADR-0092).
+    clinic_card_number: ClinicCardNumber = None
 
 
 class PatientUpdate(BaseModel):
@@ -275,6 +296,14 @@ class PatientIdentityCorrection(BaseModel):
     sex: Sex
 
 
+class PatientClinicCard(BaseModel):
+    """Номер карты клиники (ADR-0092). Отдельной ручкой, а не в `PatientUpdate`:
+    профиль правит и семья, а форма семьи номера не знает — общая замена
+    стирала бы его при каждом сохранении роста."""
+
+    clinic_card_number: ClinicCardNumber = None
+
+
 class ExcludedProductRef(BaseModel):
     """Продукт, исключённый ребёнку, — с названием.
 
@@ -298,6 +327,8 @@ class PatientRead(BaseModel):
     birth_date: date
     sex: Sex
     height_cm: float | None
+    #: Номер карты клиники — второй идентификатор на документах (ADR-0092).
+    clinic_card_number: str | None = None
     #: Как хранится: идентификаторы продуктов вперемешку со свободными метками.
     allergies: list[str]
     #: То же самое, разобранное для показа: продукты с названиями…
