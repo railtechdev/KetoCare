@@ -126,6 +126,28 @@ export function useAdminProducts(filters: ProductFilters, page = 0) {
 }
 
 /**
+ * Справочник в Excel тем же отбором, что на экране, — целиком, без страниц
+ * (ADR-0092). Файл собирает сервер: бланк клиники в колонтитулах, лист
+ * «Сведения», запись в журнал.
+ */
+export async function exportProducts(filters: ProductFilters): Promise<Blob> {
+  const { data, error } = await api.GET("/api/v1/products/export", {
+    params: {
+      query: {
+        q: filters.q.trim() || undefined,
+        category_id: filters.categoryId.trim() || undefined,
+        include_inactive: filters.includeInactive || undefined,
+        macro: filters.macro || undefined,
+        standard_id: filters.standardId || undefined,
+      },
+    },
+    parseAs: "blob",
+  });
+  if (error || !data) throw error ?? new Error("Empty export response");
+  return data as Blob;
+}
+
+/**
  * Правка продукта видна и в справочнике, и в журнале аудита: `POST/PUT
  * /products` пишут `audit_log` (правило 7 CLAUDE.md), а история ревизий позиции
  * строится по нему же.

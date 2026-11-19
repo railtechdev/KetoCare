@@ -1803,6 +1803,7 @@ dependencies = [
     { name = "slowapi" },
     { name = "structlog" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "xlsxwriter" },
 ]
 
 [package.dev-dependencies]
@@ -1825,6 +1826,7 @@ requires-dist = [
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+    { name = "xlsxwriter", specifier = ">=3.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -3859,6 +3861,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c4/0f/270bafe92fde3b069a39bc01e39ee79340895b335640df861d43d2a51885/wrapt-2.3.0-cp314-cp314t-win_amd64.whl", hash = "sha256:42869085687f0aefd57c0f636c3f9354f8ffb321a8ba9cb52d19beb796e561c5", size = 83104, upload-time = "2026-07-28T06:05:52.405Z" },
     { url = "https://files.pythonhosted.org/packages/55/b3/af176d79a8515a8a720eccdad9a96f6e31a30abf2865430c8c42adf2fd13/wrapt-2.3.0-cp314-cp314t-win_arm64.whl", hash = "sha256:b1e5aa486e269b00ed35e64771c7d0ab8096cfd2643405ca8cd60ebedc099a51", size = 81774, upload-time = "2026-07-28T06:05:53.902Z" },
     { url = "https://files.pythonhosted.org/packages/00/39/3daf9f47be208606586de4568ba6713db53ebc8fd7a575aea1fe57983b69/wrapt-2.3.0-py3-none-any.whl", hash = "sha256:d8c7ed08477429752b8c44991f40ad7838b18332a160698740a6bfbc10d998a2", size = 61866, upload-time = "2026-07-28T06:06:12.9Z" },
+]
+
+[[package]]
+name = "xlsxwriter"
+version = "3.3.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/02/ff/ce271c4e8da536ea6527a755ceb7921a2d012ef32c68b34a8fed8b80b95a/xlsxwriter-3.3.2.tar.gz", hash = "sha256:a7ec4285416ee246753ad21c18ef6c161cdeaf2c29a7b9475236cce6098b21fe", size = 223740, upload-time = "2026-11-19T18:36:54.463Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/55/d7/08bf584f3308e0ea1fa84f0cb9a0f225ef7178eb1face785a190f08a97be/xlsxwriter-3.3.2-py3-none-any.whl", hash = "sha256:bc10b314ec3bbcc910b489f095f1a365863d9482afa681748f97d6d5e976f944", size = 180558, upload-time = "2026-11-19T18:36:53.169Z" },
 ]
 
 [[package]]

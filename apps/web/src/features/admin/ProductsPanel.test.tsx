@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -620,5 +620,49 @@ describe("стандарт питания в справочнике", () => {
       ),
     );
     expect(api.PUT).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProductsPanel — Excel export (ADR-0092)", () => {
+  it("downloads the list with the filters on screen", async () => {
+    const created = vi.fn(() => "blob:file");
+    globalThis.URL.createObjectURL = created;
+    globalThis.URL.revokeObjectURL = vi.fn();
+    const base = (api.GET as Mock).getMockImplementation()!;
+    (api.GET as Mock).mockImplementation((path: string, options: unknown) =>
+      path === "/api/v1/products/export"
+        ? Promise.resolve({
+            data: new Blob(["xlsx"]),
+            response: { status: 200 },
+          })
+        : base(path, options),
+    );
+    renderPanel(undefined, true, { standard: LOCKED_ID });
+
+    // The standards load first: a locked standard drops «create» and
+    // «import», and the action row is rendered anew.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: adminRu.products.create }),
+      ).toBeNull(),
+    );
+    const exportButton = screen.getByRole("button", { name: "Скачать Excel" });
+    fireEvent.click(exportButton);
+
+    await waitFor(() =>
+      expect(
+        (api.GET as Mock).mock.calls.some(
+          ([path]) => path === "/api/v1/products/export",
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() => expect(created).toHaveBeenCalled());
+    const call = (api.GET as Mock).mock.calls.find(
+      ([path]) => path === "/api/v1/products/export",
+    )!;
+    expect(call[1]).toMatchObject({
+      parseAs: "blob",
+      params: { query: { standard_id: LOCKED_ID } },
+    });
   });
 });

@@ -11,6 +11,8 @@ from collections.abc import Collection
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from fastapi import (
     APIRouter,
@@ -25,12 +27,15 @@ from fastapi import (
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
+from core import letterhead
+from core.config import get_settings
 from core.models import DEFAULT_FOOD_STANDARD_ID, FoodStandard, Product, ProductCategory, User
 from core.models.enums import FoodStandardKind, LeadingMacro, UserRole
 from core.repositories import audit as audit_repo
 from core.repositories import food_standards as food_standards_repo
 from core.repositories import products as products_repo
 from core.repositories import users as users_repo
+from keto_engine import ENGINE_VERSION
 
 from ..deps.auth import CurrentUser, CurrentUserDep, SessionDep, require_roles
 from ..deps.query import PaginationDep
@@ -54,7 +59,7 @@ from ..schemas import (
     ProductRevisionRead,
     ProductUpdate,
 )
-from ..services import product_checks, product_recompute, spreadsheet, uploads
+from ..services import list_export, product_checks, product_recompute, spreadsheet, uploads
 from ..services.product_import import ValidRow, parse_csv
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -130,6 +135,185 @@ async def search_products(
         offset=page.offset,
     )
     return Page(items=[_read_for(user, p) for p in items], total=total)
+
+
+#: Выгрузка — весь отбор, без страниц; предел — порядок справочника с запасом.
+EXPORT_MAX_ROWS = 20_000
+
+_UNKNOWN_FIELD = {
+    "kcal_100g": 2,
+    "fat_100g": 3,
+    "protein_100g": 4,
+    "carbs_100g": 5,
+    "fiber_100g": 6,
+}
+
+_MACRO_RU = {"fat": "жиры", "protein": "белки", "carbs": "углеводы"}
+
+
+@router.get(
+    "/export",
+    summary="Справочник продуктов в Excel",
+    response_class=Response,
+    responses={
+        200: {"content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}}
+    },
+    dependencies=[Depends(require_roles(*_EDITOR_ROLES))],
+)
+async def export_products(
+    session: SessionDep,
+    user: CurrentUserDep,
+    q: str | None = None,
+    category_id: uuid.UUID | None = None,
+    macro: LeadingMacro | None = None,
+    include_inactive: bool = False,
+    standard_id: uuid.UUID | None = None,
+) -> Response:
+    """Тот же отбор, что у списка, — целиком, без страниц (ADR-0092).
+
+    Лист «Продукты» начинается с заголовков и остаётся таблицей Excel с
+    фильтром; отбор, порядок, кто и когда выгрузил — на листе «Сведения».
+    «Нет данных» в источнике (ADR-0067) — пустая ячейка, а не ноль.
+    """
+
+    standard_id = standard_id or DEFAULT_FOOD_STANDARD_ID
+    standard = await _standard_or_404(session, standard_id)
+    items, total = await products_repo.search(
+        session,
+        q=q,
+        category_id=category_id,
+        macro=macro,
+        only_active=not include_inactive,
+        verified_before=None,
+        standard_id=standard_id,
+        limit=EXPORT_MAX_ROWS,
+        offset=0,
+    )
+    categories = {c.id: c for c in await products_repo.list_categories(session)}
+
+    def order(product: Product) -> tuple[int, str, str]:
+        category = categories.get(product.category_id)
+        return (
+            category.sort if category is not None else 1_000_000,
+            category.name_ru if category is not None else "",
+            product.name_ru.casefold(),
+        )
+
+    rows: list[list[Any]] = []
+    for product in sorted(items, key=order):
+        read = ProductRead.model_validate(product)
+        category = categories.get(product.category_id)
+        row: list[Any] = [
+            category.name_ru if category is not None else "",
+            read.name_ru,
+            read.kcal_100g,
+            read.fat_100g,
+            read.protein_100g,
+            read.carbs_100g,
+            read.fiber_100g,
+            read.ratio,
+            read.counts_in_calculation,
+            read.is_active,
+            read.source,
+            read.source_version,
+            read.verified_at,
+        ]
+        for field in read.unknown_fields:
+            if field in _UNKNOWN_FIELD:
+                row[_UNKNOWN_FIELD[field]] = None
+        rows.append(row)
+
+    filters = [
+        f"стандарт — {standard.name}",
+        f"категория — {categories[category_id].name_ru}"
+        if category_id is not None and category_id in categories
+        else "категории — все",
+    ]
+    if q:
+        filters.append(f"поиск — «{q}»")
+    if macro is not None:
+        filters.append(f"ведущий макронутриент — {_MACRO_RU.get(macro.value, macro.value)}")
+    filters.append("с выведенными из оборота" if include_inactive else "только действующие")
+
+    author = await users_repo.get(session, user.id)
+    author_line = (
+        f"{author.full_name}, {_ROLE_RU.get(user.role, '')}".rstrip(", ")
+        if author is not None
+        else None
+    )
+    settings = get_settings()
+    now = datetime.now(UTC).astimezone(ZoneInfo(settings.tz))
+    logo = await letterhead.read_logo(session)
+    content = list_export.build_workbook(
+        list_export.ListExport(
+            sheet="Продукты",
+            title="Справочник продуктов",
+            code="KC-LIST-PRODUCTS-1",
+            columns=[
+                list_export.Column("Категория", width=20),
+                list_export.Column("Продукт", width=38),
+                list_export.Column("Ккал", "int", 8),
+                list_export.Column("Жиры, г", "decimal", 9),
+                list_export.Column("Белки, г", "decimal", 9),
+                list_export.Column("Углеводы, г", "decimal", 11),
+                list_export.Column("Клетчатка, г", "decimal", 11),
+                list_export.Column("Соотношение", "decimal", 12),
+                list_export.Column("В расчёте", "bool", 10),
+                list_export.Column("Действует", "bool", 10),
+                list_export.Column("Источник", width=22),
+                list_export.Column("Версия источника", width=16),
+                list_export.Column("Сверено", "date", 11),
+            ],
+            rows=rows,
+            about=[
+                ("Отбор", "; ".join(filters)),
+                ("Порядок", "по категории, внутри — по названию"),
+                (
+                    "Единицы",
+                    "на 100 г продукта; углеводы — вместе с клетчаткой; соотношение — "
+                    "жиры к белкам и чистым углеводам; пустая ячейка — нет данных в источнике",
+                ),
+                *([("Всего в отборе", str(total))] if total > len(rows) else []),
+            ],
+        ),
+        letterhead=await letterhead.snapshot(session),
+        author=author_line,
+        generated_at=now,
+        logo_png=logo.data if logo is not None else None,
+        engine_version=ENGINE_VERSION,
+    )
+    await audit_repo.write_audit_log(
+        session,
+        user_id=user.id,
+        action="export",
+        entity="products",
+        after={
+            "format": "xlsx",
+            "rows": len(rows),
+            "standard_id": str(standard_id),
+            "filters": filters,
+        },
+    )
+    file_name = f"Справочник продуктов {now:%d.%m.%Y}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="products-{now:%Y-%m-%d}.xlsx"; '
+                f"filename*=UTF-8''{quote(file_name)}"
+            ),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+_ROLE_RU = {
+    UserRole.DOCTOR: "врач",
+    UserRole.DIETITIAN: "диетолог",
+    UserRole.ADMIN: "администратор",
+    UserRole.PARENT: "родитель",
+}
 
 
 # Объявлено до "/{product_id}": иначе FastAPI сопоставит "categories" с путевым

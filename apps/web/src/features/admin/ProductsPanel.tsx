@@ -28,6 +28,7 @@ import {
   useSectionItem,
   useSectionQuery,
 } from "../../routes/useSectionTab";
+import { ExcelButton } from "../../components/ExcelButton";
 import { PageActions } from "../../components/PageLayout";
 import { useTranslation } from "react-i18next";
 
@@ -49,6 +50,7 @@ import {
   EMPTY_PRODUCT_FILTERS,
   LEADING_MACROS,
   PRODUCTS_PAGE_SIZE,
+  exportProducts,
   useAdminProducts,
   useProductCategories,
   type ProductFilters,
@@ -435,8 +437,20 @@ export function ProductsPanel({
     );
   }
 
+  // Выгрузка — чтение: её не закрывает и закрытый стандарт (ADR-0092).
+  const exportButton = (
+    <ExcelButton
+      label={t("products.exportExcel")}
+      fileName={t("products.exportFile", {
+        date: new Date().toISOString().slice(0, 10),
+      })}
+      download={() => exportProducts({ ...filters, q: debouncedQuery })}
+    />
+  );
   // В закрытый стандарт не заводят и не загружают: сервер откажет.
-  const actions = locked ? null : (
+  const actions = locked ? (
+    exportButton
+  ) : (
     <>
       <Button type="button" onClick={() => setItem(NEW_ITEM)}>
         <Plus aria-hidden="true" />
@@ -452,6 +466,7 @@ export function ProductsPanel({
           {t("products.importCsv")}
         </Button>
       )}
+      {exportButton}
     </>
   );
 
