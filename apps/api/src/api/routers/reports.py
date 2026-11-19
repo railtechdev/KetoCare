@@ -157,9 +157,25 @@ async def request_pdf_report(
         period_from=period_from,
         period_to=period_to,
     )
+    # Строка задачи коммитится до постановки в очередь: воркер, взявший задачу
+    # раньше коммита, не нашёл бы её (`render_report` молча выходит на пустом
+    # `get`), и отчёт навсегда остался бы «в очереди».
+    await session.commit()
+
     # Данные отчёта уезжают в задачу готовыми: воркер не собирает их заново,
     # иначе отчёт на экране и отчёт в PDF однажды разойдутся (ADR-0008).
-    await queue_service.enqueue("render_report", str(job.id), report.model_dump(mode="json"))
+    try:
+        await queue_service.enqueue("render_report", str(job.id), report.model_dump(mode="json"))
+    except Exception:  # noqa: BLE001 — недоступная очередь не оставляет задачу в «очереди»
+        # Строка уже записана: без этой ветки недоступный Redis оставил бы её
+        # `queued` навсегда, и кабинет ждал бы файл, которого не будет.
+        await jobs_repo.mark_failed(
+            session, job=job, error="Очередь недоступна — задача не поставлена."
+        )
+        await session.commit()
+        raise ApiError(
+            ErrorCode.INTERNAL, "Не удалось поставить сборку PDF. Попробуйте ещё раз."
+        ) from None
     return ReportJobRead.model_validate(job)
 
 
