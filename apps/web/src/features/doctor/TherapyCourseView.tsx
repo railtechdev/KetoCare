@@ -36,6 +36,11 @@ import {
   type TherapyEndReason,
 } from "./therapyCourse";
 import { queryState } from "../../lib/queryState";
+import { PrintButton } from "../../components/PrintButton";
+import { PrintedSheets } from "../../components/print/PrintedSheets";
+import { useDocumentFrame } from "../letterhead/useDocumentFrame";
+import { usePatient } from "../patients/usePatient";
+import { upcomingVisits, VisitScheduleSheet } from "./VisitScheduleSheet";
 
 /** Сегодня в формате поля `type="date"` по часам браузера. */
 function todayInput(): string {
@@ -71,6 +76,10 @@ export function TherapyCourseView({
   const endedOn = profile.data?.therapy_ended_on ?? null;
   const startedOn = schedule.data?.therapy_started_on ?? null;
   const visits = schedule.data?.visits ?? [];
+  // Лист семьи с предстоящими визитами (ADR-0092, этап 6).
+  const upcoming = upcomingVisits(visits);
+  const frame = useDocumentFrame();
+  const patient = usePatient(patientId);
 
   return (
     <>
@@ -88,41 +97,65 @@ export function TherapyCourseView({
               description={t("course.visits.description")}
               density="compact"
               action={
-                editable && (
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={
-                        startedOn === null || mutations.buildSchedule.isPending
-                      }
-                      aria-describedby={buildReasonId}
-                      onClick={() =>
-                        mutations.buildSchedule.mutate(undefined, {
-                          onSuccess: (created) =>
-                            toast.success(
-                              created.length === 0
-                                ? t("course.visits.scheduleUpToDate")
-                                : t("course.visits.scheduleBuilt", {
-                                    count: created.length,
-                                  }),
+                <div className="flex flex-wrap gap-2">
+                  {schedule.data !== undefined && upcoming.length > 0 && (
+                    <PrintButton label={t("course.sheet.button")}>
+                      <PrintedSheets
+                        frame={frame}
+                        sheets={[
+                          {
+                            key: "visits",
+                            title: t("course.sheet.sheetTitle"),
+                            aside: patient.data?.full_name,
+                            code: "KC-VISITS-1",
+                            content: (
+                              <VisitScheduleSheet
+                                schedule={schedule.data}
+                                visits={upcoming}
+                              />
                             ),
-                          onError: (error) =>
-                            toast.error(
-                              errorMessageOf(error) ??
-                                t("common:errors.unexpected"),
-                            ),
-                        })
-                      }
-                    >
-                      {t("course.visits.build")}
-                    </Button>
-                    <Button type="button" onClick={() => setVisitOpen(true)}>
-                      <Plus aria-hidden="true" />
-                      {t("course.visits.add")}
-                    </Button>
-                  </div>
-                )
+                          },
+                        ]}
+                      />
+                    </PrintButton>
+                  )}
+                  {editable && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          startedOn === null ||
+                          mutations.buildSchedule.isPending
+                        }
+                        aria-describedby={buildReasonId}
+                        onClick={() =>
+                          mutations.buildSchedule.mutate(undefined, {
+                            onSuccess: (created) =>
+                              toast.success(
+                                created.length === 0
+                                  ? t("course.visits.scheduleUpToDate")
+                                  : t("course.visits.scheduleBuilt", {
+                                      count: created.length,
+                                    }),
+                              ),
+                            onError: (error) =>
+                              toast.error(
+                                errorMessageOf(error) ??
+                                  t("common:errors.unexpected"),
+                              ),
+                          })
+                        }
+                      >
+                        {t("course.visits.build")}
+                      </Button>
+                      <Button type="button" onClick={() => setVisitOpen(true)}>
+                        <Plus aria-hidden="true" />
+                        {t("course.visits.add")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
               }
             >
               {/* Причина отключённой «Построить график» (П44) связана с кнопкой:

@@ -815,6 +815,20 @@
       "description": "Перечни анализов к визитам. Значения анализов в системе не ведутся.",
       "weekly": "Еженедельно",
       "periodic": "Каждые 3–6 месяцев"
+    },
+    "sheet": {
+      "button": "Распечатать график для семьи",
+      "sheetTitle": "График визитов и анализов",
+      "title": "График визитов и анализов",
+      "started": "Терапия начата {{date}}.",
+      "date": "Дата",
+      "visit": "Визит",
+      "labs": "Что сдать к визиту",
+      "noLabs": "—",
+      "labsTitle": "Анализы на время терапии",
+      "noteTitle": "Напоминание.",
+      "note": "За три дня до визита бот клиники пришлёт напоминание. Если дата не подходит — позвоните в клинику заранее.",
+      "uz": "Tashrifdan uch kun oldin klinika boti eslatma yuboradi. Sana toʻgʻri kelmasa, klinikaga oldindan qoʻngʻiroq qiling."
     }
   },
   "growth": {
