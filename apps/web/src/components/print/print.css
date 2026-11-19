@@ -11,6 +11,12 @@
     size: A4;
     margin: 0;
   }
+
+  /* На бумагу уходит только лист: приложение и открытые поверх него панели
+     и диалоги (они живут в `body`, а не в приложении) скрываются. */
+  body.kc-printing > :not(.kc-print-root) {
+    display: none !important;
+  }
 }
 
 .print-sheet {

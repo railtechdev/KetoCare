@@ -27,8 +27,13 @@ export function PrintButton({
     if (run === 0) return;
     const root = document.getElementById("root");
     root?.classList.add("print:hidden");
+    // Всплывающие окна (панель, диалог) живут в `body` рядом с приложением, а
+    // не внутри него: без этого флага лист из открытой панели печатался бы
+    // вместе с самой панелью.
+    document.body.classList.add("kc-printing");
     const done = () => {
       root?.classList.remove("print:hidden");
+      document.body.classList.remove("kc-printing");
       setPrinting(false);
     };
     window.addEventListener("afterprint", done);
@@ -48,6 +53,7 @@ export function PrintButton({
     });
     return () => {
       cancelled = true;
+      document.body.classList.remove("kc-printing");
       window.removeEventListener("afterprint", done);
       root?.classList.remove("print:hidden");
     };
@@ -70,7 +76,7 @@ export function PrintButton({
       </Button>
       {printing &&
         createPortal(
-          <div className="hidden bg-white text-black print:block">
+          <div className="kc-print-root hidden bg-white text-black print:block">
             {children}
           </div>,
           document.body,

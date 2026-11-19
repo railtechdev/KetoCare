@@ -461,7 +461,28 @@
     "drugNameFound_one": "Подсказка: {{count}} препарат из справочника",
     "drugNameFound_few": "Подсказка: {{count}} препарата из справочника",
     "drugNameFound_many": "Подсказка: {{count}} препаратов из справочника",
-    "drugNameApplied": "Подставлено название из справочника: {{name}}"
+    "drugNameApplied": "Подставлено название из справочника: {{name}}",
+    "sheet": {
+      "button": "Распечатать схему для семьи",
+      "sheetTitle": "Схема приёма препаратов",
+      "title": "Схема приёма препаратов",
+      "asOf": "Действует на {{date}}. Если врач изменит схему, вы получите новый лист.",
+      "drug": "Препарат",
+      "dose": "Разовая доза",
+      "how": "Как принимать",
+      "from": "Когда",
+      "ongoing": "принимается",
+      "startsOn": "с {{date}}",
+      "gridTitle": "Отметки приёма",
+      "gridHint": "Ставьте галочку в клетке сразу после приёма.",
+      "days": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+      "intake": "приём {{number}}",
+      "asNeededCell": "по требованию — время",
+      "cell": "Отметка за {{day}}",
+      "warningTitle": "Не меняйте дозу сами.",
+      "warning": "Схему меняет только лечащий врач. Пропустили приём — сообщите врачу.",
+      "uz": "Dori miqdorini oʻzingiz oʻzgartirmang: sxemani faqat davolovchi shifokor oʻzgartiradi. Har bir qabuldan keyin katakka belgi qoʻying."
+    }
   },
   "diary": {
     "tabsLabel": "Виды записей дневника",
@@ -794,6 +815,20 @@
       "description": "Перечни анализов к визитам. Значения анализов в системе не ведутся.",
       "weekly": "Еженедельно",
       "periodic": "Каждые 3–6 месяцев"
+    },
+    "sheet": {
+      "button": "Распечатать график для семьи",
+      "sheetTitle": "График визитов и анализов",
+      "title": "График визитов и анализов",
+      "started": "Терапия начата {{date}}.",
+      "date": "Дата",
+      "visit": "Визит",
+      "labs": "Что сдать к визиту",
+      "noLabs": "—",
+      "labsTitle": "Анализы на время терапии",
+      "noteTitle": "Напоминание.",
+      "note": "За три дня до визита бот клиники пришлёт напоминание. Если дата не подходит — позвоните в клинику заранее.",
+      "uz": "Tashrifdan uch kun oldin klinika boti eslatma yuboradi. Sana toʻgʻri kelmasa, klinikaga oldindan qoʻngʻiroq qiling."
     }
   },
   "growth": {

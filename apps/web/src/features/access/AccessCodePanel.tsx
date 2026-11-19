@@ -13,7 +13,11 @@ import { useEffect, useRef, useState } from "react";
 import { copyText } from "../../lib/clipboard";
 import { useTranslation } from "react-i18next";
 
+import { PrintButton } from "../../components/PrintButton";
+import { PrintedSheets } from "../../components/print/PrintedSheets";
 import { QrCode } from "../../components/QrCode";
+import { useDocumentFrame } from "../letterhead/useDocumentFrame";
+import { AccessCodeSheet } from "./AccessCodeSheet";
 import { errorMessageOf } from "../../lib/api";
 import { LinesSkeleton } from "../doctor/skeletons";
 import {
@@ -69,6 +73,8 @@ export function AccessCodePanel({
   const [copied, setCopied] = useState(false);
   // Ключи с голосом выдающего; общие — без префикса.
   const voice = (key: string) => t(`panel.${audience}.${key}`);
+  // Бланк клиники на листе «Доступ для семьи» (ADR-0092).
+  const frame = useDocumentFrame();
 
   const issue = useIssueAccessCode(patientId, PURPOSE);
   const revoke = useRevokeAccessCode(patientId);
@@ -245,6 +251,22 @@ export function AccessCodePanel({
                 <Copy aria-hidden="true" />
                 {copied ? t("panel.copied") : t("panel.copy")}
               </Button>
+
+              {/* Код забирают с приёма на бумаге: переписать восемь знаков с
+                  экрана врача — место, где ошибаются (ADR-0092, этап 6). */}
+              <PrintButton label={t("sheet.printButton")}>
+                <PrintedSheets
+                  frame={frame}
+                  sheets={[
+                    {
+                      key: issued.code,
+                      title: t("sheet.sheetTitle"),
+                      code: "KC-ACCESS-1",
+                      content: <AccessCodeSheet issued={issued} />,
+                    },
+                  ]}
+                />
+              </PrintButton>
             </div>
 
             <p className="m-0 text-sm font-medium text-muted-foreground">
