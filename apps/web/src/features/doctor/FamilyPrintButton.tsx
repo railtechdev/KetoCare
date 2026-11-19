@@ -7,9 +7,9 @@ import { WordButton } from "../../components/WordButton";
 import { wordFrame, type WordSection } from "../../lib/wordExport";
 import { prescriptionWordSection } from "../print/prescriptionWord";
 import { weekFileName, weekWordSections } from "../print/weekWord";
-import { formatDayLabel, todayIso, weekStartOf } from "../menu/dates";
+import { todayIso, weekStartOf } from "../menu/dates";
 import { useWeekQuery } from "../menu/useWeek";
-import { printableDays, WeekDayPrint } from "../menu/WeekGrid";
+import { weekSheets } from "../menu/weekSheets";
 import { useDocumentFrame } from "../letterhead/useDocumentFrame";
 import {
   PrintedSheets,
@@ -78,15 +78,7 @@ export function FamilyPrintButton({
       });
     }
     if (week.data !== undefined) {
-      for (const day of printableDays(week.data)) {
-        sheets.push({
-          key: day.date,
-          title: t("familyPrint.sheet.day", { day: formatDayLabel(day.date) }),
-          aside: name,
-          code: "KC-WEEK-1",
-          content: <WeekDayPrint day={day} patientName={name} />,
-        });
-      }
+      sheets.push(...weekSheets(t, week.data, name));
     }
     return sheets;
   }

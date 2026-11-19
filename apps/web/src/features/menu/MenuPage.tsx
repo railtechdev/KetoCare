@@ -6,6 +6,7 @@ import { Calculator, CookingPot } from "lucide-react";
 import { PageLayout } from "../../components/PageLayout";
 import { SectionLink } from "../../components/SectionLink";
 import { DayComposer } from "./DayComposer";
+import { FamilyWeekPrint } from "./FamilyWeekPrint";
 
 /**
  * Меню дня для родителя (раздел 8.3 ТЗ, строка «Меню»).
@@ -39,6 +40,7 @@ export function MenuPage({ patientId }: { patientId: string }) {
                 {t("tools.recipes")}
               </SectionLink>
             </Button>
+            <FamilyWeekPrint patientId={patientId} />
           </nav>
           {content}
         </PageLayout>
