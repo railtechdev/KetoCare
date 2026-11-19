@@ -25,11 +25,11 @@
 | 4. AI | готово: разбор свободного текста, помощник по базе знаний, сводка для врача, черновики контента |
 | 5. Стабилизация | готово: E2E, нагрузочный прогон, security-проход, импорт, прод-инфраструктура |
 
-Код готов, клинические решения — нет: что мешает пустить настоящих пациентов, описано в [`docs/READINESS.md`](docs/READINESS.md). Открытые вопросы медицинской команде — [`docs/medical/OPEN_QUESTIONS.md`](docs/medical/OPEN_QUESTIONS.md).
+С 17.11.2026 клиника ведёт по системе настоящих детей ([ADR-0088](docs/adr/0088-dish-cooking-steps-and-print.md)). Какие клинические решения и шаги эксплуатации для этого ещё не закрыты, описано в [`docs/READINESS.md`](docs/READINESS.md). Открытые вопросы медицинской команде — [`docs/medical/OPEN_QUESTIONS.md`](docs/medical/OPEN_QUESTIONS.md).
 
 Отдельно от этапов пройден разбор клиентского пути по всем ролям — [`docs/AUDIT_JOURNEY.md`](docs/AUDIT_JOURNEY.md), 75 находок: закрыто 73, частично 2, открыто 0, ждёт решения клиники 0. Test-стенд на VPS выкатывается автоматически при merge в `main` ([`docs/DEPLOY.md`](docs/DEPLOY.md)).
 
-Тестов на 08.11.2026: 2985 pytest и 1436 vitest (`apps/web` 855, `apps/miniapp` 298, `packages/ui` 263, `packages/api-client` 10, `packages/landing` 10). Демо-данные — `make seed-demo`.
+Тестов на 19.11.2026: 3814 pytest и 1846 vitest (`apps/web` 1129, `apps/miniapp` 366, `packages/ui` 287, `packages/landing` 54, `packages/api-client` 10). Демо-данные — `make seed-demo`.
 
 ## Документация
 
@@ -37,22 +37,23 @@
 |---|---|
 | [`docs/TZ_AI_AGENTS.md`](docs/TZ_AI_AGENTS.md) | Техническое задание — единый источник истины: архитектура, схема БД, API, контракт расчётного ядра, безопасность, этапы |
 | [`CLAUDE.md`](CLAUDE.md) | Памятка ИИ-агентам: команды, границы модулей, правила, нарушение которых ломает продукт |
-| [`docs/medical/OPEN_QUESTIONS.md`](docs/medical/OPEN_QUESTIONS.md) | Вопросы медицинской команде: 33 открытых решения, которые за врача принять нельзя. Написано для врачей, без кода |
+| [`docs/medical/OPEN_QUESTIONS.md`](docs/medical/OPEN_QUESTIONS.md) | Вопросы медицинской команде — неврологу и диетологу, у каждого предложение по стандарту; решения, которые за врача принять нельзя. Написано для врачей, без кода |
 | [`docs/open-questions-tech.md`](docs/open-questions-tech.md) | Он же для разработки: где живёт каждое допущение и что придётся переписать после ответа |
 | `docs/medical/reference-cases/` | Эталонные расчёты движка (35 штук, пока provisional) |
-| [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md) | UI-канон: 32 правила композиции экранов, форм, состояний и доступности, с чек-листом ревью |
+| [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md) | UI-канон: 58 правил композиции экранов, форм, состояний и доступности, с чек-листом ревью |
 | [`docs/AUDIT_JOURNEY.md`](docs/AUDIT_JOURNEY.md) | Разбор пути пользователя по ролям: где сценарий обрывается, что это блокирует, чем закрыто |
 | [`docs/AUDIT_BOT.md`](docs/AUDIT_BOT.md) | Продуктовый аудит Telegram-бота глазами родителя: 11 находок, чем закрыты, что отложено |
 | [`docs/AUDIT_MINIAPP.md`](docs/AUDIT_MINIAPP.md) | Продуктовый аудит Mini App: 8 находок, включая клинический дефект граммовки «Что взвесить» |
-| `docs/adr/` | Architecture decision records — отступления от ТЗ с обоснованием (18 штук) |
+| `docs/adr/` | Architecture decision records — отступления от ТЗ с обоснованием (91 на 19.11.2026) |
 | [`docs/DEPLOY.md`](docs/DEPLOY.md) | Развёртывание test-стенда на VPS: подготовка сервера, nginx, автодеплой, бэкапы, передача клиенту |
+| [`docs/ADMIN.md`](docs/ADMIN.md) | Руководство администратора клиники: учётные записи, справочники, модели и расход ИИ, журнал действий |
 | [`docs/PLAN_LANDING.md`](docs/PLAN_LANDING.md) | План работ по посадочной странице и заявкам — выполнен, оставлен как история решений |
 
 При конфликте между ТЗ и кодом приоритет у ТЗ; при конфликте между ТЗ и медицинской спецификацией приоритет у медицинской спецификации.
 
 ## Стек
 
-Backend — Python 3.12, FastAPI, SQLAlchemy 2.0 (async) + Alembic, PostgreSQL 16, Redis 7 + ARQ, aiogram 3, scipy (`linprog`/HiGHS), Anthropic Claude API.
+Backend — Python 3.12, FastAPI, SQLAlchemy 2.0 (async) + Alembic, PostgreSQL 16, Redis 7 + ARQ, aiogram 3, scipy (`linprog`/HiGHS; numpy 1.26 / scipy 1.13 закреплены — [ADR-0014](docs/adr/0014-numeric-stack-pin.md)), LiteLLM — обращения к моделям (Anthropic встроен, другие поставщики и модели подключает администратор, [ADR-0082](docs/adr/0082-ai-providers-and-model-catalogue.md)).
 Frontend — React 19, TypeScript 5, Vite, Tailwind 4 + shadcn/ui, TanStack Query/Router/Table.
 Посадочная страница — Astro (статика, три языка).
 Монорепозиторий: uv workspace для Python, pnpm workspaces для JS.
@@ -65,7 +66,7 @@ infra/     docker-compose, nginx, скрипты бэкапа и деплоя
 
 ## Разработка
 
-Требуются Python 3.12+ с [uv](https://docs.astral.sh/uv/), Node 20+ и Docker.
+Требуются Python 3.12 с [uv](https://docs.astral.sh/uv/) (версия закреплена в `.python-version`: под scipy 1.13 нет колёс для более новых), Node 20+ и Docker.
 Отдельно ставить pnpm не нужно — `make setup` включит его через corepack.
 
 ```bash
@@ -83,7 +84,9 @@ make bot                  # Telegram-бот; нужны make dev и make api
 
 `make setup` идемпотентен: существующий `.env` он не трогает — там уже могут быть
 настоящие токены. Фиктивными в нём остаются `BOT_TOKEN` и `ANTHROPIC_API_KEY`:
-до этапов бота и ИИ они не нужны, дальше впишите свои.
+для бота впишите свой токен; ключ ИИ, модели и бюджеты можно задать и в кабинете
+администратора («Модели и расход», [ADR-0080](docs/adr/0080-ai-settings-in-the-admin-area.md)) —
+введённое там побеждает `.env`.
 
 Проверка и запуск тестов:
 
@@ -106,7 +109,7 @@ make lint                 # ruff + mypy + prettier + tsc
 | `make makemigration m="..."` | Создать миграцию по изменениям моделей |
 | `make openapi` | Выгрузить `openapi.json` и перегенерировать `packages/api-client` |
 | `make bot` | Запустить Telegram-бота (long polling) |
-| `make worker` | Запустить ARQ-воркер (PDF-отчёты) |
+| `make worker` | Запустить ARQ-воркер (PDF-отчёты, ИИ-задачи, уведомления и напоминания) |
 
 Запуск API: `make api` (Swagger — `/api/v1/docs`). За обратным прокси заполните
 `TRUSTED_PROXY_IPS` — см. [`infra/nginx/README.md`](infra/nginx/README.md).

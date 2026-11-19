@@ -21,8 +21,9 @@ repository из packages/core (доступ к БД). SQL/ORM-запросов �
   т. п.), — `api.after_commit.defer(session, "task_name", *args)`. `get_session`
   отправит её после коммита и выбросит при откате; отказ очереди ответ не роняет.
   `queue_service.enqueue` внутри транзакции не пиши: воркер успевает выполнить
-  задачу до отката. Старые места (`routers/prescriptions.py` — `notify_family`)
-  ещё ставят задачу сами — это не образец.
+  задачу до отката. Старое место (`routers/reports.py` — `render_report`) ещё
+  ставит задачу внутри транзакции — это не образец; `notify_family` в
+  `routers/prescriptions.py` уже идёт через `defer`.
 
 ## Чек-лист новой ручки
 
@@ -102,8 +103,10 @@ repository из packages/core (доступ к БД). SQL/ORM-запросов �
 11. `make openapi` — перегенерируй packages/api-client; убедись, что web/miniapp
     компилируются (`make lint` и `make test` вызывают openapi сами). Клиент
     генерируется — руками не правится.
-12. Ответы `/calc/*` включают `engine_version`; бизнес-логики расчётов в API нет —
-    только вызов keto_engine.
+12. Ответы `/calc/*` включают `engine_version`; арифметики расчётов в API нет —
+    только вызов keto_engine. Исключение, названное долгом: выбор «коридор →
+    свободный поиск» подбора живёт в `routers/calc.py` и `services/dish_fit.py`
+    (ADR-0084) — новой логики туда не добавляй, переносить её надо в ядро.
 
 ## Долгие операции
 
