@@ -19,6 +19,7 @@ import { useSectionTab } from "../../routes/useSectionTab";
 import { DiaryForm } from "../diary/DiaryForm";
 import { DiaryList } from "../diary/DiaryList";
 import { SeizureDiaryGrid } from "../diary/SeizureDiaryGrid";
+import { usePatient } from "../patients/usePatient";
 import { usePeriodSearch } from "../diary/usePeriodSearch";
 import { PeriodPicker } from "../diary/PeriodPicker";
 import {
@@ -137,6 +138,8 @@ function DiaryKindView({
 
   const logs = useDiaryLogs(patientId, kind, range);
   const prescriptions = usePrescriptionVersions(patientId, withChart);
+  // Имя ребёнка — на листе печати сетки приступов (ADR-0092).
+  const patient = usePatient(patientId);
   // Названия препаратов нужны только вкладке отметок о приёме: на остальных
   // видах записей запрос не уходит.
   const medications = useMedications(patientId, kind === "medications");
@@ -323,6 +326,7 @@ function DiaryKindView({
           logs={items}
           types={seizureTypes.data ?? []}
           complete={total <= items.length}
+          patientName={patient.data?.full_name}
         />
       )}
 

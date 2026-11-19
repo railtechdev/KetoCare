@@ -1,4 +1,6 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import i18n from "../../lib/i18n";
@@ -39,5 +41,43 @@ describe("сетка приступов", () => {
     expect(legend).toHaveTextContent("ГТКП");
     expect(legend).not.toHaveTextContent("Абсанс");
     expect(legend).not.toHaveTextContent("Миоклонический");
+  });
+});
+
+describe("сетка приступов на печать (ADR-0092)", () => {
+  function withClient(node: ReactNode) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, enabled: false } },
+    });
+    return <QueryClientProvider client={client}>{node}</QueryClientProvider>;
+  }
+
+  it("печать есть, когда известен ребёнок и сетка полная", () => {
+    render(
+      withClient(
+        <SeizureDiaryGrid logs={[LOG]} types={TYPES} patientName="Мария О." />,
+      ),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Распечатать сетку" }),
+    ).toBeInTheDocument();
+  });
+
+  it("неполную сетку не печатают: итог на бумаге занижал бы число приступов", () => {
+    render(
+      withClient(
+        <SeizureDiaryGrid
+          logs={[LOG]}
+          types={TYPES}
+          patientName="Мария О."
+          complete={false}
+        />,
+      ),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Распечатать сетку" }),
+    ).toBeNull();
   });
 });

@@ -1,4 +1,8 @@
 import { EmptyState, Section } from "@ketocare/ui";
+
+import { PrintButton } from "../../components/PrintButton";
+import { PrintedSheets } from "../../components/print/PrintedSheets";
+import { useDocumentFrame } from "../letterhead/useDocumentFrame";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -9,6 +13,11 @@ import type { DictionaryOption } from "./useDiary";
 const DATE = new Intl.DateTimeFormat("ru-RU", {
   day: "2-digit",
   month: "2-digit",
+});
+const FULL_DATE = new Intl.DateTimeFormat("ru-RU", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
 });
 
 /**
@@ -30,9 +39,15 @@ export function SeizureDiaryGrid({
   logs,
   types,
   complete = true,
+  patientName,
+  audience = "staff",
 }: {
   logs: readonly DiaryLog[];
   types: readonly DictionaryOption[];
+  /** Ребёнок на листе печати; без него печати нет (ADR-0092). */
+  patientName?: string;
+  /** Лист врача или семьи: у семьи в подвале телефон клиники. */
+  audience?: "family" | "staff";
   /**
    * Пришли ли все записи периода. Список отдаётся страницей (до 200 записей),
    * и итог, посчитанный по странице, занижал бы число приступов — врач судит
@@ -65,6 +80,18 @@ export function SeizureDiaryGrid({
     <Section
       title={t("grid.title")}
       description={grid.rows.length === 0 ? undefined : t("grid.hint")}
+      action={
+        patientName !== undefined && grid.rows.length > 0 && complete ? (
+          // Только полная сетка: итог по неполной странице занижал бы число
+          // приступов, а на бумаге оговорку «не все записи» не прочтут.
+          <GridPrintButton
+            grid={grid}
+            legend={legend}
+            patientName={patientName}
+            audience={audience}
+          />
+        ) : undefined
+      }
     >
       {grid.rows.length === 0 ? (
         <EmptyState size="inline" title={t("grid.empty")} />
@@ -147,5 +174,151 @@ export function SeizureDiaryGrid({
         </>
       )}
     </Section>
+  );
+}
+
+/** Сетка на бумаге: те же клетки, чёрные линии, строка заголовков повторяется. */
+function PrintedSeizureGrid({
+  grid,
+  legend,
+  patientName,
+}: {
+  grid: ReturnType<typeof buildSeizureGrid>;
+  legend: string;
+  patientName: string;
+}) {
+  const { t } = useTranslation("diary");
+  // Сетка идёт по возрастанию дат: первый и последний день с записями.
+  const first = grid.rows[0]?.date;
+  const last = grid.rows[grid.rows.length - 1]?.date;
+  const day = (value: string | undefined) =>
+    value === undefined ? "" : FULL_DATE.format(new Date(`${value}T00:00:00`));
+
+  return (
+    <div className="flex flex-col gap-[4mm] text-[11pt]">
+      <div className="flex flex-col gap-[1mm]">
+        <h1 className="m-0 text-[18pt] leading-tight font-bold">
+          {t("grid.title")}
+        </h1>
+        <p className="m-0 text-[#3d4556]">
+          {t("grid.printPeriod", {
+            name: patientName,
+            from: day(first),
+            to: day(last),
+          })}
+        </p>
+      </div>
+      <table className="w-full border-collapse text-[10.5pt]">
+        <thead>
+          <tr>
+            <th
+              scope="col"
+              className="border border-[#8a93a3] px-[2mm] py-[1mm] text-left font-semibold"
+            >
+              {t("grid.day")}
+            </th>
+            {DAY_PARTS.map((part) => (
+              <th
+                key={part.key}
+                scope="col"
+                className="border border-[#8a93a3] px-[2mm] py-[1mm] text-left font-semibold"
+              >
+                {t(`grid.parts.${part.key}`)}
+              </th>
+            ))}
+            <th
+              scope="col"
+              className="border border-[#8a93a3] px-[2mm] py-[1mm] text-right font-semibold"
+            >
+              {t("grid.total")}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {grid.rows.map((row) => (
+            <tr key={row.date} className="break-inside-avoid">
+              <th
+                scope="row"
+                className="border border-[#8a93a3] px-[2mm] py-[1mm] text-left font-normal tabular-nums"
+              >
+                {DATE.format(new Date(`${row.date}T00:00:00`))}
+              </th>
+              {DAY_PARTS.map((part) => (
+                <td
+                  key={part.key}
+                  className="border border-[#8a93a3] px-[2mm] py-[1mm] tabular-nums"
+                >
+                  {formatCell(row.cells[part.key]) || "—"}
+                </td>
+              ))}
+              <td className="border border-[#8a93a3] px-[2mm] py-[1mm] text-right font-semibold tabular-nums">
+                {row.total}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th
+              scope="row"
+              className="border border-[#8a93a3] px-[2mm] py-[1mm] text-left font-semibold"
+            >
+              {t("grid.periodTotal")}
+            </th>
+            <td
+              colSpan={DAY_PARTS.length}
+              className="border border-[#8a93a3]"
+            />
+            <td className="border border-[#8a93a3] px-[2mm] py-[1mm] text-right font-bold tabular-nums">
+              {grid.total}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+      {legend !== "" && (
+        <p className="m-0 text-[10pt] text-[#4a5263]">
+          {t("grid.legend", { legend })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Печать сетки — отдельным компонентом: рамке документа нужны запросы бланка. */
+function GridPrintButton({
+  grid,
+  legend,
+  patientName,
+  audience,
+}: {
+  grid: ReturnType<typeof buildSeizureGrid>;
+  legend: string;
+  patientName: string;
+  audience: "family" | "staff";
+}) {
+  const { t } = useTranslation("diary");
+  const frame = useDocumentFrame();
+  return (
+    <PrintButton label={t("grid.print")}>
+      <PrintedSheets
+        frame={frame}
+        audience={audience}
+        sheets={[
+          {
+            key: "seizures",
+            title: t("grid.title"),
+            aside: patientName,
+            code: "KC-SEIZURES-1",
+            content: (
+              <PrintedSeizureGrid
+                grid={grid}
+                legend={legend}
+                patientName={patientName}
+              />
+            ),
+          },
+        ]}
+      />
+    </PrintButton>
   );
 }
