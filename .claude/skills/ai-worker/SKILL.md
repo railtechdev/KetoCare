@@ -5,35 +5,47 @@ description: AI-модуль и фоновые задачи apps/worker — вы
 
 # Воркер и AI-модуль — правила
 
-Подробности и устройство — `apps/worker/README.md`; ADR-0019, 0021–0024.
+Подробности и устройство — `apps/worker/README.md`; ADR-0019, 0021–0024, 0079–0082.
 Задачи регистрируются в `apps/worker/src/worker/main.py` (`WorkerSettingsARQ`):
 новая задача без строки в `functions`/`cron_jobs` молча не выполняется.
 
-## Единственная дверь к Claude API — `AiClient`
+## Единственная дверь к модели — `AiClient`
 
 `apps/worker/src/worker/ai/client.py`, метод `ask(kind=…, requested_by=…,
-patient_id=…, system=…, payload=…, user_text=…)`. Своего `anthropic.Anthropic`
-в задаче быть не должно. Клиент сам делает всё, о чём нельзя вспоминать в
-каждой задаче:
+patient_id=…, system=…, payload=…, user_text=…)`. Наружу запрос несёт
+`ai/transport.py` через LiteLLM — единственный модуль, импортирующий LiteLLM
+(тест это держит); SDK Anthropic из зависимостей убран. Своего провода в задаче
+быть не должно. Клиент сам делает всё, о чём нельзя вспоминать в каждой задаче:
 
 - `pseudonymize(payload)` и `scrub_free_text(user_text)` — вызывающий их не зовёт
   и обойти не может;
-- предохранители под блокировкой бюджета (`jobs_repo.lock_budget`): дневной
-  бюджет проекта `AI_DAILY_BUDGET_USD` (все задачи) и суточный предел
-  пользователя `AI_USER_DAILY_LIMIT` — только для `USER_LIMITED_KINDS`
-  (assistant, doctor_summary, content_draft; разбор еды не ограничен). Сутки —
-  по `TZ` проекта, не «24 часа»;
+- настройки — из `core.app_settings.ai_config` (раздел кабинета «Модели и
+  расход», ADR-0080; кэш 30 с), окружение запасное. Задачи разбиты на группы
+  `AI_TASKS` (технические работы, специалисты, семьи); новый вид задачи без
+  строки в `AI_TASKS` роняет тест. Выключенная группа — `AiDisabled`;
+- предохранители под блокировкой бюджета (`jobs_repo.lock_budget`): бюджет
+  проекта на день и месяц (запасной дневной — `AI_DAILY_BUDGET_USD`), бюджеты
+  группы на день и месяц, предел человека числом обращений — только для задач
+  с `AI_TASKS[kind].per_person` (запасное значение — `AI_USER_DAILY_LIMIT`;
+  разбор еды и чтение файла рецептов не ограничены) — и деньгами
+  (`user_daily_budget_usd`, все задачи группы). Сутки и месяц — по `TZ`
+  проекта, не «24 часа»;
 - строка `ai_jobs` с бронью стоимости ДО вызова, токены и `cost_usd` после —
   включая неудачу и ответ без текста;
-- ретраи (`MAX_RETRIES = 3`) делает SDK — свой цикл поверх не писать (было бы 9);
-  таймаут 60 с по умолчанию;
-- модель — из env (`AI_MODEL_FAST` для `parse_meal`/`parse_event`,
-  `AI_MODEL_SMART` для остальных). Пустое значение — `NotConfigured`, не
-  подстановка. Хардкод имени модели = ошибка.
+- ретраи (`MAX_RETRIES = 3` в `transport.py`) делает LiteLLM (`num_retries`) —
+  свой цикл поверх не писать (было бы 9); таймаут 60 с по умолчанию;
+- модель — `AiClient.model_for`: модель задачи (`task_models`) → для быстрых
+  задач `AI_MODEL_FAST` → модель группы → для остальных `AI_MODEL_SMART`
+  (ADR-0082). Пустое значение — `NotConfigured`, не подстановка; выбранную, но
+  невызываемую модель задача на другую не меняет, а отказывает. Хардкод имени
+  модели = ошибка.
 
-Цены — `ai/pricing.py` (сверены с прайсом Anthropic), не в env: модель без цены
-к работе не допускается (`assert_priced`), иначе бюджет считал бы её нулём.
-Новая модель → строка в `pricing.py`.
+Цены — каталог моделей (`core.ai_catalog`): встроенный прайс-лист
+`core/ai_pricing.py` (сверен с прайсом Anthropic; `ai/pricing.py` воркера его
+лишь переимпортирует) плюс модели, которые администратор добавил в кабинете.
+Не в env: модель без записи каталога к работе не допускается, иначе бюджет
+считал бы её нулём. Цены LiteLLM для счёта не используются. Новая встроенная
+модель → строка в `core/ai_pricing.py`.
 
 Превышение → `AiLimitExceeded`; задача возвращает конверт
 `{"status": "limited", "message": …}`, API превращает его в `rate_limited`.
@@ -53,7 +65,8 @@ patient_id=…, system=…, payload=…, user_text=…)`. Своего `anthropi
 
 ## Промпты
 
-`ai/prompts/*.md` (assistant, parse_free_text, doctor_summary, content_draft) —
+`ai/prompts/*.md` (assistant, parse_free_text, doctor_summary, content_draft,
+recipe_import) —
 меняются только отдельным PR с ревью человека (ТЗ §10.4). Не правь их «заодно»
 с кодом.
 
@@ -85,6 +98,11 @@ patient_id=…, system=…, payload=…, user_text=…)`. Своего `anthropi
 - **content_draft** (`ai/content.py`): состав закрыт, `grounding` с
   `only_masses=True`, ничего не сохраняется. Аномалии базы продуктов — арифметика,
   не модель.
+- **parse_recipe_file** (`ai/recipe_import.py`, ADR-0079): модель только
+  показывает, в какой строке файла какой ингредиент, количество и единица.
+  Граммы выводит сервер (`core.recipe_import`) из единиц массы и сверяет с
+  исходной строкой; продукт справочника модель не называет. Черновик —
+  `recipe_import_drafts`, рецептом он становится только по решению человека.
 
 ## Постфильтр помощника — `ai/guard.py`
 
@@ -132,3 +150,7 @@ patient_id=…, system=…, payload=…, user_text=…)`. Своего `anthropi
   `core.tools.erase_patient`. Строки остаются всегда.
 - `purge_idempotency_keys` — раз в час (сохранённые ответы содержат данные
   ребёнка, ADR-0035).
+- `watch_ai_budgets` (`ai/budget_watch.py`, каждые 5 минут) пишет в журнал
+  `ai_budget_warning` / `ai_budget_exhausted` по одной записи на бюджет, период
+  и уровень; заполнение считает `core.ai_budget` теми же суммами, по которым
+  отказывает `AiClient` (ADR-0081).
