@@ -18,7 +18,7 @@ from core.config import Settings
 from core.db import get_sessionmaker
 from core.repositories import report_jobs as jobs_repo
 
-from .render import html_to_pdf, render_html
+from .render import format_date, html_to_pdf, render_html
 
 
 def report_path(reports_dir: str, file_name: str) -> Path:
@@ -37,11 +37,17 @@ def report_path(reports_dir: str, file_name: str) -> Path:
     return target
 
 
-async def render_report(ctx: dict[str, Any], job_id: str, report: dict[str, Any]) -> str:
+async def render_report(
+    ctx: dict[str, Any],
+    job_id: str,
+    report: dict[str, Any],
+    document: dict[str, Any] | None = None,
+) -> str:
     """Собрать PDF и отметить задачу выполненной.
 
     Возвращает имя файла — оно же попадает в `report_jobs.file_name`, по нему
-    API отдаёт файл.
+    API отдаёт файл. `document` — бланк клиники на момент заказа и кто заказал
+    (ADR-0092); у задачи, поставленной прежней версией API, его нет.
     """
 
     settings = Settings()  # type: ignore[call-arg]
@@ -57,8 +63,9 @@ async def render_report(ctx: dict[str, Any], job_id: str, report: dict[str, Any]
         await session.commit()
 
     try:
-        title = "Отчёт по пациенту"
-        pdf = html_to_pdf(render_html(report, title=title))
+        period = report.get("period", {})
+        title = f"Отчёт за {format_date(period.get('from_date'))} – {format_date(period.get('to_date'))}"
+        pdf = html_to_pdf(render_html(report, title=title, document=document, tz=settings.tz))
 
         file_name = f"{job_id}.pdf"
         target = report_path(settings.reports_dir, file_name)

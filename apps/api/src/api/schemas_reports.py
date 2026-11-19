@@ -29,6 +29,8 @@ class ReportPatient(BaseModel):
     birth_date: date
     sex: str
     height_cm: float | None
+    #: Номер карты клиники — второй идентификатор на каждой странице (ADR-0092).
+    clinic_card_number: str | None = None
 
 
 class ReportPrescription(BaseModel):

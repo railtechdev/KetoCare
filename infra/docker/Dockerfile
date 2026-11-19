@@ -68,8 +68,8 @@ CMD ["python", "-m", "bot.main"]
 
 
 FROM base AS worker
-# weasyprint — обёртка над pango/cairo (apps/worker/README.md); шрифты DejaVu —
-# кириллица в PDF-отчётах.
+# weasyprint — обёртка над pango/cairo (apps/worker/README.md). Отчёт набран
+# Noto Sans из пакета воркера (ADR-0092); DejaVu — запасной шрифт системы.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libffi8 fonts-dejavu-core \

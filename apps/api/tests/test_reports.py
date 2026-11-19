@@ -254,7 +254,20 @@ class TestCsvExport:
         assert "attachment" in response.headers["content-disposition"]
         # BOM: без него Excel открывает кириллицу как мусор.
         assert response.text.startswith("﻿")
-        assert "seizures_by_day,2026-08-10,2" in response.text
+        # «;» и запятая в дробях — так русский Excel делит столбцы и читает числа
+        # (ADR-0092); с «,» он видел одну колонку.
+        assert "seizures_by_day;2026-08-10;2" in response.text
+
+    async def test_csv_decimals_use_a_comma(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """«3.4» с точкой русский Excel читает как дату «03.апр»."""
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        await _ketone(session, patient, at=datetime(2026, 8, 10, 7, 0), value=3.4)
+
+        response = await client.get(_url(patient.id, "csv"), headers=auth_headers(doctor))
+
+        assert ";3,4;blood" in response.text
 
     async def test_export_is_written_to_audit_log(
         self, client, session, make_user, make_patient, auth_headers
@@ -346,6 +359,40 @@ class TestPdfJob:
         assert enqueued and enqueued[0][0] == "render_report"
         # Данные отчёта уезжают в задачу готовыми: воркер не собирает их заново.
         assert enqueued[0][1][1]["patient"]["id"] == str(patient.id)
+
+    async def test_job_carries_the_letterhead_and_author_of_the_moment(
+        self, client, session, make_user, make_patient, auth_headers, monkeypatch
+    ):
+        """Бланк клиники и автор копируются в задачу при заказе (ADR-0092):
+        выданный PDF не меняется, если завтра сменят логотип."""
+        from api.services import queue as queue_service
+        from core import letterhead
+        from core.letterhead import LetterheadText
+
+        enqueued: list[tuple] = []
+
+        async def fake_enqueue(task: str, *args):
+            enqueued.append((task, args))
+
+        monkeypatch.setattr(queue_service, "enqueue", fake_enqueue)
+        admin = await make_user(UserRole.ADMIN)
+        await letterhead.save_text(
+            session,
+            LetterheadText(name_uz="«Namuna» markazi", short_name="ДНЦ «Образец»"),
+            by=admin.id,
+        )
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        patient.clinic_card_number = "0142"
+        await session.flush()
+
+        response = await client.post(_pdf_url(patient.id), headers=auth_headers(doctor))
+
+        assert response.status_code == 202, response.text
+        _, report, document = enqueued[0][1]
+        assert report["patient"]["clinic_card_number"] == "0142"
+        assert document["letterhead"]["short_name"] == "ДНЦ «Образец»"
+        assert document["author"] == {"name": doctor.full_name, "role": "doctor"}
+        assert document["engine_version"]
 
     async def test_job_is_committed_before_it_is_queued(
         self, client, session, make_user, make_patient, auth_headers, monkeypatch

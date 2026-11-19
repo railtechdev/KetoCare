@@ -3,184 +3,309 @@
   <head>
     <meta charset="utf-8" />
     <title>{{ title }}</title>
+    <meta name="author" content="{{ letterhead.short_name }}" />
+    <meta name="generator" content="KetoCare" />
     <style>
-      /* Печатный лист, а не экран: единицы в миллиметрах и пунктах, потому что
-         документ уходит в бумагу и в переписку, где пиксели ничего не значат. */
-      @page { size: A4; margin: 18mm 15mm; }
-      body { font-family: "DejaVu Sans", sans-serif; font-size: 10pt; color: #1a1a1a; }
-      h1 { font-size: 16pt; margin: 0 0 2mm; }
-      h2 { font-size: 12pt; margin: 6mm 0 2mm; }
-      p { margin: 0 0 1mm; }
-      .muted { color: #555; }
+      /* Единый стандарт документов (ADR-0092). Шрифт — из пакета, а не из
+         системы: на машине без Noto Sans отчёт иначе набирался бы чем придётся,
+         а узбекское oʻ/gʻ (U+02BB) есть не в каждом шрифте. */
+      @font-face { font-family: "Noto Sans"; font-weight: 400; src: url("fonts/NotoSans-Regular.ttf"); }
+      @font-face { font-family: "Noto Sans"; font-weight: 600; src: url("fonts/NotoSans-SemiBold.ttf"); }
+      @font-face { font-family: "Noto Sans"; font-weight: 700; src: url("fonts/NotoSans-Bold.ttf"); }
+
+      /* Поля 20 мм; сверху место под колонтитул со второй страницы. Номер
+         страницы — внизу и на всех страницах, включая первую: по «Стр. X из Y»
+         видно, что лист отчёта не потерялся (отступление от ГОСТа — ADR-0092). */
+      @page {
+        size: A4;
+        margin: 24mm 20mm 20mm 20mm;
+        @top-left { content: element(running); width: 100%; vertical-align: bottom; padding-bottom: 3mm; }
+        @bottom-left { content: element(footer); width: 82%; vertical-align: top; padding-top: 3mm; }
+        @bottom-right {
+          content: "Стр. " counter(page) " из " counter(pages);
+          font: 8pt "Noto Sans", sans-serif; color: #4a5263;
+          vertical-align: top; padding-top: 3mm; white-space: nowrap;
+        }
+      }
+      /* Первая страница несёт полный бланк — короткий колонтитул над ним лишний. */
+      @page :first { margin-top: 18mm; @top-left { content: none; } }
+
+      body {
+        font-family: "Noto Sans", sans-serif; font-size: 10pt; line-height: 1.4;
+        color: #1a1f2e; margin: 0;
+      }
+      p { margin: 0; }
+      .muted { color: #4a5263; }
+      .num, td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       .pre-line { white-space: pre-line; }
-      table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
-      th, td { border-bottom: 0.3pt solid #bbb; padding: 1.4mm 1mm; text-align: left; }
-      th { font-weight: 600; }
-      td.num, th.num { text-align: right; }
-      /* Раздел не разрывается между страницами посреди заголовка: врач читает
-         таблицу целиком, а не её хвост на следующем листе. */
-      section { break-inside: avoid-page; }
+
+      .running { position: running(running); font-size: 8pt; color: #4a5263;
+        border-bottom: 0.75pt solid #8a93a3; padding-bottom: 1.5mm; width: 100%; }
+      .running table { width: 100%; border-collapse: collapse; margin: 0; }
+      .running td { border: 0; padding: 0; vertical-align: middle; }
+      .running img { height: 5mm; max-width: 20mm; vertical-align: middle; margin-right: 1.5mm; }
+      .running b { color: #1a1f2e; }
+      .footer { position: running(footer); font-size: 8pt; color: #4a5263;
+        border-top: 0.75pt solid #8a93a3; padding-top: 1.5mm; }
+
+      .letterhead { border-bottom: 1.5pt solid #1a1f2e; padding-bottom: 3mm; margin-bottom: 5mm; }
+      .letterhead table { width: 100%; border-collapse: collapse; margin: 0; }
+      .letterhead td { border: 0; padding: 0; vertical-align: middle; }
+      .letterhead .logo { width: 1%; padding-right: 4mm; }
+      .letterhead .logo img { height: 15mm; max-width: 60mm; }
+      .letterhead .name { font-size: 10.5pt; font-weight: 700; }
+      .letterhead .second { font-size: 9.5pt; font-weight: 600; }
+      .letterhead .contacts { font-size: 8pt; color: #4a5263; }
+      .letterhead .details { text-align: right; font-size: 8pt; color: #4a5263; white-space: nowrap; padding-left: 4mm; }
+
+      h1 { font-size: 18pt; line-height: 1.2; margin: 0 0 1.5mm; }
+      h2 { font-size: 12pt; margin: 6mm 0 2mm; break-after: avoid; }
+      .patient { font-size: 10.5pt; margin-bottom: 1mm; }
+      .rx { color: #3d4556; margin-bottom: 4mm; }
+
+      .metrics { width: 100%; border: 0.75pt solid #8a93a3; border-radius: 2mm; border-collapse: separate; border-spacing: 0; margin: 0 0 4mm; }
+      .metrics td { width: 25%; padding: 2.5mm 3mm; border: 0; border-left: 0.75pt solid #c9ced8; vertical-align: top; }
+      .metrics td:first-child { border-left: 0; }
+      .metrics .label { font-size: 8pt; color: #4a5263; }
+      .metrics .value { font-size: 14pt; font-weight: 700; white-space: nowrap; }
+      .metrics .note { font-size: 8pt; color: #4a5263; }
+
+      figure { margin: 0 0 2mm; break-inside: avoid; }
+      figcaption { font-weight: 600; margin-bottom: 1.5mm; }
+
+      table.data { width: 100%; border-collapse: collapse; font-size: 9pt; }
+      table.data th { text-align: left; font-weight: 600; color: #4a5263; padding: 1.5mm 2mm 1.5mm 0;
+        border-bottom: 1.5pt solid #1a1f2e; }
+      table.data td { padding: 1.5mm 2mm 1.5mm 0; border-bottom: 0.5pt solid #c9ced8; vertical-align: top; }
+      table.data th:last-child, table.data td:last-child { padding-right: 0; }
+      table.data .num { text-align: right; }
+      /* Строка таблицы не рвётся между страницами, заголовок таблицы
+         повторяется сам (`thead`), заголовок раздела не остаётся последним. */
+      table.data tr { break-inside: avoid; }
+      .closing { margin-top: 6mm; }
     </style>
   </head>
   <body>
-    <h1>{{ title }}</h1>
-    <p class="muted">
-      {{ patient.full_name }}, {{ patient.birth_date }} · период
-      {{ period.from_date }} — {{ period.to_date }}
+    <div class="running">
+      <table><tr>
+        <td>
+          {% if letterhead.logo_data_uri %}<img src="{{ letterhead.logo_data_uri }}" alt="" />{% endif %}<b>{{ letterhead.short_name }}</b> · Отчёт за {{ period_text }}
+        </td>
+        <td class="num"><b>{{ patient.full_name }}</b> · {{ patient.birth_date | day }}{% if patient.clinic_card_number %} · № {{ patient.clinic_card_number }}{% endif %}</td>
+      </tr></table>
+    </div>
+    <div class="footer">
+      Медицинские сведения, конфиденциально{% if author_line %} · сформировал(а) {{ author_line }}{% endif %}
+      · {{ generated_text }} (Ташкент) · KetoCare{% if engine_version %}, расчёт {{ engine_version }}{% endif %} · {{ template_code }}
+    </div>
+
+    <div class="letterhead">
+      <table><tr>
+        {% if letterhead.logo_data_uri %}
+          <td class="logo"><img src="{{ letterhead.logo_data_uri }}" alt="" /></td>
+        {% endif %}
+        <td>
+          <p class="name" {% if letterhead.name_uz %}lang="uz"{% endif %}>{{ letterhead.name_uz or letterhead.short_name }}</p>
+          {% set second = [letterhead.name_ru, letterhead.department] | select | join(" · ") %}
+          {% if second %}<p class="second">{{ second }}</p>{% endif %}
+          {% set contacts = [letterhead.address, letterhead.contact] | select | join(" · ") %}
+          {% if contacts %}<p class="contacts">{{ contacts }}</p>{% endif %}
+        </td>
+        {% if letterhead.license or letterhead.stir %}
+          <td class="details">
+            {% if letterhead.license %}<p>Лицензия {{ letterhead.license }}</p>{% endif %}
+            {% if letterhead.stir %}<p>СТИР {{ letterhead.stir }}</p>{% endif %}
+          </td>
+        {% endif %}
+      </tr></table>
+    </div>
+
+    <h1>Отчёт за {{ period_text }}</h1>
+    <p class="patient">
+      <b>{{ patient.full_name }}</b> · {{ patient.birth_date | day }} ({{ age }})
+      {% if patient.clinic_card_number %} · № карты клиники {{ patient.clinic_card_number }}{% endif %}
     </p>
-    <p class="muted">Собран {{ generated_at }}</p>
-
-    <section>
-      <h2>Назначение</h2>
-      {% if prescriptions %}
-        <table>
-          <thead>
-            <tr>
-              <th>Действует с</th><th class="num">Соотношение</th><th class="num">Ккал</th>
-              <th class="num">Белок, г</th><th class="num">Углеводы до, г</th>
-              <th class="num">Приёмов</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for item in prescriptions %}
-              <tr>
-                <td>{{ item.effective_from }}</td>
-                <td class="num">{{ item.ratio }} : 1</td>
-                <td class="num">{{ item.kcal_per_day }}</td>
-                <td class="num">{{ item.protein_g }}</td>
-                <td class="num">{{ item.carbs_limit_g }}</td>
-                <td class="num">{{ item.meals_per_day }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="muted">Назначение за период не оформлялось.</p>
-      {% endif %}
-    </section>
-
-    <section>
-      <h2>Приступы</h2>
-      <p>
-        Всего приступов: {{ seizures.count }} · записей в дневнике:
-        {{ seizures.entries }}
+    {% if current_prescription %}
+      <p class="rx">
+        Назначение {{ current_prescription.ratio }} : 1, {{ current_prescription.kcal_per_day | kcal }} ккал,
+        {{ current_prescription.meals_per_day }} {{ current_prescription.meals_per_day | meals }} в день · действует с {{ current_prescription.effective_from | day }}
       </p>
-      {% if seizures.by_type %}
-        <table>
-          <thead>
-            <tr><th>Тип</th><th>Код</th><th class="num">Приступов</th><th class="num">Записей</th></tr>
-          </thead>
-          <tbody>
-            {% for item in seizures.by_type %}
-              <tr>
-                <td>{{ item.name_ru }}</td>
-                <td>{{ item.code or "—" }}</td>
-                <td class="num">{{ item.count }}</td>
-                <td class="num">{{ item.entries }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="muted">За период приступов не записано.</p>
-      {% endif %}
-    </section>
+    {% else %}
+      <p class="rx">Назначение за период не оформлялось.</p>
+    {% endif %}
 
-    <section>
-      <h2>Кетоны и вес</h2>
-      <table>
+    <table class="metrics"><tr>
+      <td>
+        <p class="label">Приступы</p>
+        <p class="value">{{ seizures.count }}</p>
+        <p class="note">записей в дневнике: {{ seizures.entries }}</p>
+      </td>
+      <td>
+        <p class="label">Кетоны в крови, среднее</p>
+        <p class="value">{% if ketones_blood.mean is not none %}{{ ketones_blood.mean | num }} <span style="font-size: 9pt">ммоль/л</span>{% else %}—{% endif %}</p>
+        <p class="note">{% if ketones_blood.points %}от {{ ketones_blood.min | num }} до {{ ketones_blood.max | num }} · {{ ketones_blood.points | length }} замеров{% else %}замеров нет{% endif %}</p>
+      </td>
+      <td>
+        <p class="label">Вес, среднее</p>
+        <p class="value">{% if weight.mean is not none %}{{ weight.mean | num }} <span style="font-size: 9pt">кг</span>{% else %}—{% endif %}</p>
+        <p class="note">{% if weight.points %}от {{ weight.min | num }} до {{ weight.max | num }}{% else %}взвешиваний нет{% endif %}</p>
+      </td>
+      <td>
+        <p class="label">Меню, отмечено съеденным</p>
+        <p class="value">{{ menu.items_eaten }} из {{ menu.items_planned }}</p>
+        <p class="note">дней в плане: {{ menu.days_planned }}</p>
+      </td>
+    </tr></table>
+
+    {% if chart %}
+      <figure>
+        <figcaption>Кетоны в крови по дням и приступы</figcaption>
+        <svg width="{{ chart.width }}" height="{{ chart.height }}" viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.label }}" style="width: 100%; height: auto">
+          {% for gy, glabel in chart.grid %}
+            <line x1="{{ chart.left }}" y1="{{ gy }}" x2="{{ chart.width }}" y2="{{ gy }}" stroke="#c9ced8" stroke-width="1" />
+            <text x="{{ chart.left - 8 }}" y="{{ gy + 4 }}" font-family="Noto Sans" font-size="11" fill="#4a5263" text-anchor="end">{{ glabel }}</text>
+          {% endfor %}
+          <polyline fill="none" stroke="#1a1f2e" stroke-width="2" points="{{ chart.line }}" />
+          {% for dx, dy in chart.dots %}
+            <circle cx="{{ dx }}" cy="{{ dy }}" r="3.5" fill="#ffffff" stroke="#1a1f2e" stroke-width="2" />
+          {% endfor %}
+          <line x1="{{ chart.left }}" y1="{{ chart.seizure_y }}" x2="{{ chart.width }}" y2="{{ chart.seizure_y }}" stroke="#8a93a3" stroke-width="1" stroke-dasharray="3 3" />
+          <text x="{{ chart.left - 8 }}" y="{{ chart.seizure_y + 4 }}" font-family="Noto Sans" font-size="11" fill="#4a5263" text-anchor="end">пр.</text>
+          {% for sx, count in chart.seizures %}
+            <path d="M{{ sx }} {{ chart.seizure_y - 7 }} l7 12 h-14 z" fill="#2c5fe0" />
+            <text x="{{ sx + 9 }}" y="{{ chart.seizure_y + 4 }}" font-family="Noto Sans" font-size="11" font-weight="700" fill="#1a1f2e">{{ count }}</text>
+          {% endfor %}
+          {% for tx, tlabel in chart.ticks %}
+            <text x="{{ tx }}" y="{{ chart.height - 2 }}" font-family="Noto Sans" font-size="11" fill="#4a5263" text-anchor="middle">{{ tlabel }}</text>
+          {% endfor %}
+        </svg>
+        <p class="muted" style="font-size: 8pt">Линия — среднее за день, ммоль/л; треугольник — день с приступами и их число.</p>
+      </figure>
+    {% endif %}
+
+    <h2>Назначения в периоде</h2>
+    {% if prescriptions %}
+      <table class="data">
         <thead>
-          <tr><th>Показатель</th><th class="num">Измерений</th><th class="num">Мин</th><th class="num">Макс</th><th class="num">Среднее</th></tr>
+          <tr>
+            <th>Действует с</th><th class="num">Соотношение</th><th class="num">Ккал в сутки</th>
+            <th class="num">Белок, не меньше</th><th class="num">Углеводы, не больше</th><th class="num">Приёмов</th>
+          </tr>
         </thead>
         <tbody>
-          {# Кровь и моча — разные шкалы, общего среднего нет (аудит 13.11.2026). #}
-          {% for label, series in [("Кетоны в крови, ммоль/л", ketones_blood), ("Кетоны в моче, ммоль/л", ketones_urine)] %}
+          {% for item in prescriptions %}
+            <tr>
+              <td>{{ item.effective_from | day }}</td>
+              <td class="num">{{ item.ratio }} : 1</td>
+              <td class="num">{{ item.kcal_per_day | kcal }}</td>
+              <td class="num">{{ item.protein_g | num }} г</td>
+              <td class="num">{{ item.carbs_limit_g | num }} г</td>
+              <td class="num">{{ item.meals_per_day }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">Назначение за период не оформлялось.</p>
+    {% endif %}
+
+    <h2>Приступы</h2>
+    <p>Всего приступов: {{ seizures.count }} · записей в дневнике: {{ seizures.entries }}</p>
+    {% if seizures.by_type %}
+      <table class="data">
+        <thead>
+          <tr><th>Тип</th><th>Код</th><th class="num">Приступов</th><th class="num">Записей</th></tr>
+        </thead>
+        <tbody>
+          {% for item in seizures.by_type %}
+            <tr>
+              <td>{{ item.name_ru }}</td>
+              <td>{{ item.code or "—" }}</td>
+              <td class="num">{{ item.count }}</td>
+              <td class="num">{{ item.entries }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">За период приступов не записано.</p>
+    {% endif %}
+
+    <h2>Кетоны и вес</h2>
+    <table class="data">
+      <thead>
+        <tr><th>Показатель</th><th class="num">Измерений</th><th class="num">Мин</th><th class="num">Макс</th><th class="num">Среднее</th></tr>
+      </thead>
+      <tbody>
+        {# Кровь и моча — разные шкалы, общего среднего нет (аудит 13.11.2026). #}
+        {% for label, series in [("Кетоны в крови, ммоль/л", ketones_blood), ("Кетоны в моче, ммоль/л", ketones_urine), ("Вес, кг", weight)] %}
           <tr>
             <td>{{ label }}</td>
             <td class="num">{{ series.points | length }}</td>
-            <td class="num">{{ series.min if series.min is not none else "—" }}</td>
-            <td class="num">{{ series.max if series.max is not none else "—" }}</td>
-            <td class="num">{{ series.mean if series.mean is not none else "—" }}</td>
+            <td class="num">{{ series.min | num }}</td>
+            <td class="num">{{ series.max | num }}</td>
+            <td class="num">{{ series.mean | num }}</td>
           </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Препараты</h2>
+    {% if medications %}
+      <table class="data">
+        <thead><tr><th>Препарат</th><th>Доза</th><th>Приём</th><th>Период</th></tr></thead>
+        <tbody>
+          {% for item in medications %}
+            <tr>
+              <td>{{ item.drug_name }}</td>
+              <td>{{ item.dose }}</td>
+              <td>{{ item.frequency }}</td>
+              <td>с {{ item.started_at | day }}{% if item.stopped_at %} по {{ item.stopped_at | day }}{% endif %}</td>
+            </tr>
           {% endfor %}
-          <tr>
-            <td>Вес, кг</td>
-            <td class="num">{{ weight.points | length }}</td>
-            <td class="num">{{ weight.min if weight.min is not none else "—" }}</td>
-            <td class="num">{{ weight.max if weight.max is not none else "—" }}</td>
-            <td class="num">{{ weight.mean if weight.mean is not none else "—" }}</td>
-          </tr>
         </tbody>
       </table>
-    </section>
-
-    <section>
-      <h2>Препараты</h2>
-      {% if medications %}
-        <table>
-          <thead><tr><th>Препарат</th><th>Доза</th><th>Приём</th><th>Период</th></tr></thead>
-          <tbody>
-            {% for item in medications %}
-              <tr>
-                <td>{{ item.drug_name }}</td>
-                <td>{{ item.dose }}</td>
-                <td>{{ item.frequency }}</td>
-                <td>с {{ item.started_at }}{% if item.stopped_at %} по {{ item.stopped_at }}{% endif %}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="muted">Схема терапии не заполнена.</p>
-      {% endif %}
-    </section>
+    {% else %}
+      <p class="muted">Схема терапии не заполнена.</p>
+    {% endif %}
 
     {% if side_effects %}
-      <section>
-        <h2>Нежелательные явления</h2>
-        <table>
-          <thead><tr><th>Когда</th><th>Симптом</th><th>Описание</th></tr></thead>
-          <tbody>
-            {% for item in side_effects %}
-              <tr>
-                <td>{{ item.occurred_at }}</td>
-                <td>{{ item.symptom }}</td>
-                <td>{{ item.description or "—" }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </section>
+      <h2>Нежелательные явления</h2>
+      <table class="data">
+        <thead><tr><th>Когда</th><th>Симптом</th><th>Описание</th></tr></thead>
+        <tbody>
+          {% for item in side_effects %}
+            <tr>
+              <td>{{ item.occurred_at | day }}</td>
+              <td>{{ item.symptom }}</td>
+              <td>{{ item.description or "—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     {% endif %}
 
-    <section>
-      <h2>Выполнение меню</h2>
-      <p>
-        Дней спланировано: {{ menu.days_planned }} · позиций в меню:
-        {{ menu.items_planned }} · отмечено съеденными: {{ menu.items_eaten }}
-      </p>
-    </section>
+    <h2>Выполнение меню</h2>
+    <p>
+      Дней спланировано: {{ menu.days_planned }} · позиций в меню: {{ menu.items_planned }} ·
+      отмечено съеденными: {{ menu.items_eaten }}
+    </p>
 
     {% if summaries %}
-      <section>
-        <h2>Сводки врача</h2>
-        {% for item in summaries %}
-          <p class="muted">{{ item.period_start }} — {{ item.period_end }}</p>
-          <!-- pre-line, а не <p>: сводка — шесть разделов с заголовками, и без
-               сохранения переносов они схлопывались в сплошной абзац. Markdown
-               здесь намеренно не разбирается: преобразователь с `|safe` отдал бы
-               weasyprint произвольную разметку из правленого человеком текста, а
-               weasyprint ходит за внешними ресурсами. -->
-          <p class="pre-line">{{ item.approved_md }}</p>
-        {% endfor %}
-      </section>
+      <h2>Сводки врача</h2>
+      {% for item in summaries %}
+        <p class="muted">{{ item.period_start | day }} — {{ item.period_end | day }}</p>
+        <!-- pre-line, а не <p>: сводка — шесть разделов с заголовками, и без
+             сохранения переносов они схлопывались в сплошной абзац. Markdown
+             здесь намеренно не разбирается: преобразователь с `|safe` отдал бы
+             weasyprint произвольную разметку из правленого человеком текста. -->
+        <p class="pre-line">{{ item.approved_md }}</p>
+      {% endfor %}
     {% endif %}
 
-    <section>
-      <p class="muted">
-        Отчёт собран автоматически из записей дневника и назначений. Сводки
-        включены только в подтверждённом врачом виде.
-      </p>
-    </section>
+    <p class="muted closing">
+      Отчёт собран автоматически из записей дневника и назначений. Сводки
+      включены только в подтверждённом врачом виде.
+    </p>
   </body>
 </html>
