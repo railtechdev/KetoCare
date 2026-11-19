@@ -6,6 +6,7 @@ import { AiSection } from "./AiSettingsPanel";
 import { AuditPanel } from "./AuditPanel";
 import { DictionariesPanel } from "./DictionariesPanel";
 import { LeadsPanel } from "./LeadsPanel";
+import { LetterheadPanel } from "./LetterheadPanel";
 import { UsersPanel } from "./UsersPanel";
 import { isAdminSection, type AdminSection } from "./types";
 
@@ -58,6 +59,7 @@ export function AdminPage({ section }: { section?: string }) {
         {current === "leads" && <LeadsPanel chrome="screen" />}
         {current === "dictionaries" && <DictionariesPanel chrome="screen" />}
         {current === "ai" && <AiSection />}
+        {current === "letterhead" && <LetterheadPanel />}
         {current === "audit" && <AuditPanel chrome="screen" />}
       </div>
     </PageLayout>
