@@ -248,7 +248,9 @@ async def _rows(session: AsyncSession) -> dict[str, _Row]:
         return _cache[1]
     rows = {
         row.key: _Row(value=dict(row.value), updated_at=row.updated_at, updated_by=row.updated_by)
-        for row in await session.scalars(select(AppSetting))
+        # Only the AI keys: the registry shares the table with the clinic
+        # letterhead (ADR-0092), whose logo is too heavy to drag along here.
+        for row in await session.scalars(select(AppSetting).where(AppSetting.key.like("ai.%")))
     }
     _cache = (now, rows)
     return rows

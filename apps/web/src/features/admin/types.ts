@@ -29,6 +29,8 @@ export const ADMIN_SECTIONS = [
   "dictionaries",
   // Ключ, модели, бюджеты и лимиты ИИ (ADR-0080).
   "ai",
+  // Логотип, название и реквизиты клиники на документах (ADR-0092).
+  "letterhead",
   "audit",
 ] as const;
 

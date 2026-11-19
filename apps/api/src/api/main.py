@@ -26,6 +26,7 @@ from .routers import (
     food_standards,
     intake,
     leads,
+    letterhead,
     logs,
     menus,
     overview,
@@ -116,6 +117,8 @@ def create_app() -> FastAPI:
     v1.include_router(staff.router)
     v1.include_router(admin.router)
     v1.include_router(admin_ai.router)
+    v1.include_router(letterhead.router)
+    v1.include_router(letterhead.admin_router)
     v1.include_router(telegram.router)
     v1.include_router(telegram.bot_router)
     v1.include_router(monitor_health_router)

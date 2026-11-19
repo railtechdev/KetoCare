@@ -63,6 +63,7 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
     "recipes",
     "dictionaries",
     "ai",
+    "letterhead",
     "audit",
     "profile",
   ],
