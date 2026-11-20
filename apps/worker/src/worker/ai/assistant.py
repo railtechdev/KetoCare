@@ -208,6 +208,7 @@ async def assistant_reply(
     text = DOCTOR_TEMPLATE
     sources: list[str] = []
     blocked = True
+    limited = False
     job_id = None
     status = "done"
 
@@ -226,6 +227,7 @@ async def assistant_reply(
         job_id = result.ai_job_id
     except AiLimitExceeded as error:
         text = str(error)
+        limited = True
     except AiError:
         text = ASSISTANT_UNAVAILABLE
         status = "failed"
@@ -246,6 +248,7 @@ async def assistant_reply(
                 text=text,
                 status=status,  # type: ignore[arg-type]
                 blocked=blocked,
+                limited=limited,
                 sources=sources,
                 ai_job_id=job_id,
             ),

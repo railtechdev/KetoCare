@@ -95,8 +95,8 @@ describe("ChatMessage", () => {
   });
 
   it("под отказом подписи нет", () => {
-    // Подпись утверждает происхождение: «ответ по материалам приложения». Под
-    // отказом ответа по материалам не было, и утверждение ложно.
+    // Подпись стоит под каждым ОТВЕТОМ (раздел 10.4 ТЗ). Отказ ответом не
+    // является: он сам ведёт к врачу или говорит о службе.
     render(
       <ChatMessage role="assistant" refusal note="Не заменяет врача">
         Этот вопрос нужно обсудить с лечащим врачом.
@@ -125,5 +125,119 @@ describe("ChatMessage", () => {
     // @ts-expect-error — у ответа помощника подпись обязательна (раздел 10.4 ТЗ)
     const answer = <ChatMessage role="assistant">ответ</ChatMessage>;
     expect(answer).toBeTruthy();
+  });
+
+  it("подпись нельзя передать пустой", () => {
+    // `note={cond ? t(…) : undefined}` компилировался и давал ответ без
+    // подписи при обязательном пропе.
+    const empty = (
+      // @ts-expect-error — `undefined` вместо подписи не принимается
+      <ChatMessage role="assistant" note={undefined}>
+        ответ
+      </ChatMessage>
+    );
+    const nothing = (
+      // @ts-expect-error — `null` вместо подписи не принимается
+      <ChatMessage role="assistant" note={null}>
+        ответ
+      </ChatMessage>
+    );
+    expect([empty, nothing]).toHaveLength(2);
+  });
+});
+
+describe("ChatMessage — переписка на телефоне (аудит Mini App 2026-11)", () => {
+  it("ответ помощника показывает жирный, а не звёздочки (П5)", () => {
+    const { container } = render(
+      <ChatMessage role="assistant" note="Не заменяет консультацию врача.">
+        {"**Важно:** отметку ставят в меню."}
+      </ChatMessage>,
+    );
+
+    expect(container.querySelector("strong")).toHaveTextContent("Важно:");
+    expect(container).not.toHaveTextContent("**");
+  });
+
+  it("реплика семьи печатается как написана", () => {
+    const { container } = render(
+      <ChatMessage role="user">{"**не жирный**"}</ChatMessage>,
+    );
+
+    expect(container.querySelector("strong")).toBeNull();
+    expect(screen.getByText("**не жирный**")).toBeInTheDocument();
+  });
+
+  it("источник и оговорка — отдельными строками (П9)", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        note="Не заменяет консультацию врача."
+        sources={<span>Источник: Как записать кетоны</span>}
+      >
+        ответ
+      </ChatMessage>,
+    );
+
+    const sources = screen.getByText("Источник: Как записать кетоны");
+    const note = screen.getByText("Не заменяет консультацию врача.");
+    expect(sources.parentElement).not.toBe(note.parentElement);
+    expect(sources.parentElement?.className).toContain("text-sm");
+  });
+
+  it("под отказом нет ни источников, ни оговорки, но есть следующий шаг (П4)", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        refusal
+        note="Не заменяет консультацию врача."
+        sources={<span>Источник: статья</span>}
+        nextStep={<button type="button">Спросить ещё раз</button>}
+      >
+        Помощник сейчас недоступен.
+      </ChatMessage>,
+    );
+
+    expect(container.querySelector('[data-refusal="true"]')).not.toBeNull();
+    expect(screen.queryByText("Источник: статья")).toBeNull();
+    expect(screen.queryByText("Не заменяет консультацию врача.")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Спросить ещё раз" }),
+    ).toBeInTheDocument();
+  });
+
+  it("следующий шаг под обычным ответом не показывается", () => {
+    render(
+      <ChatMessage
+        role="assistant"
+        note="Не заменяет консультацию врача."
+        nextStep={<button type="button">Спросить ещё раз</button>}
+      >
+        ответ
+      </ChatMessage>,
+    );
+
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("ожидание ответа говорит словами и движется только без запрета движения (П6)", () => {
+    const { container } = render(
+      <ChatMessage
+        role="assistant"
+        pending
+        pendingLabel="Помощник отвечает…"
+        slowNote="дольше обычного"
+        pendingSince={new Date(Date.now() - 60_000)}
+      />,
+    );
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Помощник отвечает…");
+    expect(status).toHaveTextContent("дольше обычного");
+    const dots = container.querySelectorAll("[data-typing-dot]");
+    expect(dots).toHaveLength(3);
+    for (const dot of dots) {
+      expect(dot.className).toContain("motion-safe:animate-bounce");
+      expect(dot.className).not.toMatch(/(^|\s)animate-/);
+    }
   });
 });

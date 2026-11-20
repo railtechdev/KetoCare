@@ -1,3 +1,4 @@
+import { mergeBySeq, nextAfterSeq } from "@ketocare/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
@@ -13,6 +14,8 @@ export interface AssistantMessage {
   /** Статьи с заголовками — их и печатает экран под ответом. */
   source_articles: { slug: string; title: string }[];
   blocked: boolean;
+  /** Отказ — исчерпанный предел: под ним нет «спросите врача». */
+  limited: boolean;
 }
 
 /**
@@ -70,8 +73,10 @@ export function useConversation(
   // без конца, пока ответ не дописан (находка ревью, 05.10.2026), поэтому
   // читателю переписка не обновляется сама — только по кнопке.
   const reader = options.reader === true;
+  const queryClient = useQueryClient();
+  const queryKey = ["assistant", patientId, conversationId];
   return useQuery({
-    queryKey: ["assistant", patientId, conversationId],
+    queryKey,
     enabled: conversationId !== null,
     refetchOnWindowFocus: !reader,
     // Пока ответ не дописан, переписка перечитывается; как только дописан —
@@ -84,6 +89,14 @@ export function useConversation(
         : false;
     },
     queryFn: async (): Promise<AssistantMessage[]> => {
+      // Семья дочитывает только новое (`nextAfterSeq` кита, П8 аудита Mini
+      // App): опрос перекачивал всю переписку каждые 2,5 секунды. Читатель
+      // (специалист) перечитывает целиком — он обновляет переписку только по
+      // кнопке, и каждое чтение у него — запись в журнале.
+      const cached = reader
+        ? undefined
+        : queryClient.getQueryData<AssistantMessage[]>(queryKey);
+      const afterSeq = nextAfterSeq(cached);
       const { data, error } = await api.GET(
         "/api/v1/patients/{patient_id}/ai-conversations/{conversation_id}",
         {
@@ -92,12 +105,16 @@ export function useConversation(
               patient_id: patientId,
               conversation_id: conversationId ?? "",
             },
+            ...(afterSeq === undefined
+              ? {}
+              : { query: { after_seq: afterSeq } }),
           },
         },
       );
       if (error || !data)
         throw error ?? new Error("Empty conversation response");
-      return data.messages as AssistantMessage[];
+      const fresh = data.messages as AssistantMessage[];
+      return afterSeq === undefined ? fresh : mergeBySeq(cached, fresh);
     },
   });
 }
@@ -130,6 +147,26 @@ export function useAskAssistant(patientId: string) {
       void queryClient.invalidateQueries({
         queryKey: ["assistant", patientId, accepted.conversation_id],
       });
+    },
+  });
+}
+
+/**
+ * Статья базы знаний, на которую опирается ответ: заголовок под ответом
+ * открывает её панелью. Статьи меняются выкатом — час без перечитывания.
+ */
+export function useArticle(slug: string | null) {
+  return useQuery({
+    queryKey: ["kb-article", slug],
+    enabled: slug !== null,
+    staleTime: 60 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        "/api/v1/knowledge-base/articles/{slug}",
+        { params: { path: { slug: slug ?? "" } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty article response");
+      return data;
     },
   });
 }

@@ -190,4 +190,50 @@ describe("вопросы семьи в карте пациента", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/в приложении в Telegram/)).toBeInTheDocument();
   });
+
+  it("ответ помощника читается так же, как у семьи, — без звёздочек и без поля вопроса", async () => {
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.endsWith("/ai-conversations")) {
+        return {
+          data: {
+            items: [conversation(ANSWERED, "куда записать кетоны", 0)],
+            total: 1,
+          },
+        };
+      }
+      return {
+        data: {
+          id: ANSWERED,
+          patient_id: PATIENT_ID,
+          channel: "web",
+          created_at: "2026-10-04T09:00:00Z",
+          updated_at: "2026-10-04T09:01:00Z",
+          messages: [
+            message({ seq: 0, role: "user", text: "куда записать кетоны" }),
+            message({
+              seq: 1,
+              text: "**Важно:** кнопка «Кетоны» на главной.\n1. Откройте\n2. Запишите",
+              created_at: "2026-10-04T09:01:00Z",
+            }),
+          ],
+        },
+      };
+    });
+    renderView({ item: ANSWERED });
+
+    expect((await screen.findByText("Важно:")).tagName).toBe("STRONG");
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.queryByText(/\*\*/)).not.toBeInTheDocument();
+    // Под ответом — та же короткая оговорка, что видит семья.
+    expect(screen.getByText(assistantRu.disclaimer)).toBeInTheDocument();
+    // Врач читает: ни поля, ни готовых вопросов, ни строки о читателях.
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(assistantRu.startersTitle),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(assistantRu.audience.summary.both),
+    ).not.toBeInTheDocument();
+    expect(api.POST).not.toHaveBeenCalled();
+  });
 });

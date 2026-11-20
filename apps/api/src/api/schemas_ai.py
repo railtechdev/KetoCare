@@ -53,6 +53,9 @@ class MessageRead(BaseModel):
     #: Ответ заменён шаблоном постфильтром. Экран показывает его обычным
     #: сообщением: это ответ по существу, просто не тот, которого ждали.
     blocked: bool = False
+    #: The refusal is a spent limit or budget, not a question for the doctor:
+    #: the cabinet and the Mini App show no «ask the doctor» step under it.
+    limited: bool = False
 
 
 class ConversationRead(BaseModel):

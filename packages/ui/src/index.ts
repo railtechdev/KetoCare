@@ -35,10 +35,23 @@ export {
   toleranceGapKey,
 } from "./lib/dayVerdict";
 export type { DayTolerance, DayVerdict, ToleranceGap } from "./lib/dayVerdict";
-export { isRefusal } from "./lib/assistantAnswer";
-export { chatReadersList } from "./lib/chatAudience";
-export type { ChatReader } from "./lib/chatAudience";
-export type { AssistantMessageSignals } from "./lib/assistantAnswer";
+export { isRefusal, refusalNextStep } from "./lib/assistantAnswer";
+export {
+  chatAudienceRoles,
+  chatReadersList,
+  telHref,
+} from "./lib/chatAudience";
+export type { ChatAudienceRoles, ChatReader } from "./lib/chatAudience";
+export { chatDayLabel, withChatDays } from "./lib/chatDays";
+export { mergeBySeq, nextAfterSeq } from "./lib/conversationPolling";
+export type { SequencedMessage } from "./lib/conversationPolling";
+export type { ChatDayWords } from "./lib/chatDays";
+export { parseChatInline, parseChatText } from "./lib/chatText";
+export type { ChatBlock, ChatInline, ChatLine } from "./lib/chatText";
+export type {
+  AssistantMessageSignals,
+  RefusalNextStep,
+} from "./lib/assistantAnswer";
 export {
   DURATIONS_BOTH,
   KETONE_MAX_MMOL,
@@ -131,10 +144,31 @@ export type {
 } from "./components/WarningBanner";
 
 export { CHAT_SLOW_AFTER_MS, ChatMessage } from "./components/ChatMessage";
-export type { ChatMessageProps } from "./components/ChatMessage";
+export type {
+  ChatMessageNote,
+  ChatMessageProps,
+} from "./components/ChatMessage";
 
 export { ChatComposer } from "./components/ChatComposer";
-export type { ChatComposerProps } from "./components/ChatComposer";
+export type {
+  ChatAudience,
+  ChatComposerProps,
+} from "./components/ChatComposer";
+
+export { ChatText } from "./components/ChatText";
+export type { ChatTextProps } from "./components/ChatText";
+
+export {
+  ChatDayDivider,
+  ChatSources,
+  ChatStarters,
+} from "./components/ChatParts";
+export type {
+  ChatSourceArticle,
+  ChatSourcesProps,
+  ChatStarter,
+  ChatStartersProps,
+} from "./components/ChatParts";
 
 export { DiaryEntryCard } from "./components/DiaryEntryCard";
 export type { DiaryEntryCardProps } from "./components/DiaryEntryCard";

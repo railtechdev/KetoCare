@@ -1,3 +1,4 @@
+import { mergeBySeq, nextAfterSeq } from "@ketocare/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../lib/api";
@@ -14,6 +15,8 @@ export interface AssistantMessage {
   /** Статьи, по которым дан ответ: на экране — их заголовки. */
   source_articles: { slug: string; title: string }[];
   blocked: boolean;
+  /** Отказ — исчерпанный предел: под ним нет «спросите врача». */
+  limited: boolean;
 }
 
 /**
@@ -57,8 +60,10 @@ export function useConversation(
   patientId: string,
   conversationId: string | null,
 ) {
+  const queryClient = useQueryClient();
+  const queryKey = ["assistant", conversationId];
   return useQuery({
-    queryKey: ["assistant", conversationId],
+    queryKey,
     enabled: conversationId !== null,
     refetchInterval: (query) => {
       const messages = (query.state.data ?? []) as AssistantMessage[];
@@ -66,7 +71,11 @@ export function useConversation(
         ? POLL_MS
         : false;
     },
+    // Дочитываются только новые сообщения (`nextAfterSeq` кита): опрос раз в
+    // 2,5 секунды перекачивал всю переписку, пока ждали ответа (П8).
     queryFn: async (): Promise<AssistantMessage[]> => {
+      const cached = queryClient.getQueryData<AssistantMessage[]>(queryKey);
+      const afterSeq = nextAfterSeq(cached);
       const { data, error } = await api.GET(
         "/api/v1/patients/{patient_id}/ai-conversations/{conversation_id}",
         {
@@ -75,12 +84,16 @@ export function useConversation(
               patient_id: patientId,
               conversation_id: conversationId ?? "",
             },
+            ...(afterSeq === undefined
+              ? {}
+              : { query: { after_seq: afterSeq } }),
           },
         },
       );
       if (error || !data)
         throw error ?? new Error("Empty conversation response");
-      return data.messages as AssistantMessage[];
+      const fresh = data.messages as AssistantMessage[];
+      return afterSeq === undefined ? fresh : mergeBySeq(cached, fresh);
     },
   });
 }
@@ -137,4 +150,47 @@ export function useCareTeam(patientId: string) {
       return data;
     },
   });
+}
+
+/**
+ * Статья базы знаний, на которую опирается ответ (П7): заголовок под ответом
+ * открывает её. Статьи меняются выкатом, а не на глазах, — час без перечитывания.
+ */
+export function useArticle(slug: string | null) {
+  return useQuery({
+    queryKey: ["kb-article", slug],
+    enabled: slug !== null,
+    staleTime: 60 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        "/api/v1/knowledge-base/articles/{slug}",
+        { params: { path: { slug: slug ?? "" } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty article response");
+      return data;
+    },
+  });
+}
+
+/**
+ * Телефон клиники для семьи — из бланка клиники (ADR-0092), если
+ * администратор его указал. Под отказом помощника и в «кто именно»: «о срочном
+ * звоните в клинику» без номера отсылало туда, куда семье нечем дозвониться.
+ *
+ * Не пришёл бланк — номера просто нет: строка «звоните в клинику» остаётся,
+ * ссылки не появляется. Повторять запрос ради необязательной строки незачем.
+ */
+export function useClinicPhone(): string | null {
+  const letterhead = useQuery({
+    queryKey: ["letterhead"],
+    staleTime: 10 * 60_000,
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/letterhead");
+      if (error || !data) throw error ?? new Error("Empty letterhead");
+      return data;
+    },
+  });
+  const phone = letterhead.data?.text?.family_phone?.trim();
+  return phone ? phone : null;
 }
