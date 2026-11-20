@@ -79,3 +79,47 @@ async def test_reply_names_articles_by_title(
     assert reply["source_articles"] == [{"slug": slug, "title": "Как составить день"}]
     # У вопроса семьи ссылок нет, но поле есть: экраны читают его у каждого.
     assert response.json()["messages"][0]["source_articles"] == []
+
+
+async def test_limit_refusal_is_told_apart(
+    client, session, make_user, make_patient, auth_headers, enqueued
+) -> None:
+    """`limited` reaches the screens.
+
+    Consumers: `refusalNextStep` in the kit, read by both assistant screens. A
+    spent limit gets no «ask the doctor» step; every other refusal does. A
+    message written before the field existed reads as `limited: false`.
+    """
+
+    parent = await make_user(UserRole.PARENT)
+    patient = await make_patient()
+    await patients_repo.link_parent(session, parent_id=parent.id, patient_id=patient.id)
+
+    accepted = await client.post(
+        "/api/v1/ai/assistant/messages",
+        json={"patient_id": str(patient.id), "text": "как поменять язык"},
+        headers=auth_headers(parent),
+    )
+    assert accepted.status_code == 202, accepted.text
+    conversation = await conversations_repo.get(
+        session, uuid.UUID(accepted.json()["conversation_id"])
+    )
+    assert conversation is not None
+    await conversations_repo.replace_message(
+        session,
+        conversation=conversation,
+        message=new_message(
+            seq=1, role="assistant", text="На сегодня хватит.", blocked=True, limited=True
+        ),
+    )
+    await session.flush()
+
+    response = await client.get(
+        f"/api/v1/patients/{patient.id}/ai-conversations/{conversation.id}",
+        headers=auth_headers(parent),
+    )
+
+    assert response.status_code == 200, response.text
+    question, reply = response.json()["messages"]
+    assert (reply["blocked"], reply["limited"]) == (True, True)
+    assert question["limited"] is False

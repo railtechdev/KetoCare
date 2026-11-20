@@ -482,20 +482,68 @@
     "conversation": "Suhbat",
     "ask": "So‘rash",
     "placeholder": "Masalan: ketonlarni qayerga yozish kerak",
-    "hint": "Yordamchi ilova materiallari bo‘yicha javob beradi. Materiallar hozircha faqat rus tilida, shuning uchun savolni ruscha yozsangiz, javob topilishi ehtimoli ko‘proq.",
+    "intro": "Yordamchi ilova qanday ishlashini tushuntiradi: nimani qayerga yozish va nimani qayerdan topish. Bolaning sog‘lig‘i haqida shifokordan so‘rang. Materiallar hozircha faqat rus tilida, shuning uchun savolni ruscha yozsangiz, javob topilishi ehtimoli ko‘proq.",
+    "startersTitle": "Masalan, so‘rang:",
+    "starters": {
+      "seizure": {
+        "label": "Xurujni qanday yozish kerak?",
+        "ask": "Как записать приступ?"
+      },
+      "menu": {
+        "label": "Kunlik menyuni qanday tuzish kerak?",
+        "ask": "Как составить меню на день?"
+      },
+      "fixEntry": {
+        "label": "Kundalikdagi yozuvni qanday tuzatish mumkin?",
+        "ask": "Как исправить запись в дневнике?"
+      },
+      "invite": {
+        "label": "Yaqinni qanday taklif qilish mumkin?",
+        "ask": "Как пригласить близкого?"
+      },
+      "reminders": {
+        "label": "Eslatmalarni qanday sozlash kerak?",
+        "ask": "Как настроить напоминания?"
+      },
+      "dishMismatch": {
+        "label": "Nega taom tayinlovga mos kelmayapti?",
+        "ask": "Почему блюдо не сходится с назначением?"
+      }
+    },
     "audience": {
-      "named": "Bu savollarni bolangizni olib boruvchi mutaxassislar ko‘radi: {{list}}. Ular xabarnoma olmaydi — shoshilinch masalalar bo‘yicha klinikaga qo‘ng‘iroq qiling.",
-      "roles": "Bu savollarni bolangizni olib boruvchi mutaxassislar — shifokor va dietolog ko‘radi. Ular xabarnoma olmaydi — shoshilinch masalalar bo‘yicha klinikaga qo‘ng‘iroq qiling.",
+      "summary": {
+        "both": "Savollarni shifokor va dietolog ko‘radi",
+        "doctor": "Savollarni shifokor ko‘radi",
+        "dietitian": "Savollarni dietolog ko‘radi"
+      },
+      "more": "Aynan kim",
+      "named": "Bular: {{list}}.",
+      "readBy": "Savollarni {{list}} o‘qiydi.",
+      "noAlerts": "Ular xabarnoma olmaydi — shoshilinch masalalar bo‘yicha klinikaga qo‘ng‘iroq qiling.",
       "role": {
         "doctor": "shifokor",
         "dietitian": "dietolog"
       }
     },
+    "clinicPhone": "Klinika telefoni:",
     "send": "So‘rash",
     "sending": "Yuborilmoqda…",
-    "empty": "Ilova qanday ishlashi haqida so‘rang: tayinlovni qayerda ko‘rish, yeyilganini qanday belgilash, o‘lchovni qanday yozish.",
-    "disclaimer": "Javob ilova materiallari asosida; u shifokor maslahatining o‘rnini bosmaydi.",
-    "sources": "Manba: {{list}}.",
+    "pending": "Yordamchi javob bermoqda…",
+    "disclaimer": "Shifokor maslahatining o‘rnini bosmaydi.",
+    "sources": "Manba:",
+    "retry": "Yana so‘rash",
+    "askDoctor": "Qabulda shifokordan so‘rang.",
+    "day": {
+      "today": "Bugun",
+      "yesterday": "Kecha"
+    },
+    "article": {
+      "loading": "Maqola yuklanmoqda",
+      "loadFailed": "Maqolani ochib bo‘lmadi",
+      "loadFailedHint": "Aloqani tekshirib, qaytaring.",
+      "close": "Yopish",
+      "gone": "Bu maqola ilova materiallarida endi yo‘q."
+    },
     "limited": "Bugun yordamchiga boshqa savol berib bo‘lmaydi — ertaga yana paydo bo‘ladi.",
     "sendFailed": "Savolni yuborib bo‘lmadi. Yana bir bor urinib ko‘ring.",
     "loadFailed": "Suhbatni yuklab bo‘lmadi",

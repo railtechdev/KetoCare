@@ -1,10 +1,18 @@
 import { onlineManager, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 
-import "../../lib/i18n";
+import { applyLanguage } from "../../lib/i18n";
 import { NetworkError } from "@ketocare/api-client";
 import { api } from "../../lib/api";
 import { createQueryClient } from "../../lib/queryClient";
@@ -96,8 +104,9 @@ describe("помощник в Mini App", () => {
     await ask(user);
 
     expect(
-      await screen.findByText(/Источник: Как записать кетоны\./),
+      await screen.findByRole("button", { name: "Как записать кетоны" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Источник:")).toBeInTheDocument();
     expect(screen.queryByText(/how-to-record-ketones/)).toBeNull();
   });
 
@@ -420,35 +429,726 @@ describe("помощник в Mini App", () => {
   });
 });
 
-describe("кто прочтёт вопрос (ADR-0022)", () => {
-  function withCareTeam(team: unknown) {
-    (api.GET as Mock).mockImplementation((path: string) =>
-      path.endsWith("/doctors")
-        ? Promise.resolve({ data: team })
-        : Promise.resolve({ data: { items: [], total: 0 } }),
-    );
+describe("кто прочтёт вопрос (ADR-0022, решение Р1)", () => {
+  function withCareTeam(team: unknown, phone: string | null = null) {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("/doctors")) return Promise.resolve({ data: team });
+      if (path === "/api/v1/letterhead") {
+        return Promise.resolve({
+          data: {
+            text:
+              phone === null
+                ? null
+                : {
+                    name_uz: "Klinika",
+                    short_name: "Клиника",
+                    family_phone: phone,
+                  },
+            logo: null,
+            fallback_name: "KetoCare",
+            updated_at: null,
+          },
+        });
+      }
+      return Promise.resolve({ data: { items: [], total: 0 } });
+    });
   }
 
-  it("называет специалистов, которые ведут ребёнка, по именам", async () => {
-    withCareTeam([
-      { id: "d1", role: "doctor", full_name: "Иванова Анна Сергеевна" },
-      { id: "d2", role: "dietitian", full_name: "Петров Борис" },
-    ]);
+  it("одной строкой называет роли тех, кто ведёт ребёнка", async () => {
+    withCareTeam([{ id: "d1", role: "doctor", full_name: "Иванова Анна" }]);
     renderScreen();
 
-    expect(
-      await screen.findByText(
-        /видят специалисты, которые ведут вашего ребёнка: Иванова Анна Сергеевна \(врач\) и Петров Борис \(диетолог\)/,
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Вопросы видит врач")).toBeInTheDocument();
   });
 
-  it("без имён говорит о ролях, а не молчит", async () => {
+  it("без имён называет обе роли, а не молчит", async () => {
     withCareTeam([]);
     renderScreen();
 
     expect(
-      await screen.findByText(/видят специалисты.*— врач и диетолог/),
+      await screen.findByText("Вопросы видят врач и диетолог"),
     ).toBeInTheDocument();
+  });
+
+  it("«Кто именно» раскрывает имена, «о срочном звоните» и телефон клиники", async () => {
+    withCareTeam(
+      [
+        { id: "d1", role: "doctor", full_name: "Иванова Анна Сергеевна" },
+        { id: "d2", role: "dietitian", full_name: "Петров Борис" },
+      ],
+      "+998 71 123-45-67",
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    const composer = (
+      await screen.findByRole("button", { name: "Кто именно" })
+    ).closest("form") as HTMLElement;
+    const names = await within(composer).findByText(
+      /Иванова Анна Сергеевна \(врач\) и Петров Борис \(диетолог\)/,
+    );
+    expect(names).not.toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Кто именно" }));
+
+    expect(names).toBeVisible();
+    expect(
+      within(composer).getByText(
+        /Уведомлений они не получают — о срочном звоните/,
+      ),
+    ).toBeVisible();
+    expect(
+      await within(composer).findByRole("link", { name: "+998 71 123-45-67" }),
+    ).toHaveAttribute("href", "tel:+998711234567");
+  });
+
+  it("на пустом экране имена, «о срочном звоните» и телефон видны без нажатий", async () => {
+    // Решение Р1: в раскрытии И на пустом экране. Семья с первым вопросом
+    // «Кто именно» ещё не нашла, а о срочном ей нужно знать до вопроса.
+    withCareTeam(
+      [{ id: "d1", role: "doctor", full_name: "Иванова Анна Сергеевна" }],
+      "+998 71 123-45-67",
+    );
+    renderScreen();
+
+    const starters = await screen.findByText("Например, спросите:");
+    const empty = starters.closest("div.flex-col")
+      ?.parentElement as HTMLElement;
+    expect(
+      await within(empty).findByText(
+        "Вопросы прочтут Иванова Анна Сергеевна (врач).",
+      ),
+    ).toBeVisible();
+    expect(
+      within(empty).getByText(
+        /Уведомлений они не получают — о срочном звоните/,
+      ),
+    ).toBeVisible();
+    expect(
+      await within(empty).findByRole("link", { name: "+998 71 123-45-67" }),
+    ).toBeVisible();
+  });
+
+  it("на пустом экране без имён называет роли", async () => {
+    withCareTeam([]);
+    renderScreen();
+
+    // Строка над полем и строка пустого экрана — обе о ролях.
+    await waitFor(() => {
+      expect(screen.getAllByText("Вопросы видят врач и диетолог")).toHaveLength(
+        2,
+      );
+    });
+  });
+});
+
+describe("переписка на телефоне (аудит Mini App 2026-11)", () => {
+  /** Ответы сервера по пути; переписка уже есть. */
+  function serve({
+    messages,
+    phone = null,
+    article,
+  }: {
+    messages: unknown[] | (() => unknown[]);
+    phone?: string | null;
+    article?: unknown;
+  }) {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("/ai-conversations")) {
+        return Promise.resolve({
+          data: { items: [{ id: CONVERSATION_ID }], total: 1 },
+        });
+      }
+      if (path.endsWith("/doctors")) return Promise.resolve({ data: [] });
+      if (path === "/api/v1/letterhead") {
+        return Promise.resolve({
+          data: {
+            text:
+              phone === null
+                ? null
+                : { name_uz: "K", short_name: "K", family_phone: phone },
+            logo: null,
+            fallback_name: "KetoCare",
+            updated_at: null,
+          },
+        });
+      }
+      if (path.startsWith("/api/v1/knowledge-base/")) {
+        return Promise.resolve(
+          article === undefined
+            ? { error: { error: { code: "internal", message: "сбой" } } }
+            : article === "gone"
+              ? { error: { error: { code: "not_found", message: "нет" } } }
+              : { data: article },
+        );
+      }
+      return Promise.resolve({
+        data: {
+          id: CONVERSATION_ID,
+          messages: typeof messages === "function" ? messages() : messages,
+        },
+      });
+    });
+  }
+
+  const QUESTION = message({
+    seq: 0,
+    role: "user",
+    text: "куда записать кетоны",
+    sources: [],
+    source_articles: [],
+  });
+
+  it("второго видимого заголовка «Разговор» нет — он только для чтения с экрана (П3)", async () => {
+    serve({ messages: [QUESTION, message({ seq: 1 })] });
+    renderScreen();
+
+    await screen.findByText("куда записать кетоны");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Помощник",
+    );
+    expect(screen.getByRole("heading", { name: "Разговор" })).toHaveClass(
+      "sr-only",
+    );
+  });
+
+  it("жирный из ответа — жирным, без звёздочек (П5)", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({ seq: 1, text: "**Важно:** кнопка «Кетоны» на главной." }),
+      ],
+    });
+    renderScreen();
+
+    const strong = await screen.findByText("Важно:");
+    expect(strong.tagName).toBe("STRONG");
+    expect(screen.queryByText(/\*\*/)).toBeNull();
+  });
+
+  it("ожидание ответа — словами «Помощник отвечает…» (П6)", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({ seq: 1, text: "", status: "pending", source_articles: [] }),
+      ],
+    });
+    renderScreen();
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Помощник отвечает…",
+    );
+  });
+
+  it("пока ждём ответ, дочитывает только новое — с места ожидания (П8)", async () => {
+    // Воркер кладёт ответ НА МЕСТО ожидания с тем же seq: чтение «после
+    // последнего» его бы не увидело.
+    let answered = false;
+    serve({
+      messages: () =>
+        answered
+          ? [message({ seq: 1, text: "Ответ пришёл." })]
+          : [
+              QUESTION,
+              message({
+                seq: 1,
+                text: "",
+                status: "pending",
+                source_articles: [],
+              }),
+            ],
+    });
+    renderScreen();
+
+    await screen.findByText("Помощник отвечает…");
+    answered = true;
+
+    expect(
+      await screen.findByText("Ответ пришёл.", {}, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    // Вопрос из первого чтения остался — ответ лёг рядом, а не вместо всего.
+    expect(screen.getByText("куда записать кетоны")).toBeInTheDocument();
+    const polls = (api.GET as Mock).mock.calls.filter(([path]) =>
+      (path as string).endsWith("/{conversation_id}"),
+    );
+    expect(polls.at(-1)?.[1]?.params?.query).toEqual({ after_seq: 0 });
+    expect(polls[0]?.[1]?.params?.query).toBeUndefined();
+  });
+
+  it("между днями — подпись дня (П8)", async () => {
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 86_400_000);
+    serve({
+      messages: [
+        message({
+          seq: 0,
+          role: "user",
+          text: "старый вопрос",
+          created_at: yesterday.toISOString(),
+          source_articles: [],
+        }),
+        message({ seq: 1, created_at: yesterday.toISOString() }),
+        message({
+          seq: 2,
+          role: "user",
+          text: "новый вопрос",
+          created_at: now.toISOString(),
+          source_articles: [],
+        }),
+        message({ seq: 3, created_at: now.toISOString() }),
+      ],
+    });
+    renderScreen();
+
+    await screen.findByText("новый вопрос");
+    expect(screen.getByText("Вчера")).toBeInTheDocument();
+    expect(screen.getByText("Сегодня")).toBeInTheDocument();
+  });
+
+  it("источник открывает статью панелью, текст статьи — без разметки (П7)", async () => {
+    serve({
+      messages: [QUESTION, message({ seq: 1 })],
+      article: {
+        slug: "how-to-record-ketones",
+        title: "Как записать кетоны",
+        kind: "product",
+        body_md: "## Где кнопка\n\nНа главной — **Кетоны**.",
+      },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Как записать кетоны" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("Кетоны")).toHaveProperty(
+      "tagName",
+      "STRONG",
+    );
+    expect(within(dialog).queryByText(/##/)).toBeNull();
+    expect(api.GET).toHaveBeenCalledWith(
+      "/api/v1/knowledge-base/articles/{slug}",
+      { params: { path: { slug: "how-to-record-ketones" } } },
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "Закрыть" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
+  it("не открылась статья — отказ с повтором", async () => {
+    serve({ messages: [QUESTION, message({ seq: 1 })] });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Как записать кетоны" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Не удалось открыть статью",
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("статьи больше нет — так и сказано, без «проверьте связь» и повтора", async () => {
+    serve({ messages: [QUESTION, message({ seq: 1 })], article: "gone" });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Как записать кетоны" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Этой статьи больше нет в материалах приложения.",
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Не удалось открыть статью")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Повторить" })).toBeNull();
+  });
+
+  it("оговорка под ответом — короткой строкой, под каждым ответом", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({ seq: 1 }),
+        message({ seq: 2, role: "user", text: "ещё", source_articles: [] }),
+        message({ seq: 3 }),
+      ],
+    });
+    renderScreen();
+
+    await screen.findByText("ещё");
+    expect(screen.getAllByText("Не заменяет консультацию врача.")).toHaveLength(
+      2,
+    );
+  });
+
+  it("отклонённый вопрос — своим видом, к врачу и телефон клиники (П4)", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Этот вопрос нужно обсудить с лечащим врачом.",
+          blocked: true,
+          source_articles: [],
+        }),
+      ],
+      phone: "+998 71 200-00-00",
+    });
+    const { container } = renderScreen();
+
+    await screen.findByText("Этот вопрос нужно обсудить с лечащим врачом.");
+    expect(container.querySelector('[data-refusal="true"]')).not.toBeNull();
+    expect(screen.getByText("Спросите врача на приёме.")).toBeInTheDocument();
+    const call = await screen.findByRole("link", { name: "+998 71 200-00-00" });
+    expect(call).toHaveAttribute("href", "tel:+998712000000");
+    expect(
+      screen.queryByRole("button", { name: "Спросить ещё раз" }),
+    ).toBeNull();
+  });
+
+  it("недоступность — «Спросить ещё раз» тем же вопросом и новым ключом (П4)", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Помощник сейчас недоступен.",
+          status: "failed",
+          source_articles: [],
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    const retry = await screen.findByRole("button", {
+      name: "Спросить ещё раз",
+    });
+    expect(screen.queryByText("Спросите врача на приёме.")).toBeNull();
+    await user.click(retry);
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(1);
+    });
+    const [, options] = (api.POST as Mock).mock.calls[0] ?? [];
+    expect(options.body).toEqual({
+      patient_id: SESSION.patientId,
+      conversation_id: CONVERSATION_ID,
+      text: "куда записать кетоны",
+    });
+    expect(options.params.header["Idempotency-Key"]).toMatch(KEY_FORMAT);
+  });
+
+  it("повтор после недоступности недоступен, пока исчерпан предел", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Помощник сейчас недоступен.",
+          status: "failed",
+          source_articles: [],
+        }),
+      ],
+    });
+    (api.POST as Mock).mockResolvedValue({
+      error: { error: { code: "rate_limited", message: "На сегодня хватит." } },
+      response: { status: 429 },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    const retry = await screen.findByRole("button", {
+      name: "Спросить ещё раз",
+    });
+    await user.click(retry);
+
+    await waitFor(() => {
+      expect(retry).toBeDisabled();
+    });
+  });
+  it("исчерпанный предел — без «спросите врача» и без телефона (П4)", async () => {
+    // Текст предела говорит «завтра»; совет к врачу отправил бы вопрос о
+    // приложении тому, кто на них не отвечает.
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Дневной лимит ИИ-помощника исчерпан. Он обновится завтра.",
+          blocked: true,
+          limited: true,
+          source_articles: [],
+        }),
+      ],
+      phone: "+998 71 200-00-00",
+    });
+    const { container } = renderScreen();
+
+    await screen.findByText(/Он обновится завтра/);
+    expect(container.querySelector('[data-refusal="true"]')).not.toBeNull();
+    expect(screen.queryByText("Спросите врача на приёме.")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Спросить ещё раз" }),
+    ).toBeNull();
+  });
+
+  it("телефон клиники — высотой в касание, а не в строку", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Этот вопрос нужно обсудить с лечащим врачом.",
+          blocked: true,
+          source_articles: [],
+        }),
+      ],
+      phone: "+998 71 200-00-00",
+    });
+    renderScreen();
+
+    const call = await screen.findByRole("link", { name: "+998 71 200-00-00" });
+    // `min-height` на строчной ссылке не действует — нужна блочная.
+    expect(call).toHaveClass("inline-flex", "min-h-touch");
+  });
+
+  it("панель статьи — с отступами безопасной зоны Telegram", async () => {
+    serve({
+      messages: [QUESTION, message({ seq: 1 })],
+      article: {
+        slug: "how-to-record-ketones",
+        title: "Как записать кетоны",
+        kind: "product",
+        body_md: "Текст.",
+      },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Как записать кетоны" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveClass("pt-(--safe-top,0px)", "pb-(--safe-bottom,0px)");
+  });
+});
+
+describe("прокрутка к концу переписки (П1)", () => {
+  const scroll = vi.fn();
+
+  beforeEach(() => {
+    scroll.mockReset();
+    Element.prototype.scrollIntoView = scroll;
+    // Поле вопроса — 120 px; длинный ответ — 1000 px, прочее — 60 px.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const height = this.textContent?.includes("Длинный ответ")
+          ? 1000
+          : this.querySelector("textarea") !== null &&
+              !this.textContent?.includes("куда записать кетоны")
+            ? 120
+            : 60;
+        return { height, width: 360, top: 0, left: 0 } as DOMRect;
+      },
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // @ts-expect-error — в jsdom прокрутки нет, заглушка снимается
+    delete Element.prototype.scrollIntoView;
+  });
+
+  function serveConversation(messages: () => unknown[]) {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("/ai-conversations")) {
+        return Promise.resolve({
+          data: { items: [{ id: CONVERSATION_ID }], total: 1 },
+        });
+      }
+      if (path.endsWith("/doctors")) return Promise.resolve({ data: [] });
+      if (path === "/api/v1/letterhead") {
+        return Promise.resolve({
+          data: {
+            text: null,
+            logo: null,
+            fallback_name: "K",
+            updated_at: null,
+          },
+        });
+      }
+      return Promise.resolve({
+        data: { id: CONVERSATION_ID, messages: messages() },
+      });
+    });
+  }
+
+  const QUESTION = message({
+    seq: 0,
+    role: "user",
+    text: "куда записать кетоны",
+    sources: [],
+    source_articles: [],
+  });
+
+  it("конец переписки встаёт над полем вопроса, а не под ним", async () => {
+    serveConversation(() => [QUESTION, message({ seq: 1 })]);
+    renderScreen();
+
+    await screen.findByText("Кетоны записываются кнопкой «Кетоны».");
+    await waitFor(() => {
+      expect(scroll).toHaveBeenCalledWith({ block: "end" });
+    });
+    const end = scroll.mock.contexts.at(-1) as HTMLElement;
+    // Высота поля и зазор: без них конец вставал на нижний край окна — под
+    // поле и полосу вкладок, и новый ответ приходилось искать пальцем.
+    expect(end.style.scrollMarginBottom).toBe("128px");
+  });
+
+  it("пришёл ответ — прокручивает к нему ещё раз", async () => {
+    let answered = false;
+    serveConversation(() =>
+      answered
+        ? [message({ seq: 1, text: "Ответ пришёл." })]
+        : [
+            QUESTION,
+            message({
+              seq: 1,
+              text: "",
+              status: "pending",
+              source_articles: [],
+            }),
+          ],
+    );
+    renderScreen();
+
+    await screen.findByText("Помощник отвечает…");
+    await waitFor(() => {
+      expect(scroll).toHaveBeenCalled();
+    });
+    const before = scroll.mock.calls.length;
+    answered = true;
+
+    await screen.findByText("Ответ пришёл.", {}, { timeout: 5000 });
+    await waitFor(() => {
+      expect(scroll.mock.calls.length).toBeGreaterThan(before);
+    });
+    expect(scroll.mock.calls.at(-1)).toEqual([{ block: "end" }]);
+  });
+
+  it("длинный ответ показывается с начала, а не с конца", async () => {
+    serveConversation(() => [
+      QUESTION,
+      message({ seq: 1, text: "Длинный ответ, выше экрана." }),
+    ]);
+    renderScreen();
+
+    await screen.findByText("Длинный ответ, выше экрана.");
+    await waitFor(() => {
+      expect(scroll).toHaveBeenCalledWith({ block: "start" });
+    });
+    const answer = scroll.mock.contexts.at(-1) as HTMLElement;
+    expect(answer).toHaveTextContent("Длинный ответ, выше экрана.");
+    expect(scroll).not.toHaveBeenCalledWith({ block: "end" });
+  });
+});
+
+describe("пустой экран: о чём спросить (П7, решение Р5)", () => {
+  beforeEach(() => {
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+  });
+
+  it("шесть готовых вопросов, нажатие сразу задаёт вопрос", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    expect(
+      await screen.findByText(/О здоровье ребёнка спрашивайте врача/),
+    ).toBeInTheDocument();
+    const starters = screen
+      .getByText("Например, спросите:")
+      .parentElement?.querySelectorAll("button");
+    expect(starters).toHaveLength(6);
+
+    await user.click(
+      screen.getByRole("button", { name: "Как записать приступ?" }),
+    );
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(1);
+    });
+    expect((api.POST as Mock).mock.calls[0]?.[1]?.body?.text).toBe(
+      "Как записать приступ?",
+    );
+  });
+
+  it("по-узбекски кнопка подписана по-узбекски, а вопрос уходит по-русски", async () => {
+    // База знаний русская: узбекский вопрос находил бы меньше.
+    applyLanguage("uz");
+    try {
+      const user = userEvent.setup();
+      renderScreen();
+
+      expect(await screen.findByText(/faqat rus tilida/)).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "Xurujni qanday yozish kerak?" }),
+      );
+
+      await waitFor(() => {
+        expect(api.POST).toHaveBeenCalledTimes(1);
+      });
+      expect((api.POST as Mock).mock.calls[0]?.[1]?.body?.text).toBe(
+        "Как записать приступ?",
+      );
+    } finally {
+      applyLanguage("ru");
+    }
+  });
+});
+
+describe("суточный предел вопросов", () => {
+  it("в полночь поле включается само", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 10, 20, 23, 59, 30));
+    try {
+      (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+      (api.POST as Mock).mockResolvedValue({
+        error: {
+          error: { code: "rate_limited", message: "На сегодня хватит." },
+        },
+        response: { status: 429 },
+      });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderScreen();
+
+      await ask(user);
+      await waitFor(() => {
+        expect(screen.getByLabelText(/куда записать кетоны/i)).toBeDisabled();
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/куда записать кетоны/i)).toBeEnabled();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

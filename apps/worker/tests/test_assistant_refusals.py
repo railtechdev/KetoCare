@@ -1,8 +1,8 @@
 """Отказ помощника со стороны поставщика (раздел 10.4 ТЗ, ADR-0022).
 
-Кабинет и Mini App не ставят подпись «Ответ по материалам приложения; он не
-заменяет консультацию врача» под отказом: ответа по материалам там не было, и
-утверждение о происхождении было бы ложным. Решают они это функцией `isRefusal`
+Кабинет и Mini App не ставят подпись «Не заменяет консультацию врача» под
+отказом: раздел 10.4 ТЗ требует её под каждым ОТВЕТОМ, а отказ ответом не
+является — он сам ведёт к врачу или говорит о службе. Решают они это функцией `isRefusal`
 в ките (`packages/ui/src/lib/assistantAnswer.ts`) по двум признакам — `blocked`
 и `status`.
 
@@ -140,6 +140,7 @@ class TestAssistantReplyMarksRefusals:
             "text": reply.text,
             "status": reply.status,
             "blocked": reply.blocked,
+            "limited": reply.limited,
             "sources": list(reply.sources),
         }
 
@@ -159,6 +160,7 @@ class TestAssistantReplyMarksRefusals:
 
         assert (reply["blocked"], reply["status"]) == (False, "done")
         assert reply["sources"] == ["how-to-record-ketones"]
+        assert reply["limited"] is False
 
     async def test_exhausted_limit_stays_marked(
         self, monkeypatch, sessionmaker, user_id, patient_id
@@ -167,8 +169,8 @@ class TestAssistantReplyMarksRefusals:
 
         Это единственное, что делает его отказом: текст приходит из исключения,
         и ничего в нём об отказе не говорит. «Причешут» инициализатор в `False`
-        — и под «на сегодня вопросов больше нет» вернётся подпись о том, что
-        это ответ по материалам приложения.
+        — и «на сегодня вопросов больше нет» станет выглядеть ответом, с
+        подписью под ним.
         """
 
         conversation_id = await self._conversation(sessionmaker, user_id, patient_id)
@@ -185,6 +187,9 @@ class TestAssistantReplyMarksRefusals:
         assert reply["blocked"] is True
         assert reply["text"] == "На сегодня вопросов к помощнику больше нет."
         assert reply["sources"] == []
+        # Screens put no «ask the doctor» step under a spent limit: the doctor
+        # does not answer app questions, and the text says «tomorrow».
+        assert reply["limited"] is True
 
     async def test_failure_is_marked_twice(
         self, monkeypatch, sessionmaker, user_id, patient_id
@@ -210,3 +215,4 @@ class TestAssistantReplyMarksRefusals:
         assert (reply["blocked"], reply["status"]) == (True, "failed")
         assert reply["text"] == ASSISTANT_UNAVAILABLE
         assert reply["sources"] == []
+        assert reply["limited"] is False

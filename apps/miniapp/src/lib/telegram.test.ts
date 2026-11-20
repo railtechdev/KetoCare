@@ -329,8 +329,15 @@ describe("возможности новее Bot API 6.0 (ADR-0075)", () => {
   it("клавиатура прячется методом 9.1, а в старом клиенте — снятием фокуса", async () => {
     const { app } = client("9.1");
     const module = await import("./telegram");
+    const field = document.createElement("textarea");
+    document.body.append(field);
+    field.focus();
     module.hideKeyboard();
     expect(app.hideKeyboard).toHaveBeenCalled();
+    // И в 9.1 фокус снимается: метод Telegram прячет только клавиатуру, а по
+    // фокусу экран помощника решает, вернуть ли полосу вкладок.
+    expect(document.activeElement).not.toBe(field);
+    field.remove();
 
     client("8.0");
     const input = document.createElement("input");

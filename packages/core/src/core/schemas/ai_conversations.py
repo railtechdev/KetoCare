@@ -49,6 +49,12 @@ class AssistantMessage(BaseModel):
     #: Ответ заменён шаблоном постфильтром — экран показывает его обычным
     #: сообщением, а не ошибкой: это ответ по существу, просто не тот.
     blocked: bool = False
+    #: The refusal is a spent limit or budget (`AiLimitExceeded`), not a
+    #: question for the doctor. Screens offer no next step under it: the text
+    #: already says the assistant is back tomorrow, and «ask the doctor» would
+    #: send an app question to someone who does not answer them. Always comes
+    #: with `blocked`.
+    limited: bool = False
 
     def dump(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
@@ -61,6 +67,7 @@ def new_message(
     text: str = "",
     status: Status = "done",
     blocked: bool = False,
+    limited: bool = False,
     sources: list[str] | None = None,
     ai_job_id: uuid.UUID | None = None,
 ) -> AssistantMessage:
@@ -72,6 +79,7 @@ def new_message(
         created_at=datetime.now(UTC),
         status=status,
         blocked=blocked,
+        limited=limited,
         sources=sources or [],
         ai_job_id=ai_job_id,
     )

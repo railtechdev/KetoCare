@@ -1,5 +1,5 @@
 import { onlineManager, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -297,8 +297,9 @@ describe("помощник в кабинете", () => {
     // Заголовок статьи, а не имя файла: «how-to-record-ketones» под ответом
     // читается как поломка.
     expect(
-      await screen.findByText(/Источник: Как записать кетоны/),
+      await screen.findByRole("button", { name: "Как записать кетоны" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Источник:")).toBeInTheDocument();
     expect(screen.queryByText(/how-to-record-ketones/)).not.toBeInTheDocument();
   });
 
@@ -437,37 +438,390 @@ describe("помощник в кабинете", () => {
   });
 });
 
-describe("кто прочтёт вопрос (ADR-0022)", () => {
-  function withCareTeam(team: unknown) {
-    (api.GET as Mock).mockImplementation((path: string) =>
-      path.endsWith("/doctors")
-        ? Promise.resolve({ data: team })
-        : Promise.resolve({ data: { items: [], total: 0 } }),
-    );
+describe("кто прочтёт вопрос (ADR-0022, решение Р1)", () => {
+  function withCareTeam(team: unknown, phone: string | null = null) {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("/doctors")) return Promise.resolve({ data: team });
+      if (path === "/api/v1/letterhead")
+        return Promise.resolve(letterhead(phone));
+      return Promise.resolve({ data: { items: [], total: 0 } });
+    });
   }
 
-  it("называет специалистов, которые ведут ребёнка, по именам", async () => {
-    withCareTeam([
-      { id: "d1", role: "doctor", full_name: "Иванова Анна Сергеевна" },
-      { id: "d2", role: "dietitian", full_name: "Петров Борис" },
-    ]);
+  it("одной строкой называет роли тех, кто ведёт ребёнка", async () => {
+    withCareTeam([{ id: "d2", role: "dietitian", full_name: "Петров Борис" }]);
     renderPage();
 
     expect(
-      await screen.findByText(
-        /видят специалисты, которые ведут вашего ребёнка: Иванова Анна Сергеевна \(врач\) и Петров Борис \(диетолог\)/,
-      ),
+      await screen.findByText("Вопросы видит диетолог"),
     ).toBeInTheDocument();
   });
 
-  it("без имён говорит о ролях, а не молчит", async () => {
+  it("без имён называет обе роли, а не молчит", async () => {
     // Список пуст или не пришёл — предупреждение остаётся: семья не должна
     // узнавать о читателе по тому, ответила ли ручка.
     withCareTeam([]);
     renderPage();
 
+    // Над полем и на пустом экране (Р1) — обе строки о ролях.
+    await waitFor(() => {
+      expect(screen.getAllByText("Вопросы видят врач и диетолог")).toHaveLength(
+        2,
+      );
+    });
+  });
+
+  it("«Кто именно» раскрывает имена, «о срочном звоните» и телефон клиники", async () => {
+    withCareTeam(
+      [
+        { id: "d1", role: "doctor", full_name: "Иванова Анна Сергеевна" },
+        { id: "d2", role: "dietitian", full_name: "Петров Борис" },
+      ],
+      "+998 71 123-45-67",
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    const composer = (
+      await screen.findByRole("button", { name: "Кто именно" })
+    ).closest("form") as HTMLElement;
+    const names = await within(composer).findByText(
+      /Иванова Анна Сергеевна \(врач\) и Петров Борис \(диетолог\)/,
+    );
+    expect(names).not.toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Кто именно" }));
+
+    expect(names).toBeVisible();
     expect(
-      await screen.findByText(/видят специалисты.*— врач и диетолог/),
+      within(composer).getByText(/о срочном звоните в клинику/),
+    ).toBeVisible();
+    expect(
+      await within(composer).findByRole("link", { name: "+998 71 123-45-67" }),
+    ).toHaveAttribute("href", "tel:+998711234567");
+  });
+
+  it("на пустом экране имена, «о срочном звоните» и телефон видны без нажатий", async () => {
+    // Решение Р1: в раскрытии И на пустом экране. Прежде здесь не было ни
+    // имён, ни слов о срочном — только «Пока вопросов не было».
+    withCareTeam(
+      [{ id: "d1", role: "doctor", full_name: "Иванова Анна Сергеевна" }],
+      "+998 71 123-45-67",
+    );
+    renderPage();
+
+    const starters = await screen.findByText("Например, спросите:");
+    const empty = starters.closest("div.flex-col")
+      ?.parentElement as HTMLElement;
+    expect(
+      await within(empty).findByText(
+        "Вопросы прочтут Иванова Анна Сергеевна (врач).",
+      ),
+    ).toBeVisible();
+    expect(
+      within(empty).getByText(/о срочном звоните в клинику/),
+    ).toBeVisible();
+    const call = await within(empty).findByRole("link", {
+      name: "+998 71 123-45-67",
+    });
+    expect(call).toBeVisible();
+    // Высотой в касание: `min-height` на строчной ссылке не действует.
+    expect(call).toHaveClass("inline-flex", "min-h-touch");
+  });
+});
+
+function letterhead(phone: string | null) {
+  return {
+    data: {
+      text:
+        phone === null
+          ? null
+          : { name_uz: "K", short_name: "K", family_phone: phone },
+      logo: null,
+      fallback_name: "KetoCare",
+      updated_at: null,
+    },
+  };
+}
+
+describe("переписка (аудит Mini App 2026-11 — общие части с кабинетом)", () => {
+  function serve({
+    messages,
+    phone = null,
+    article,
+  }: {
+    messages: unknown[] | (() => unknown[]);
+    phone?: string | null;
+    article?: unknown;
+  }) {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("/ai-conversations")) {
+        return Promise.resolve({
+          data: { items: [{ id: CONVERSATION_ID }], total: 1 },
+        });
+      }
+      if (path.endsWith("/doctors")) return Promise.resolve({ data: [] });
+      if (path === "/api/v1/letterhead")
+        return Promise.resolve(letterhead(phone));
+      if (path.startsWith("/api/v1/knowledge-base/")) {
+        return Promise.resolve(
+          article === undefined
+            ? { error: { error: { code: "internal", message: "сбой" } } }
+            : article === "gone"
+              ? { error: { error: { code: "not_found", message: "нет" } } }
+              : { data: article },
+        );
+      }
+      return Promise.resolve({
+        data: {
+          id: CONVERSATION_ID,
+          messages: typeof messages === "function" ? messages() : messages,
+        },
+      });
+    });
+  }
+
+  const QUESTION = message({
+    seq: 0,
+    role: "user",
+    text: "куда записать кетоны",
+    sources: [],
+    source_articles: [],
+  });
+
+  it("пустой экран — шесть готовых вопросов, нажатие сразу спрашивает", async () => {
+    (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
+    const user = userEvent.setup();
+    renderPage();
+
+    const title = await screen.findByText("Например, спросите:");
+    expect(title.parentElement?.querySelectorAll("button")).toHaveLength(6);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Почему блюдо не сходится с назначением?",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(1);
+    });
+    expect((api.POST as Mock).mock.calls[0]?.[1]?.body?.text).toBe(
+      "Почему блюдо не сходится с назначением?",
+    );
+  });
+
+  it("жирный из ответа — жирным, HTML — текстом", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "**Важно:** <img src=x onerror=alert(1)>",
+        }),
+      ],
+    });
+    const { container } = renderPage();
+
+    expect((await screen.findByText("Важно:")).tagName).toBe("STRONG");
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByText(/<img src=x/)).toBeInTheDocument();
+  });
+
+  it("ожидание — «Помощник отвечает…»", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({ seq: 1, text: "", status: "pending", source_articles: [] }),
+      ],
+    });
+    renderPage();
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Помощник отвечает…",
+    );
+  });
+
+  it("пока ждём ответ, дочитывает только новое — с места ожидания", async () => {
+    let answered = false;
+    serve({
+      messages: () =>
+        answered
+          ? [message({ seq: 1, text: "Ответ пришёл." })]
+          : [
+              QUESTION,
+              message({
+                seq: 1,
+                text: "",
+                status: "pending",
+                source_articles: [],
+              }),
+            ],
+    });
+    renderPage();
+
+    await screen.findByText("Помощник отвечает…");
+    answered = true;
+
+    expect(
+      await screen.findByText("Ответ пришёл.", {}, { timeout: 5000 }),
     ).toBeInTheDocument();
+    expect(screen.getByText("куда записать кетоны")).toBeInTheDocument();
+    const polls = (api.GET as Mock).mock.calls.filter(([path]) =>
+      (path as string).endsWith("/{conversation_id}"),
+    );
+    expect(polls.at(-1)?.[1]?.params?.query).toEqual({ after_seq: 0 });
+  });
+
+  it("между днями — подпись дня", async () => {
+    const now = new Date();
+    const old = new Date(2026, 0, 13, 12).toISOString();
+    serve({
+      messages: [
+        message({
+          seq: 0,
+          role: "user",
+          text: "старый вопрос",
+          created_at: old,
+          source_articles: [],
+        }),
+        message({ seq: 1, created_at: old }),
+        message({
+          seq: 2,
+          role: "user",
+          text: "новый вопрос",
+          created_at: now.toISOString(),
+          source_articles: [],
+        }),
+        message({ seq: 3, created_at: now.toISOString() }),
+      ],
+    });
+    renderPage();
+
+    await screen.findByText("новый вопрос");
+    expect(screen.getByText(/^13 января/)).toBeInTheDocument();
+    expect(screen.getByText("Сегодня")).toBeInTheDocument();
+  });
+
+  it("источник открывает статью панелью", async () => {
+    serve({
+      messages: [QUESTION, message({ seq: 1 })],
+      article: {
+        slug: "how-to-record-ketones",
+        title: "Как записать кетоны",
+        kind: "product",
+        body_md: "## Где кнопка\n\n1. Откройте дневник\n2. Нажмите **Кетоны**",
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Как записать кетоны" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText("Откройте дневник"),
+    ).toBeInTheDocument();
+    expect(within(dialog).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(dialog).queryByText(/##/)).toBeNull();
+  });
+
+  it("статьи больше нет — так и сказано, без повтора", async () => {
+    serve({ messages: [QUESTION, message({ seq: 1 })], article: "gone" });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Как записать кетоны" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText(
+        "Этой статьи больше нет в материалах приложения.",
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Повторить" }),
+    ).toBeNull();
+  });
+
+  it("отклонённый вопрос — к врачу на приёме и телефон клиники", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Этот вопрос нужно обсудить с лечащим врачом.",
+          blocked: true,
+          source_articles: [],
+        }),
+      ],
+      phone: "+998 71 200-00-00",
+    });
+    renderPage();
+
+    expect(
+      await screen.findByText("Спросите врача на приёме."),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("link", { name: "+998 71 200-00-00" }),
+    ).toHaveAttribute("href", "tel:+998712000000");
+  });
+
+  it("исчерпанный предел — без «спросите врача»", async () => {
+    // Текст предела говорит «завтра»; врач на вопросы о приложении не
+    // отвечает, и совет к нему был бы ложным шагом.
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Дневной лимит ИИ-помощника исчерпан. Он обновится завтра.",
+          blocked: true,
+          limited: true,
+          source_articles: [],
+        }),
+      ],
+      phone: "+998 71 200-00-00",
+    });
+    renderPage();
+
+    await screen.findByText(/Он обновится завтра/);
+    expect(screen.queryByText("Спросите врача на приёме.")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Спросить ещё раз" }),
+    ).toBeNull();
+  });
+
+  it("недоступность — «Спросить ещё раз» тем же вопросом и новым ключом", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Помощник сейчас недоступен.",
+          status: "failed",
+          source_articles: [],
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Спросить ещё раз" }),
+    );
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledTimes(1);
+    });
+    const [, options] = (api.POST as Mock).mock.calls[0] ?? [];
+    expect(options.body.text).toBe("куда записать кетоны");
+    expect(options.body.conversation_id).toBe(CONVERSATION_ID);
+    expect(options.params.header["Idempotency-Key"]).toMatch(KEY_FORMAT);
   });
 });

@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -139,3 +140,67 @@ async def titles_for(session: AsyncSession, slugs: list[str]) -> dict[str, str]:
         .distinct()
     )
     return {row.doc_slug: row.doc_title for row in rows}
+
+
+#: Separator between the article title and the section heading in
+#: `heading_path` — the one `knowledge.documents.split_article` writes.
+HEADING_SEPARATOR = " › "
+
+
+@dataclass(frozen=True, slots=True)
+class KbArticle:
+    """One article as the assistant read it: the indexed sections in order."""
+
+    slug: str
+    title: str
+    kind: str
+    body_md: str
+
+
+async def article(session: AsyncSession, slug: str) -> KbArticle | None:
+    """The article behind a source link under an assistant reply, or None.
+
+    Assembled from the index, not read from the file: the index is what the
+    assistant actually quoted, and a draft or withdrawn article — absent from
+    the index — is absent here too.
+    """
+
+    chunks = (
+        await session.scalars(select(KbChunk).where(KbChunk.doc_slug == slug).order_by(KbChunk.ord))
+    ).all()
+    if not chunks:
+        return None
+    first = chunks[0]
+    return KbArticle(
+        slug=first.doc_slug,
+        title=first.doc_title,
+        kind=first.kind,
+        body_md=_reassemble(first.doc_title, [(c.heading_path, c.body) for c in chunks]),
+    )
+
+
+def _reassemble(title: str, sections: list[tuple[str, str]]) -> str:
+    """Markdown of the article body from its sections, without the title.
+
+    The indexer cuts an article at its headings and keeps the heading as
+    `Title › Heading`; each section turns back into `## Heading` and its text.
+    The title itself (the file's H1) is left out: it travels as its own field
+    and the screen prints it as the page heading. A section whose path is the
+    bare title is an article without `##` sections: the indexer keeps its whole
+    body, H1 included, so the leading H1 line is dropped here — otherwise the
+    sheet showed the title twice. Articles use only `##` under the title, so
+    every heading is restored at that level.
+    """
+
+    prefix = f"{title}{HEADING_SEPARATOR}"
+    parts: list[str] = []
+    for heading_path, body in sections:
+        if heading_path.startswith(prefix):
+            parts.append(f"## {heading_path.removeprefix(prefix)}\n\n{body.strip()}")
+        else:
+            parts.append(_LEADING_H1.sub("", body.strip(), count=1).strip())
+    return "\n\n".join(part for part in parts if part)
+
+
+#: The file's H1 at the very start of a section body.
+_LEADING_H1 = re.compile(r"\A#[ \t]+[^\n]*(?:\n|\Z)")

@@ -1,27 +1,78 @@
 import {
   AsyncSection,
+  Button,
   ChatComposer,
+  ChatDayDivider,
   ChatMessage,
+  ChatSources,
+  ChatStarters,
+  ChatText,
+  FormSheet,
+  Skeleton,
+  chatAudienceRoles,
   chatReadersList,
+  cn,
   isRefusal,
-  Section,
+  refusalNextStep,
+  telHref,
+  useAttemptKey,
   useFrozenAttempt,
+  withChatDays,
+  type ChatSourceArticle,
 } from "@ketocare/ui";
-import { useContext, useEffect, useRef, useState } from "react";
+import { RotateCcw } from "lucide-react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { currentLanguage } from "../../lib/i18n";
+import { KeyboardContext } from "../../lib/keyboard";
 import { hideKeyboard } from "../../lib/telegram";
-import { TabVisibleContext, useUnsavedGuard } from "../../lib/useTelegram";
+import {
+  TabVisibleContext,
+  useTelegramBack,
+  useUnsavedGuard,
+} from "../../lib/useTelegram";
 import { today } from "../menu/useMenu";
 import type { Session } from "../session/useSession";
 import {
+  type AssistantMessage,
+  useArticle,
   useAskAssistant,
   useCareTeam,
+  useClinicPhone,
   useConversation,
   useLatestConversationId,
 } from "./useAssistant";
+
+/**
+ * Готовые вопросы на пустом экране (П7, решение Р5).
+ *
+ * Подпись кнопки — на языке экрана (`starters.<ключ>.label`), а уходит вопрос
+ * из ключа `starters.<ключ>.ask`, который по-русски в ОБОИХ словарях: база
+ * знаний помощника русская, и узбекский вопрос находил бы меньше. Перевести
+ * `ask` в узбекском словаре — значит сломать готовые вопросы узбекской семье.
+ */
+const STARTERS = [
+  "seizure",
+  "menu",
+  "fixEntry",
+  "invite",
+  "reminders",
+  "dishMismatch",
+] as const;
+
+/** Зазор между концом переписки и полем вопроса, px. */
+const END_GAP = 8;
 
 /**
  * Помощник семьи в Mini App (раздел 10.4 ТЗ, п. 20 этапа 4).
@@ -33,6 +84,10 @@ import {
  *
  * Ответ приходит не сразу (ADR-0022): экран дочитывает переписку, пока
  * «ожидание» не сменится ответом.
+ *
+ * Раскладка — для телефона (аудит Mini App 2026-11): переписка во всю ширину
+ * без карточки и второго видимого заголовка (П3), поле вопроса одной строкой
+ * прижато к низу (П2), а конец переписки всегда стоит НАД полем (П1).
  */
 export function AssistantScreen({ session }: { session: Session }) {
   const { t } = useTranslation();
@@ -41,6 +96,7 @@ export function AssistantScreen({ session }: { session: Session }) {
   const latest = useLatestConversationId(session.patientId);
   const conversationId = chosenId ?? latest.data ?? null;
   const [question, setQuestion] = useState("");
+  const [article, setArticle] = useState<ChatSourceArticle | null>(null);
 
   const conversation = useConversation(session.patientId, conversationId);
   const ask = useAskAssistant(session.patientId);
@@ -52,6 +108,7 @@ export function AssistantScreen({ session }: { session: Session }) {
     (role) => t(`assistant.audience.role.${role}`, { defaultValue: role }),
     currentLanguage() === "uz" ? "uz-Latn" : "ru",
   );
+  const phone = useClinicPhone();
 
   const messages = conversation.data ?? [];
   // Свежайший разговор не прочитан, а свой разговор человек не выбирал —
@@ -83,15 +140,101 @@ export function AssistantScreen({ session }: { session: Session }) {
     return () => clearTimeout(timer);
   }, [day, reset]);
 
-  // К последнему сообщению — когда приходит новое и когда вкладку открывают:
-  // ответ появлялся под всей перепиской, ниже первого экрана.
+  // Клавиатура: пока поле в фокусе на телефоне, полоса вкладок скрыта, и поле
+  // встаёт к нижнему краю. Ушли с вкладки — полоса возвращается.
   const visible = useContext(TabVisibleContext);
-  const endRef = useRef<HTMLDivElement>(null);
-  const lastKey = `${messages.length}:${messages.at(-1)?.status ?? ""}`;
+  const keyboard = useContext(KeyboardContext);
+  const { report } = keyboard;
   useEffect(() => {
+    if (!visible) report(false);
+  }, [visible, report]);
+  useEffect(() => () => report(false), [report]);
+
+  // Сколько места снизу занимает поле вопроса вместе с полосой вкладок под
+  // ним. Это поле прибавляется к концу переписки как `scroll-margin-bottom`:
+  // `scrollIntoView` ставил конец на нижний край окна — под поле и полосу,
+  // и новый ответ приходилось искать пальцем (П1).
+  const composerRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+  const lastRef = useRef<HTMLDivElement>(null);
+  const space = useRef(0);
+  const measure = useCallback(() => {
+    const composer = composerRef.current;
+    if (composer === null) return;
+    const offset = parseFloat(getComputedStyle(composer).bottom);
+    space.current =
+      composer.getBoundingClientRect().height +
+      (Number.isFinite(offset) ? offset : 0) +
+      END_GAP;
+    if (endRef.current !== null) {
+      endRef.current.style.scrollMarginBottom = `${space.current}px`;
+    }
+  }, []);
+  useLayoutEffect(() => {
+    measure();
+    const composer = composerRef.current;
+    if (composer === null || typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(composer);
+    return () => observer.disconnect();
+  }, [measure, keyboard.open]);
+
+  // К концу переписки — после вопроса, когда пришёл ответ и когда вкладку
+  // открывают. Длинный ответ, не влезающий над полем, показывается С НАЧАЛА:
+  // конец ответа без начала читать нечего.
+  const last = messages.at(-1);
+  const lastKey = `${messages.length}:${last?.status ?? ""}`;
+  useLayoutEffect(() => {
     if (!visible) return;
+    measure();
+    const answer = lastRef.current;
+    const room = window.innerHeight - space.current - END_GAP;
+    if (
+      last?.role === "assistant" &&
+      last.status !== "pending" &&
+      answer !== null &&
+      answer.getBoundingClientRect().height > room
+    ) {
+      answer.scrollIntoView?.({ block: "start" });
+      return;
+    }
     endRef.current?.scrollIntoView?.({ block: "end" });
-  }, [lastKey, visible]);
+    // `last` — по ключу: тот же ответ не должен прокручивать экран заново.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastKey, visible, measure]);
+
+  // Stay at the end while the conversation grows under the reader: the
+  // «дольше обычного» note and the answer replacing the wait change the
+  // height without a new message, and the end slid under the composer. Only
+  // when the end was in view — a parent reading older replies is not pulled.
+  const listRef = useRef<HTMLDivElement>(null);
+  const atEnd = useRef(true);
+  // The list mounts with the first message, after the loading skeleton.
+  const hasMessages = messages.length > 0;
+  useEffect(() => {
+    const onScroll = () => {
+      const end = endRef.current;
+      if (end === null) return;
+      atEnd.current =
+        end.getBoundingClientRect().top <=
+        window.innerHeight - space.current + END_GAP;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  useEffect(() => {
+    const list = listRef.current;
+    if (list === null || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (visible && atEnd.current) {
+        endRef.current?.scrollIntoView?.({ block: "end" });
+      }
+    });
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [visible, hasMessages]);
 
   // Разговор может быть ещё не прочитан: до отправки берётся свежайший, с
   // первой отправки — замороженный (`useFrozenAttempt`, ADR-0035).
@@ -117,11 +260,67 @@ export function AssistantScreen({ session }: { session: Session }) {
     );
   }
 
+  // Готовый вопрос уходит сразу, но тем же путём, что набранный: текст встаёт
+  // в поле, и отправка идёт со своим ключом попытки. Сорвалась — «Спросить»
+  // повторит её с тем же ключом, а не заведёт второй вопрос.
+  const [starter, setStarter] = useState<string | null>(null);
+  useEffect(() => {
+    if (starter === null || question !== starter) return;
+    setStarter(null);
+    send();
+    // `send` — новая функция на каждой отрисовке; запуск — по готовому тексту.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [starter, question]);
+  function pickStarter(key: string) {
+    const text = t(`assistant.starters.${key}.ask`);
+    setQuestion(text);
+    setStarter(text);
+  }
+
+  // «Спросить ещё раз» после недоступности — тот же вопрос НОВОЙ попыткой:
+  // прежняя на сервере удалась (вопрос записан, ответа не было), и её ключ
+  // вернул бы прежний отказ. Ключ один на отказ: повтор после потерянного
+  // ответа не задаст вопрос дважды.
+  const failed =
+    last?.role === "assistant" && last.status === "failed" ? last : undefined;
+  const failedQuestion = failed
+    ? questionBefore(messages, failed.seq)
+    : undefined;
+  const retryKey = useAttemptKey(failed?.id ?? "");
+  function retry() {
+    if (failedQuestion === undefined || conversationId === null) return;
+    ask.mutate({
+      text: failedQuestion.text,
+      conversationId,
+      idempotencyKey: retryKey,
+    });
+  }
+
+  const phoneLink = <ClinicPhone phone={phone} />;
+  const rolesSummary = t(
+    `assistant.audience.summary.${chatAudienceRoles(careTeam.data)}`,
+  );
+  const rows = withChatDays(
+    messages,
+    (message) => new Date(message.created_at),
+    new Date(),
+    {
+      today: t("assistant.day.today"),
+      yesterday: t("assistant.day.yesterday"),
+    },
+  );
+  const conversationTitle = useId();
+
   return (
     <main className="flex flex-col gap-section p-section">
       <h1 className="text-page-title">{t("assistant.title")}</h1>
 
-      <Section title={t("assistant.conversation")} density="compact">
+      {/* Без карточки и без видимого второго заголовка (П3): переписка — это
+          и есть экран. Заголовок остаётся для программы чтения с экрана. */}
+      <section aria-labelledby={conversationTitle} className="flex flex-col">
+        <h2 id={conversationTitle} className="sr-only">
+          {t("assistant.conversation")}
+        </h2>
         <AsyncSection
           loading={
             latest.isPending ||
@@ -151,82 +350,322 @@ export function AssistantScreen({ session }: { session: Session }) {
           }}
           isEmpty={messages.length === 0}
           empty={
-            <p className="text-muted-foreground">{t("assistant.empty")}</p>
+            <div className="flex flex-col gap-section">
+              <div className="flex flex-col gap-2 text-muted-foreground">
+                <p className="m-0">{t("assistant.intro")}</p>
+                {/* Кто прочтёт и куда звонить о срочном — на пустом экране
+                    целиком, а не только по «Кто именно» (решение Р1): тот,
+                    кто пришёл с первым вопросом, раскрытие ещё не нашёл. */}
+                <AudienceNote
+                  readers={readers}
+                  rolesSummary={rolesSummary}
+                  phoneLink={phoneLink}
+                />
+              </div>
+              <ChatStarters
+                title={t("assistant.startersTitle")}
+                items={STARTERS.map((key) => ({
+                  key,
+                  label: t(`assistant.starters.${key}.label`),
+                }))}
+                onPick={pickStarter}
+                disabled={ask.isPending || limited}
+              />
+            </div>
           }
         >
-          <div className="flex flex-col gap-field">
-            {messages.map((message) => (
-              <ChatMessage
+          <div ref={listRef} className="flex flex-col gap-field">
+            {rows.map(({ item: message, day: dayLabel }, index) => (
+              <div
                 key={message.id}
-                {...(message.role === "assistant"
-                  ? {
-                      role: "assistant" as const,
-                      note: (
-                        <>
-                          {t("assistant.disclaimer")}
-                          {/* Заголовки статей, а не имена файлов:
-                              «how-to-plan-the-day» читается как поломка. */}
-                          {message.source_articles.length > 0 && (
-                            <>
-                              {" "}
-                              {t("assistant.sources", {
-                                list: message.source_articles
-                                  .map((article) => article.title)
-                                  .join(", "),
-                              })}
-                            </>
-                          )}
-                        </>
-                      ),
-                    }
-                  : { role: "user" as const })}
-                pending={message.status === "pending"}
-                // Ответа нет дольше обычного — сказать словами, а не ждать
-                // молча: при остановленном обработчике ожидание шло бы вечно.
-                slowNote={t("assistant.slow")}
-                pendingSince={new Date(message.created_at)}
-                refusal={isRefusal(message)}
+                ref={index === rows.length - 1 ? lastRef : undefined}
+                className="flex scroll-mt-2 flex-col gap-field"
               >
-                {message.text}
-              </ChatMessage>
+                {dayLabel !== null && (
+                  <ChatDayDivider>{dayLabel}</ChatDayDivider>
+                )}
+                <ChatMessage
+                  {...(message.role === "assistant"
+                    ? {
+                        role: "assistant" as const,
+                        note: t("assistant.disclaimer"),
+                        // Заголовки статей, а не имена файлов:
+                        // «how-to-plan-the-day» читается как поломка.
+                        sources: (
+                          <ChatSources
+                            label={t("assistant.sources")}
+                            articles={message.source_articles}
+                            onOpen={setArticle}
+                          />
+                        ),
+                      }
+                    : { role: "user" as const })}
+                  pending={message.status === "pending"}
+                  pendingLabel={t("assistant.pending")}
+                  // Ответа нет дольше обычного — сказать словами, а не ждать
+                  // молча: при остановленном обработчике ожидание шло бы вечно.
+                  slowNote={t("assistant.slow")}
+                  pendingSince={new Date(message.created_at)}
+                  refusal={message.role === "assistant" && isRefusal(message)}
+                  nextStep={
+                    <RefusalStep
+                      message={message}
+                      retryable={
+                        message === failed && failedQuestion !== undefined
+                      }
+                      onRetry={retry}
+                      retryDisabled={ask.isPending || limited}
+                      phoneLink={phoneLink}
+                    />
+                  }
+                >
+                  {message.text}
+                </ChatMessage>
+              </div>
             ))}
-            <div ref={endRef} />
+            <div ref={endRef} aria-hidden="true" />
           </div>
         </AsyncSection>
-      </Section>
+      </section>
 
       {/* Поле вопроса — прижато к низу экрана над полосой вкладок, а не под
-          всей перепиской: в длинном разговоре до него было не долистать. */}
-      <div className="sticky bottom-[calc(4rem+var(--safe-bottom,0px))] z-10 -mx-section bg-background px-section pt-field pb-field">
-        <Section title={t("assistant.ask")} titleHidden density="compact">
-          <ChatComposer
-            value={question}
-            onChange={setQuestion}
-            onSubmit={send}
-            placeholder={t("assistant.placeholder")}
-            sendLabel={t("assistant.send")}
-            sendingLabel={t("assistant.sending")}
-            hint={t("assistant.hint")}
-            audience={
-              readers === null
-                ? t("assistant.audience.roles")
-                : t("assistant.audience.named", { list: readers })
-            }
-            pending={ask.isPending}
-            disabled={limited}
-          />
-          {limited && (
-            <p role="status" className="text-warning-strong">
-              {errorMessageOf(ask.error) ?? t("assistant.limited")}
-            </p>
-          )}
-          {ask.isError && !limited && (
-            <p role="alert" className="text-destructive">
-              {errorMessageOf(ask.error) ?? t("assistant.sendFailed")}
-            </p>
-          )}
-        </Section>
+          всей перепиской: в длинном разговоре до него было не долистать. С
+          открытой клавиатурой полосы нет, и поле встаёт к самому низу. */}
+      <div
+        ref={composerRef}
+        className={cn(
+          "sticky z-10 -mx-section mt-auto bg-background px-section py-2",
+          keyboard.open
+            ? "bottom-[var(--safe-bottom,0px)]"
+            : "bottom-[calc(4rem+var(--safe-bottom,0px))]",
+        )}
+      >
+        <h2 className="sr-only">{t("assistant.ask")}</h2>
+        <ChatComposer
+          value={question}
+          onChange={setQuestion}
+          onSubmit={send}
+          onFocusChange={report}
+          placeholder={t("assistant.placeholder")}
+          sendLabel={t("assistant.send")}
+          sendingLabel={t("assistant.sending")}
+          audience={{
+            summary: rolesSummary,
+            detailsLabel: t("assistant.audience.more"),
+            details: (
+              <>
+                {readers !== null && (
+                  <p className="m-0">
+                    {t("assistant.audience.named", { list: readers })}
+                  </p>
+                )}
+                <p className="m-0">{t("assistant.audience.noAlerts")}</p>
+                {phoneLink}
+              </>
+            ),
+          }}
+          pending={ask.isPending}
+          disabled={limited}
+        />
+        {limited && (
+          <p role="status" className="m-0 text-sm text-warning-strong">
+            {errorMessageOf(ask.error) ?? t("assistant.limited")}
+          </p>
+        )}
+        {ask.isError && !limited && (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {errorMessageOf(ask.error) ?? t("assistant.sendFailed")}
+          </p>
+        )}
       </div>
+
+      <ArticleSheet article={article} onClose={() => setArticle(null)} />
     </main>
+  );
+}
+
+/** The family's question the answer under `seq` replied to. */
+function questionBefore(
+  messages: readonly AssistantMessage[],
+  seq: number,
+): AssistantMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message !== undefined && message.role === "user" && message.seq < seq) {
+      return message;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Кто прочтёт вопрос и что делать о срочном — для пустого экрана (Р1).
+ *
+ * Имена, когда они известны, иначе роли: молчать о том, что вопрос прочтут,
+ * нельзя ни в одном состоянии.
+ */
+function AudienceNote({
+  readers,
+  rolesSummary,
+  phoneLink,
+}: {
+  readers: string | null;
+  rolesSummary: string;
+  phoneLink: ReactNode;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <p className="m-0">
+        {readers === null
+          ? rolesSummary
+          : t("assistant.audience.readBy", { list: readers })}
+      </p>
+      <p className="m-0">{t("assistant.audience.noAlerts")}</p>
+      {phoneLink}
+    </>
+  );
+}
+
+/**
+ * «Телефон клиники: +998 …» — ссылкой для звонка; без номера — ничего.
+ *
+ * Ссылка — блок высотой в касание: строчная ссылка была высотой в строку
+ * (около 20 px), и `min-height` базовой темы на строчный элемент не действует.
+ * А это главный следующий шаг под отказом (П4).
+ */
+function ClinicPhone({ phone }: { phone: string | null }) {
+  const { t } = useTranslation();
+  const href = telHref(phone);
+  if (phone === null || href === null) return null;
+  return (
+    <p className="m-0 flex flex-wrap items-center gap-x-1">
+      {t("assistant.clinicPhone")}
+      <a
+        href={href}
+        className="inline-flex min-h-touch items-center font-medium whitespace-nowrap text-primary underline underline-offset-2"
+      >
+        {phone}
+      </a>
+    </p>
+  );
+}
+
+/**
+ * Что делать после отказа (П4), по правилу кита `refusalNextStep`. Помощник
+ * недоступен — «Спросить ещё раз» у последнего такого отказа. Вопрос отклонён
+ * — к врачу на приёме и телефон клиники, если он задан. Исчерпан предел —
+ * ничего: текст сам говорит «завтра», а врач на вопросы о приложении не
+ * отвечает.
+ */
+function RefusalStep({
+  message,
+  retryable,
+  onRetry,
+  retryDisabled,
+  phoneLink,
+}: {
+  message: AssistantMessage;
+  retryable: boolean;
+  onRetry: () => void;
+  retryDisabled: boolean;
+  phoneLink: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const step = refusalNextStep(message);
+  if (step === null || step === "none") return null;
+  if (step === "retry") {
+    if (!retryable) return null;
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-touch self-start"
+        disabled={retryDisabled}
+        onClick={onRetry}
+      >
+        <RotateCcw aria-hidden="true" />
+        {t("assistant.retry")}
+      </Button>
+    );
+  }
+  return (
+    <>
+      <p className="m-0">{t("assistant.askDoctor")}</p>
+      {phoneLink}
+    </>
+  );
+}
+
+/**
+ * Статья, на которую опирается ответ, — панелью поверх переписки. «Назад»
+ * Telegram закрывает её, как любое вложенное состояние.
+ */
+function ArticleSheet({
+  article,
+  onClose,
+}: {
+  article: ChatSourceArticle | null;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const query = useArticle(article?.slug ?? null);
+  useTelegramBack(article === null ? null : onClose);
+
+  return (
+    <FormSheet
+      open={article !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={query.data?.title ?? article?.title ?? ""}
+      closeLabel={t("assistant.article.close")}
+      // Панель рисуется вне полей страницы: во весь экран Telegram шапка и
+      // полоса «домой» закрыли бы её заголовок, крестик и последние строки.
+      className="pt-(--safe-top,0px) pb-(--safe-bottom,0px)"
+    >
+      {errorCodeOf(query.error) === "not_found" ? (
+        // The article left the knowledge base after the answer was given:
+        // «check the connection» and «Повторить» would send the parent after
+        // a network that works and a retry that never helps.
+        <p role="status" className="m-0">
+          {t("assistant.article.gone")}
+        </p>
+      ) : (
+        <AsyncSection
+          loading={query.isPending}
+          skeleton={
+            <div
+              role="status"
+              aria-label={t("assistant.article.loading")}
+              className="flex flex-col gap-2"
+            >
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          }
+          error={
+            query.isError
+              ? {
+                  title: t("assistant.article.loadFailed"),
+                  description: t("assistant.article.loadFailedHint"),
+                }
+              : null
+          }
+          waiting={
+            query.fetchStatus === "paused"
+              ? t("errors.waitingForNetwork")
+              : null
+          }
+          retryLabel={t("actions.retry")}
+          onRetry={() => void query.refetch()}
+          isEmpty={query.data === undefined}
+          empty={null}
+        >
+          {query.data !== undefined && <ChatText text={query.data.body_md} />}
+        </AsyncSection>
+      )}
+    </FormSheet>
   );
 }

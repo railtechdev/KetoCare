@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -251,5 +257,112 @@ describe("запуск с параметром (ADR-0075)", () => {
     renderScreens({ launch: { tab: "today", view: "menu" } });
 
     expect(tab("Сегодня")).toHaveAttribute("aria-current", "page");
+  });
+});
+
+describe("клавиатура над полем вопроса помощнику (аудит 2026-11, П2)", () => {
+  function pointer(kind: "coarse" | "fine") {
+    const original = window.matchMedia;
+    window.matchMedia = (query: string) =>
+      ({
+        matches: query === `(pointer: ${kind})`,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList;
+    return () => {
+      window.matchMedia = original;
+    };
+  }
+
+  it("на телефоне полоса вкладок уходит, пока поле в фокусе, и возвращается", async () => {
+    const restore = pointer("coarse");
+    try {
+      renderScreens({ launch: { tab: "assistant" } });
+      const field = await screen.findByLabelText(
+        /куда записать кетоны/i,
+        {},
+        { timeout: 5000 },
+      );
+      const nav = document.querySelector("nav");
+      expect(nav).toBeVisible();
+
+      fireEvent.focus(field);
+      expect(nav).not.toBeVisible();
+      // Поле — к нижнему краю, а не над пропавшей полосой.
+      expect(field.closest(".sticky")?.className).toContain(
+        "bottom-[var(--safe-bottom,0px)]",
+      );
+
+      fireEvent.blur(field);
+      // Потеря фокуса сообщается после касания, следующей задачей.
+      await waitFor(() => {
+        expect(nav).toBeVisible();
+      });
+      expect(field.closest(".sticky")?.className).toContain(
+        "bottom-[calc(4rem+var(--safe-bottom,0px))]",
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it("касание «Спросить» с открытой клавиатурой отправляет вопрос с первого раза", async () => {
+    // На Android касание кнопки уводит фокус с поля на mousedown. Пока
+    // потеря фокуса сообщалась сразу, полоса вкладок возвращалась и поле
+    // уезжало на 4rem вверх до mouseup — щелчок попадал в полосу, и вопрос не
+    // уходил. Раскладка обязана стоять до конца касания.
+    const restore = pointer("coarse");
+    try {
+      renderScreens({ launch: { tab: "assistant" } });
+      const field = await screen.findByLabelText(
+        /куда записать кетоны/i,
+        {},
+        { timeout: 5000 },
+      );
+      fireEvent.focus(field);
+      fireEvent.change(field, { target: { value: "куда записать вес" } });
+      const nav = document.querySelector("nav");
+      const composer = field.closest(".sticky");
+      const send = screen.getByRole("button", { name: "Спросить" });
+
+      fireEvent.mouseDown(send);
+      fireEvent.blur(field, { relatedTarget: send });
+      fireEvent.mouseUp(send);
+      expect(nav).not.toBeVisible();
+      expect(composer?.className).toContain("bottom-[var(--safe-bottom,0px)]");
+      fireEvent.click(send);
+
+      await waitFor(() => {
+        expect(api.POST).toHaveBeenCalledWith(
+          "/api/v1/ai/assistant/messages",
+          expect.objectContaining({
+            body: expect.objectContaining({ text: "куда записать вес" }),
+          }),
+        );
+      });
+      // Касание закончилось — полоса возвращается.
+      await waitFor(() => {
+        expect(nav).toBeVisible();
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it("с мышью экранной клавиатуры нет — полоса остаётся", async () => {
+    const restore = pointer("fine");
+    try {
+      renderScreens({ launch: { tab: "assistant" } });
+      const field = await screen.findByLabelText(
+        /куда записать кетоны/i,
+        {},
+        { timeout: 5000 },
+      );
+
+      fireEvent.focus(field);
+      expect(document.querySelector("nav")).toBeVisible();
+    } finally {
+      restore();
+    }
   });
 });

@@ -14,6 +14,9 @@ import type { LucideIcon } from "lucide-react";
  *
  * Высота полосы постоянная — 4rem: к ней прижимается поле вопроса помощнику
  * (`sticky` над полосой), и плавающая высота сдвигала бы его.
+ *
+ * `hidden` — пока открыта клавиатура над полем вопроса (`lib/keyboard.ts`):
+ * полоса уходит целиком, а поле встаёт к нижнему краю.
  */
 export interface TabBarItem<T extends string> {
   id: T;
@@ -25,13 +28,18 @@ export function TabBar<T extends string>({
   items,
   active,
   onSelect,
+  hidden = false,
 }: {
   items: readonly TabBarItem<T>[];
   active: T;
   onSelect: (id: T) => void;
+  hidden?: boolean;
 }) {
   return (
-    <nav className="sticky bottom-0 z-20 border-t border-border bg-card/95 pb-[var(--safe-bottom,0px)] backdrop-blur-xs">
+    <nav
+      hidden={hidden}
+      className="sticky bottom-0 z-20 border-t border-border bg-card/95 pb-[var(--safe-bottom,0px)] backdrop-blur-xs"
+    >
       <ul className="flex">
         {items.map(({ id, label, icon: Icon }) => (
           <li key={id} className="flex-1">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isRefusal } from "./assistantAnswer";
+import { isRefusal, refusalNextStep } from "./assistantAnswer";
 
 describe("isRefusal", () => {
   it("настоящий ответ отказом не считается", () => {
@@ -24,5 +24,29 @@ describe("isRefusal", () => {
     // Под ожиданием подпись скрывает сам `ChatMessage`, и путать эти два
     // состояния нельзя: ответ ещё может прийти.
     expect(isRefusal({ status: "pending", blocked: false })).toBe(false);
+  });
+});
+
+describe("refusalNextStep", () => {
+  it("у ответа шага нет", () => {
+    expect(refusalNextStep({ status: "done", blocked: false })).toBeNull();
+    expect(refusalNextStep({ status: "pending" })).toBeNull();
+  });
+
+  it("отклонённый вопрос — к врачу", () => {
+    expect(refusalNextStep({ status: "done", blocked: true })).toBe("doctor");
+  });
+
+  it("недоступность — повтор, с признаком и без", () => {
+    expect(refusalNextStep({ status: "failed" })).toBe("retry");
+    expect(refusalNextStep({ status: "failed", blocked: true })).toBe("retry");
+  });
+
+  it("исчерпанный предел — без «спросите врача»", () => {
+    // Текст предела говорит «завтра»; врач на вопросы о приложении не
+    // отвечает, и совет к нему здесь был бы ложным шагом.
+    expect(
+      refusalNextStep({ status: "done", blocked: true, limited: true }),
+    ).toBe("none");
   });
 });

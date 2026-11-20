@@ -37,6 +37,7 @@ import {
   rememberedCloudTab,
   rememberedTab,
 } from "./lib/tabs";
+import { KeyboardContext, useKeyboardState } from "./lib/keyboard";
 import { TabVisibleContext, useSettingsButton } from "./lib/useTelegram";
 
 /**
@@ -210,6 +211,9 @@ export function Screens({
     });
   }, []);
   useSettingsButton(() => openSettings());
+  // Пока поле вопроса помощнику в фокусе на телефоне, полоса вкладок уходит:
+  // открытая клавиатура и так оставляет переписке мало места (П2).
+  const keyboard = useKeyboardState();
 
   const navigate = useCallback(
     (target: LaunchTarget) => {
@@ -241,48 +245,57 @@ export function Screens({
   );
 
   return (
-    <NavigateContext value={navigate}>
-      {settings !== null && (
-        <SettingsScreen
-          session={session}
-          section={settings.section}
-          onClose={closeSettings}
-        />
-      )}
-      <div hidden={settings !== null} className="flex flex-1 flex-col">
-        <ChildSwitcher
-          session={session}
-          onSwitch={onSwitchChild}
-          onOpenSettings={() => openSettings()}
-        />
-        <div className="flex-1">
-          {/* Пока чанк вкладки едет — скелетон, а не пустота: в Telegram
+    <KeyboardContext value={keyboard}>
+      <NavigateContext value={navigate}>
+        {settings !== null && (
+          <SettingsScreen
+            session={session}
+            section={settings.section}
+            onClose={closeSettings}
+          />
+        )}
+        <div hidden={settings !== null} className="flex flex-1 flex-col">
+          <ChildSwitcher
+            session={session}
+            onSwitch={onSwitchChild}
+            onOpenSettings={() => openSettings()}
+          />
+          <div className="flex-1">
+            {/* Пока чанк вкладки едет — скелетон, а не пустота: в Telegram
               приложение открывается поверх чата, и мигание пустым экраном
               читается как «не загрузилось». */}
-          {TAB_ORDER.filter((id) => visited.has(id)).map((id) => (
-            // `hidden` убирает скрытую вкладку и из дерева доступности: её
-            // заголовок и поля не мешают программе чтения с экрана.
-            <div key={id} hidden={id !== tab} data-tab={id}>
-              <TabVisibleContext value={id === tab && settings === null}>
-                {/* Своя граница ожидания у каждой вкладки: чанк новой
+            {TAB_ORDER.filter((id) => visited.has(id)).map((id) => (
+              // `hidden` убирает скрытую вкладку и из дерева доступности: её
+              // заголовок и поля не мешают программе чтения с экрана.
+              <div key={id} hidden={id !== tab} data-tab={id}>
+                <TabVisibleContext value={id === tab && settings === null}>
+                  {/* Своя граница ожидания у каждой вкладки: чанк новой
                     вкладки не должен прятать уже открытые за скелетоном. */}
-                <Suspense fallback={<TabSkeleton />}>
-                  {id === "today" && (
-                    <TodayScreen session={session} request={todayRequest} />
-                  )}
-                  {id === "diary" && (
-                    <DiaryScreen session={session} request={diaryRequest} />
-                  )}
-                  {id === "dishes" && <DishesScreen session={session} />}
-                  {id === "assistant" && <AssistantScreen session={session} />}
-                </Suspense>
-              </TabVisibleContext>
-            </div>
-          ))}
+                  <Suspense fallback={<TabSkeleton />}>
+                    {id === "today" && (
+                      <TodayScreen session={session} request={todayRequest} />
+                    )}
+                    {id === "diary" && (
+                      <DiaryScreen session={session} request={diaryRequest} />
+                    )}
+                    {id === "dishes" && <DishesScreen session={session} />}
+                    {id === "assistant" && (
+                      <AssistantScreen session={session} />
+                    )}
+                  </Suspense>
+                </TabVisibleContext>
+              </div>
+            ))}
+          </div>
+          <TabBar
+            items={tabs}
+            active={tab}
+            onSelect={select}
+            hidden={keyboard.open}
+          />
         </div>
-        <TabBar items={tabs} active={tab} onSelect={select} />
-      </div>
-    </NavigateContext>
+      </NavigateContext>
+    </KeyboardContext>
   );
 }
 
