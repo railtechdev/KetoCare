@@ -9,6 +9,7 @@ import {
   formatNumber,
   formatOccurredAt,
   formatDayTime,
+  formatTime,
   formatDayMonth,
   formatRatio,
   formatWeight,
@@ -33,6 +34,22 @@ describe("formatDayTime", () => {
   it("день, месяц и время — без года", () => {
     const formatted = formatDayTime(new Date(2026, 9, 5, 14, 30));
     expect(formatted).toBe("05.10, 14:30");
+  });
+});
+
+describe("formatTime", () => {
+  it("только часы и минуты — день назван заголовком над строкой", () => {
+    expect(formatTime(new Date(2026, 10, 13, 10, 56))).toBe("10:56");
+    expect(formatTime(new Date(2026, 10, 13, 8, 5))).toBe("08:05");
+  });
+
+  it("и на узбекском экране — через двоеточие", () => {
+    setFormatLanguage("uz");
+    try {
+      expect(formatTime(new Date(2026, 10, 13, 14, 0))).toBe("14:00");
+    } finally {
+      setFormatLanguage("ru");
+    }
   });
 });
 

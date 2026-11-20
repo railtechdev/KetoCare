@@ -11,7 +11,16 @@ import {
 
 import { cn } from "../lib/cn";
 import { formatMeasured } from "../lib/format";
-import { dayAxis, valueDomain } from "../lib/trendAxes";
+import { useState } from "react";
+
+import {
+  MARKER_ROW_STEP,
+  PHONE_PLOT_WIDTH,
+  chartMargin,
+  dayAxis,
+  markerLabelRows,
+  valueDomain,
+} from "../lib/trendAxes";
 import { EmptyState } from "./EmptyState";
 
 export interface TrendPoint {
@@ -60,6 +69,10 @@ export interface TrendChartProps {
   className?: string;
 }
 
+/** Ширина оси значений; вместе с полями — то, что вычитается из ширины графика. */
+const Y_AXIS_WIDTH = 48;
+const CHART_SIDE_MARGINS = 8;
+
 /** График динамики показателя с маркерами смены назначения (раздел 8.2 ТЗ). */
 export function TrendChart({
   points,
@@ -70,6 +83,9 @@ export function TrendChart({
   formatDate,
   className,
 }: TrendChartProps) {
+  // Ширина контейнера — чтобы развести подписи черт по рядам в пикселях,
+  // а не по догадке; до первого замера — ширина телефона.
+  const [width, setWidth] = useState<number | null>(null);
   if (points.length === 0) {
     if (typeof emptyState === "string") {
       return (
@@ -94,6 +110,21 @@ export function TrendChart({
     .sort((a, b) => a.ts - b.ts);
   const xAxis = dayAxis(data.map((point) => point.ts));
   const yDomain = valueDomain(data.map((point) => point.value));
+  const plotWidth =
+    width === null
+      ? PHONE_PLOT_WIDTH
+      : Math.max(width - Y_AXIS_WIDTH - CHART_SIDE_MARGINS, 1);
+  // Соседние черты (ввод диеты через день-два) подписаны в два ряда, а не
+  // поверх друг друга (Д5).
+  const labelRows = markerLabelRows(
+    markers.map((marker) => ({
+      ts: marker.at.getTime(),
+      label: marker.label,
+    })),
+    xAxis.domain,
+    plotWidth,
+  );
+  const usedRows = Math.max(0, ...labelRows.map((row) => (row ?? -1) + 1));
 
   return (
     // `min-w-0` обязателен: график стоит в колонке (`flex flex-col`), а у
@@ -116,10 +147,16 @@ export function TrendChart({
           переменную — она просто раскрывается в пустую строку, и сетка с осями
           рисуются невидимыми. Именно так и случилось после переименования
           токенов под словарь кита. */}
-      <ResponsiveContainer width="100%" height={260}>
+      <ResponsiveContainer
+        width="100%"
+        height={260}
+        onResize={(measured) => setWidth(measured)}
+      >
         <LineChart
           data={data}
-          margin={{ top: 8, right: 8, bottom: 8, left: 0 }}
+          // Черты смены назначения подписаны над областью построения: им
+          // нужно место сверху, иначе подпись обрезается (Д5).
+          margin={chartMargin(usedRows)}
         >
           <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
           <XAxis
@@ -137,7 +174,7 @@ export function TrendChart({
           <YAxis
             stroke="var(--color-muted-foreground)"
             fontSize={12}
-            width={48}
+            width={Y_AXIS_WIDTH}
             // С запасом: верх оси, равный единственному значению, срезал точку.
             domain={yDomain}
             tickFormatter={(value: number) => formatMeasured(value)}
@@ -178,15 +215,27 @@ export function TrendChart({
             }}
           />
 
-          {markers.map((marker) => (
-            <ReferenceLine
-              key={`${marker.at.getTime()}-${marker.label}`}
-              x={marker.at.getTime()}
-              stroke="var(--color-warning)"
-              strokeDasharray="4 4"
-              label={{ value: marker.label, position: "top", fontSize: 11 }}
-            />
-          ))}
+          {markers.map((marker, index) => {
+            const row = labelRows[index] ?? null;
+            return (
+              <ReferenceLine
+                key={`${marker.at.getTime()}-${marker.label}`}
+                x={marker.at.getTime()}
+                stroke="var(--color-warning)"
+                strokeDasharray="4 4"
+                label={
+                  row === null
+                    ? undefined
+                    : {
+                        value: marker.label,
+                        position: "top",
+                        fontSize: 11,
+                        offset: 5 + row * MARKER_ROW_STEP,
+                      }
+                }
+              />
+            );
+          })}
 
           <Line
             type="monotone"

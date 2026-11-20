@@ -26,6 +26,9 @@ import type { CreatableKind } from "./useDiary";
 
 const KINDS: readonly TrendKind[] = ["ketones", "weight", "seizures"];
 
+/** Что показывает вкладка: ленту записей или график. */
+type DiaryView = "entries" | "chart";
+
 /** Что открыть: выбор вида записи или сразу форму вида. */
 type Adding = { kind?: CreatableKind } | null;
 
@@ -34,9 +37,13 @@ type Adding = { kind?: CreatableKind } | null;
  * ADR-0075).
  *
  * **Записи — первыми.** Прежде над ними стояли три графика по 260 px, и до
- * своей вчерашней записи человек листал два экрана. График теперь один, с
- * переключателем «кетоны / вес / приступы», и стоит под записями: записывают и
- * исправляют чаще, чем рассматривают линии.
+ * своей вчерашней записи человек листал два экрана. График один, с
+ * переключателем «кетоны / вес / приступы».
+ *
+ * **«Записи / График» — переключатель наверху** (аудит Mini App 21.11.2026,
+ * Д1). Под лентой за две недели график оказывался на восемнадцатом экране, и
+ * до него не долистывали. Выбор помнится, пока вкладка открыта; лента при
+ * этом остаётся смонтированной — раскрытые дни и отбор не теряются.
  *
  * Вертикальные черты смены назначения на графике остаются: без них скачок
  * показателя читается как ухудшение, хотя это следствие изменённой терапии.
@@ -56,6 +63,7 @@ export function DiaryScreen({
       : null,
   );
   const [chart, setChart] = useState<TrendKind>("ketones");
+  const [view, setView] = useState<DiaryView>("entries");
   const [handled, setHandled] = useState(request?.id ?? null);
 
   // Новый запрос к уже открытой вкладке (вторая кнопка под напоминанием).
@@ -80,9 +88,24 @@ export function DiaryScreen({
         {t("diary.add.action")}
       </Button>
 
-      <DiaryEntries session={session} onAdd={() => setAdding({})} />
+      <SegmentedControl
+        label={t("diary.view.label")}
+        value={view}
+        onChange={setView}
+        items={[
+          { value: "entries", label: t("diary.view.entries") },
+          { value: "chart", label: t("diary.view.chart") },
+        ]}
+        className="w-full [&>label]:flex-1"
+      />
 
-      <Trends patientId={session.patientId} kind={chart} onKind={setChart} />
+      <div hidden={view !== "entries"}>
+        <DiaryEntries session={session} onAdd={() => setAdding({})} />
+      </div>
+
+      {view === "chart" && (
+        <Trends patientId={session.patientId} kind={chart} onKind={setChart} />
+      )}
 
       {adding !== null && (
         <AddEntry
@@ -135,11 +158,17 @@ function Trends({
         </WarningBanner>
       )}
 
-      {/* Без сети об этом один раз говорит лента записей выше: та же фраза
-          второй раз ниже — шум, а не объяснение (правило П27). */}
+      {/* Без сети график говорит об этом сам: лента записей в виде
+          «График» скрыта, и её строка «нет связи» не видна. Оба вида разом
+          не показываются, поэтому фраза одна на экране (правило П27). */}
       <AsyncSection
         loading={trend.isPending}
         skeleton={null}
+        waiting={
+          trend.fetchStatus === "paused" && trend.isPending
+            ? t("errors.waitingForNetwork")
+            : null
+        }
         error={
           trend.isError
             ? {

@@ -5,6 +5,11 @@
 собирает сервер, и словарей кабинета у него нет, поэтому слова записаны дважды.
 Стык проверяется здесь, на стороне поставщика: разойдись они — врач читал бы в
 отчёте одно, а в карте другое.
+
+С 21.11.2026 те же слова читает семья — блок «Лекарства сегодня» Mini App
+(`apps/miniapp/src/features/today/MedicationsToday.tsx`, словарь `app.json`,
+ключ `today.medications.frequency`). У «другой схемы» подписи там нет: правило
+кита показывает вместо неё одно уточнение.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from core.models.enums import MedicationFrequency
 
 REPO = Path(__file__).resolve().parents[3]
 DOCTOR_RU = REPO / "apps/web/src/locales/ru/doctor.json"
+MINIAPP = REPO / "apps/miniapp/src/locales"
 
 
 class TestMedicationFrequencyLabels:
@@ -29,6 +35,19 @@ class TestMedicationFrequencyLabels:
         cabinet = json.loads(DOCTOR_RU.read_text(encoding="utf-8"))["medications"]["frequencyCodes"]
 
         assert cabinet == {code.value: label for code, label in LABELS.items()}
+
+    def test_miniapp_uses_the_same_words(self):
+        def labels(language: str) -> dict[str, str]:
+            app = json.loads((MINIAPP / language / "app.json").read_text(encoding="utf-8"))
+            return app["today"]["medications"]["frequency"]
+
+        expected = {
+            code.value: label
+            for code, label in LABELS.items()
+            if code is not MedicationFrequency.OTHER
+        }
+        assert labels("ru") == expected
+        assert set(labels("uz")) == set(expected)
 
 
 class TestDescribeFrequency:

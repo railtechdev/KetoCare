@@ -188,6 +188,18 @@ export function formatOccurredAt(value: Date): string {
 }
 
 /**
+ * Только время: «10:56». Для строки записи под заголовком дня — день уже
+ * назван над ней, и полная дата в каждой строке только переносила значение
+ * (аудит Mini App 21.11.2026, Д2).
+ */
+export function formatTime(value: Date): string {
+  return new Intl.DateTimeFormat(NUMERIC_DATE_LOCALE, {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+}
+
+/**
  * День и месяц цифрами: «05.10». Для подписей оси графика за месяц — год там
  * шум, а места на телефоне мало. Цифры через точку на обоих языках, как и у
  * остальных цифровых дат (см. `NUMERIC_DATE_LOCALE`): `toLocaleDateString` на

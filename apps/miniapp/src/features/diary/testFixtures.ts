@@ -58,9 +58,26 @@ export function defaultLogs(): LogsByKind {
   };
 }
 
+/** Справочник и прошлые типы приступов — для выбора типа (Д3). */
+export interface SeizureFixture {
+  types?: {
+    id: string;
+    name_ru: string;
+    ilae_ref?: string | null;
+    retired?: boolean;
+  }[];
+  recent?: string[];
+}
+
 /** Реализация `api.GET` для `mockImplementation`. */
-export function fakeGet(logs: LogsByKind = defaultLogs()) {
+export function fakeGet(
+  logs: LogsByKind = defaultLogs(),
+  seizures: SeizureFixture = {},
+) {
   return (path: string) => {
+    if (path.endsWith("/seizures/recent-types")) {
+      return Promise.resolve({ data: { items: seizures.recent ?? [] } });
+    }
     const logKind = /\/logs\/([a-z-]+)$/.exec(path)?.[1];
     if (logKind !== undefined) {
       const items = logs[logKind] ?? [];
@@ -93,7 +110,11 @@ export function fakeGet(logs: LogsByKind = defaultLogs()) {
     }
     if (path.endsWith("/seizure-types")) {
       return Promise.resolve({
-        data: { items: [{ id: "t1", name_ru: "Тонико-клонический" }] },
+        data: {
+          items: seizures.types ?? [
+            { id: "t1", name_ru: "Тонико-клонический" },
+          ],
+        },
       });
     }
     if (path.endsWith("/intake-options")) {

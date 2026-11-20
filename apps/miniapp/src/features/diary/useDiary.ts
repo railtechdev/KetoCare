@@ -3,9 +3,14 @@ import {
   useQueries,
   useQuery,
   useQueryClient,
+  type UseQueryResult,
 } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
-import type { DiaryEntryBody, DiaryEntryKind } from "@ketocare/ui";
+import {
+  RECENT_SEIZURE_TYPES,
+  type DiaryEntryBody,
+  type DiaryEntryKind,
+} from "@ketocare/ui";
 
 import { api } from "../../lib/api";
 import { haptic } from "../../lib/telegram";
@@ -42,6 +47,8 @@ export interface NamedOption {
   name: string;
   /** Выведен из справочника (типы приступов до ILAE 2025, ADR-0050). */
   retired?: boolean;
+  /** Номер узла ILAE у типа приступа — по нему строится выбор (Д3). */
+  ilaeRef?: string | null;
 }
 
 export interface MedicationOption extends NamedOption {
@@ -73,7 +80,7 @@ export function diaryRange(now: Date = new Date()): {
 /** Верхняя граница страницы на сервере (`MAX_PAGE_SIZE`). */
 const PAGE_LIMIT = 200;
 
-async function fetchKind(
+export async function fetchKind(
   patientId: string,
   kind: DiaryEntryKind,
   range: { from: string; to: string },
@@ -217,7 +224,89 @@ export function useSeizureTypes() {
         id: item.id,
         name: item.name_ru,
         retired: item.retired ?? false,
+        ilaeRef: item.ilae_ref ?? null,
       }));
+    },
+  });
+}
+
+/**
+ * Что выбор типа приступа знает о справочнике, кроме самого списка.
+ *
+ * Пустой список значит разное: ответ ещё в пути, запрос ждёт связи или
+ * сервер отказал. Пока выбор получал только `data ?? []`, отказ выглядел
+ * вечной «загрузкой», и записать приступ было нельзя, ничего не объяснив.
+ */
+export interface DictionaryStatus {
+  /** Ответа ещё нет (`isPending`). */
+  pending: boolean;
+  /** Ответа нет и запрос ждёт связи. */
+  paused: boolean;
+  /** Отказ последней загрузки; `null` — отказа нет. */
+  error: unknown;
+  retry: () => void;
+}
+
+/** Справочник уже на месте — состояние по умолчанию у формы правки. */
+export const DICTIONARY_READY: DictionaryStatus = {
+  pending: false,
+  paused: false,
+  error: null,
+  retry: () => undefined,
+};
+
+export function dictionaryStatusOf(
+  query: UseQueryResult<unknown>,
+): DictionaryStatus {
+  return {
+    pending: query.isPending,
+    paused: query.isPending && query.fetchStatus === "paused",
+    error: query.isError ? query.error : null,
+    retry: () => void query.refetch(),
+  };
+}
+
+/**
+ * Прошлые типы приступов для выбора: `null` — ответ ещё идёт.
+ *
+ * Отличать «ещё идёт» от «прошлых нет» обязательно: первый экран выбора
+ * строится по этому ответу, и пришедший позже ответ перерисовал бы группы
+ * классификации в прошлые типы под пальцем родителя — нажатие записало бы
+ * не тот тип (аудит Mini App, Д3). Отказ и ожидание связи — пустой список:
+ * выбор начнётся с групп, записать приступ они не мешают.
+ */
+export function recentSeizureTypesOf(
+  query: UseQueryResult<string[]>,
+): readonly string[] | null {
+  if (query.data !== undefined) return query.data;
+  if (query.isPending && query.fetchStatus === "fetching") return null;
+  return [];
+}
+
+/**
+ * Типы прошлых приступов ребёнка, свежие первыми — первый экран выбора типа,
+ * как в боте (ADR-0076, аудит Mini App Д3).
+ *
+ * Ключ под «logs»: новая запись приступа сбрасывает и его, и следующий
+ * приступ предложит только что выбранный тип. Отказ — не повод не дать
+ * записать приступ: выбор просто начнётся с групп.
+ */
+export function useRecentSeizureTypes(patientId: string) {
+  return useQuery({
+    queryKey: ["patient", patientId, "logs", "seizure-recent-types"],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/logs/seizures/recent-types",
+        {
+          params: {
+            path: { patient_id: patientId },
+            query: { limit: RECENT_SEIZURE_TYPES },
+          },
+        },
+      );
+      if (error || !data)
+        throw error ?? new Error("Empty recent seizure types response");
+      return data.items;
     },
   });
 }
@@ -300,6 +389,12 @@ async function patchEntry(
 export type CreatableKind = Exclude<DiaryEntryKind, "meals">;
 export type CreatableEntryBody = Exclude<DiaryEntryBody, { kind: "meals" }>;
 
+/** Что сервер вернул на новую запись: вид и идентификатор (если пришёл). */
+export interface CreatedEntry {
+  kind: CreatableKind;
+  id: string | null;
+}
+
 /**
  * Новая запись с ключом попытки (`Idempotency-Key`, ADR-0035).
  *
@@ -312,45 +407,51 @@ async function createEntry(
   patientId: string,
   input: CreatableEntryBody,
   idempotencyKey: string,
-): Promise<void> {
+): Promise<CreatedEntry> {
   const params = {
     path: { patient_id: patientId },
     header: { "Idempotency-Key": idempotencyKey },
   };
+  // Идентификатор новой записи — для «Отменить» под отметкой лекарства.
+  let data: { id: string } | undefined;
   let error: unknown;
   switch (input.kind) {
     case "seizures":
-      ({ error } = await api.POST(
+      ({ data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/logs/seizures",
         { params, body: input.body },
       ));
       break;
     case "ketones":
-      ({ error } = await api.POST(
+      ({ data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/logs/ketones",
         { params, body: input.body },
       ));
       break;
     case "weight":
-      ({ error } = await api.POST("/api/v1/patients/{patient_id}/logs/weight", {
-        params,
-        body: input.body,
-      }));
+      ({ data, error } = await api.POST(
+        "/api/v1/patients/{patient_id}/logs/weight",
+        {
+          params,
+          body: input.body,
+        },
+      ));
       break;
     case "medications":
-      ({ error } = await api.POST(
+      ({ data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/logs/medications",
         { params, body: input.body },
       ));
       break;
     case "side-effects":
-      ({ error } = await api.POST(
+      ({ data, error } = await api.POST(
         "/api/v1/patients/{patient_id}/logs/side-effects",
         { params, body: input.body },
       ));
       break;
   }
   if (error) throw error;
+  return { kind: input.kind, id: data?.id ?? null };
 }
 
 /** Мягкое удаление: запись остаётся в базе с `deleted_at` (правило 4). */

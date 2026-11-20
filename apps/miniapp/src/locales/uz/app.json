@@ -216,11 +216,8 @@
     "loadError": "Yozuvlar yuklanmadi",
     "loadErrorHint": "Aloqani tekshirib, yana urinib ko‘ring.",
     "wroteBy": "Yozdi: {{name}}",
-    "wroteByMe": "Siz yozdingiz",
     "fromMenuHint": "«Yeyildi» belgilari menyuda tuzatiladi.",
-    "edit": "Tuzatish",
-    "editAria": "«{{title}}» yozuvini tuzatish",
-    "delete": "O‘chirish",
+    "editAria": "«{{title}}» yozuvini o‘zgartirish",
     "deleteAria": "«{{title}}» yozuvini o‘chirish",
     "deleting": "O‘chirilmoqda…",
     "confirmTitle": "«{{title}}» yozuvi o‘chirilsinmi?",
@@ -294,7 +291,8 @@
       "durationEstimated": "So‘z bilan, taxminan",
       "choose": "Tanlang",
       "seizureTypeRequired": "Qanday xuruj bo‘lganini tanlang.",
-      "takenQuestion": "Dori berildimi?"
+      "takenQuestion": "Dori berildimi?",
+      "seizureTypeNone": "Tanlanmagan"
     },
     "next": "Keyingi",
     "back": "Orqaga",
@@ -314,6 +312,45 @@
         "meals": "Ovqat",
         "side-effects": "O‘zini his qilish"
       }
+    },
+    "deleteEntry": "Yozuvni o‘chirish",
+    "view": {
+      "label": "Nimani ko‘rsatish",
+      "entries": "Yozuvlar",
+      "chart": "Grafik"
+    },
+    "filter": {
+      "label": "Qaysi yozuvlarni ko‘rsatish",
+      "all": "Hammasi",
+      "seizures": "Xurujlar",
+      "ketones": "Ketonlar",
+      "weight": "Vazn",
+      "medications": "Dorilar",
+      "meals": "Ovqat",
+      "side-effects": "O‘zini his qilish",
+      "empty": "Ikki hafta ichida bu turdagi yozuvlar yo‘q."
+    },
+    "daySummary_one": "{{count}} ta yozuv: {{kinds}}",
+    "daySummary_other": "{{count}} ta yozuv: {{kinds}}",
+    "dayKind": "{{kind}} {{number}}",
+    "dayKinds": {
+      "seizures": "xurujlar",
+      "ketones": "ketonlar",
+      "weight": "vazn",
+      "medications": "dorilar",
+      "meals": "ovqat",
+      "side-effects": "o‘zini his qilish"
+    },
+    "seizurePicker": {
+      "ask": "Qanday xuruj bo‘ldi?",
+      "group": "Qanday xuruj bo‘ldi? Guruhni tanlang.",
+      "subtype": "{{group}}: aynan qaysi?",
+      "groupItself": "{{name}}, aniqrog‘ini bilmayman",
+      "other": "Boshqa tur",
+      "unknown": "Bilmayman",
+      "change": "Turini o‘zgartirish",
+      "loadFailed": "Xuruj turlari ro‘yxatini yuklab bo‘lmadi",
+      "empty": "Ro‘yxatda xuruj turlari yo‘q — shifokorga xabar bering."
     }
   },
   "reminders": {
@@ -644,6 +681,32 @@
       "next": "Hozir — {{index}}-ovqatlanish",
       "allEaten": "Bugungi menyudagi hammasi yeyildi deb belgilangan.",
       "open": "Menyuni ochish"
+    },
+    "medications": {
+      "title": "Bugungi dorilar",
+      "loadError": "Dorilar yuklanmadi",
+      "give": "Berildi",
+      "skip": "O‘tkazib yuborildi",
+      "giveAria": "Berildi: {{name}}",
+      "skipAria": "O‘tkazib yuborildi: {{name}}",
+      "givenAt": "{{time}} da berildi",
+      "skippedAt": "{{time}} da o‘tkazib yuborildi",
+      "markedGiven": "Belgilandi: {{name}} berildi",
+      "markedSkipped": "Belgilandi: {{name}} o‘tkazib yuborildi",
+      "markFailed": "Belgilab bo‘lmadi",
+      "undo": "Bekor qilish",
+      "undone": "Belgi bekor qilindi",
+      "undoFailed": "Belgini bekor qilib bo‘lmadi",
+      "showRest": "Qolganlarini ko‘rsatish: {{count}}",
+      "collapse": "Ro‘yxatni yig‘ish",
+      "frequency": {
+        "once_daily": "Sutkada 1 marta",
+        "twice_daily": "Sutkada 2 marta",
+        "three_times_daily": "Sutkada 3 marta",
+        "four_times_daily": "Sutkada 4 marta",
+        "every_other_day": "Kunora",
+        "as_needed": "Zarurat bo‘lganda"
+      }
     }
   },
   "dishes": {

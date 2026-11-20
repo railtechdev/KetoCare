@@ -49,14 +49,19 @@ describe("записи дневника в Mini App", () => {
     expect(
       await screen.findByRole("heading", { name: "Сегодня" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Кетоны: 3,2 ммоль/л")).toBeInTheDocument();
-    expect(screen.getByText("по крови")).toBeInTheDocument();
+    // Значение и способ — одной строкой через «·» (Д2).
+    const ketones = await screen.findByRole("article", {
+      name: "Кетоны: 3,2 ммоль/л",
+    });
+    expect(ketones).toHaveTextContent("Кетоны: 3,2 ммоль/л · по крови");
     expect(screen.getByText("Вес: 18,4 кг")).toBeInTheDocument();
-    expect(screen.getByText("Приступ: Тонико-клонический")).toBeInTheDocument();
+    const seizure = screen.getByRole("article", {
+      name: "Приступ: Тонико-клонический",
+    });
     // Интервал со слов показывается словами, а не пересчитанными секундами
     // (ADR-0020).
-    expect(screen.getByText("Длился: от 1 до 5 минут")).toBeInTheDocument();
-    expect(screen.getByText("Сколько раз: 2")).toBeInTheDocument();
+    expect(seizure).toHaveTextContent("Длился: от 1 до 5 минут");
+    expect(seizure).toHaveTextContent("Сколько раз: 2");
     expect(screen.getByText("Записал(а): Бабушка Галя")).toBeInTheDocument();
 
     // Шесть видов — шесть запросов за один и тот же период.
@@ -80,13 +85,33 @@ describe("записи дневника в Mini App", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "Исправить запись «Кетоны: 3,2 ммоль/л»",
+        name: "Изменить запись «Кетоны: 3,2 ммоль/л»",
       }),
     ).toBeInTheDocument();
     // Вес записала бабушка: её свидетельство правит она сама.
     expect(
-      screen.queryByRole("button", { name: "Исправить запись «Вес: 18,4 кг»" }),
+      screen.queryByRole("button", { name: "Изменить запись «Вес: 18,4 кг»" }),
     ).toBeNull();
+  });
+
+  it("своя запись открывается всей строкой: ширина остаётся значению", async () => {
+    // Отдельная кнопка «Изменить» забирала у значения около ста пикселей на
+    // 360 px, и своя запись ломалась на три-четыре строки (Д2).
+    renderEntries();
+
+    const row = await screen.findByRole("article", {
+      name: "Кетоны: 3,2 ммоль/л",
+    });
+    const edit = within(row).getByRole("button", {
+      name: "Изменить запись «Кетоны: 3,2 ммоль/л»",
+    });
+    // Кнопка — сама строка: время, значение и карандаш-подсказка внутри неё.
+    expect(edit).toHaveTextContent("Кетоны: 3,2 ммоль/л");
+    expect(edit).not.toHaveTextContent("Изменить");
+    expect(within(row).getAllByRole("button")).toHaveLength(1);
+    // Чужая запись — не кнопка.
+    const other = screen.getByRole("article", { name: "Вес: 18,4 кг" });
+    expect(within(other).queryByRole("button")).toBeNull();
   });
 
   it("исправление отправляет PATCH с полями этого вида", async () => {
@@ -95,7 +120,7 @@ describe("записи дневника в Mini App", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Исправить запись «Кетоны: 3,2 ммоль/л»",
+        name: "Изменить запись «Кетоны: 3,2 ммоль/л»",
       }),
     );
     const value = await screen.findByLabelText("Кетоны, ммоль/л");
@@ -125,7 +150,7 @@ describe("записи дневника в Mini App", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Исправить запись «Кетоны: 3,2 ммоль/л»",
+        name: "Изменить запись «Кетоны: 3,2 ммоль/л»",
       }),
     );
     const value = await screen.findByLabelText("Кетоны, ммоль/л");
@@ -146,7 +171,7 @@ describe("записи дневника в Mini App", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Исправить запись «Приступ: Тонико-клонический»",
+        name: "Изменить запись «Приступ: Тонико-клонический»",
       }),
     );
     // Запись со слов: открыт интервал, поля секунд нет вовсе.
@@ -178,7 +203,7 @@ describe("записи дневника в Mini App", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Исправить запись «Приступ: Тонико-клонический»",
+        name: "Изменить запись «Приступ: Тонико-клонический»",
       }),
     );
     const dialog = await screen.findByRole("dialog");
@@ -195,7 +220,7 @@ describe("записи дневника в Mini App", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Исправить запись «Приступ: Тонико-клонический»",
+        name: "Изменить запись «Приступ: Тонико-клонический»",
       }),
     );
     await user.click(await screen.findByRole("button", { name: "Далее" }));
@@ -218,10 +243,19 @@ describe("записи дневника в Mini App", () => {
     );
   });
 
-  it("удаление спрашивает подтверждение с названием записи", async () => {
+  it("удаление — внутри правки и спрашивает подтверждение с названием записи", async () => {
     const user = userEvent.setup();
     renderEntries();
 
+    // В строке ленты удаления нет: одна кнопка «Изменить» (Д2).
+    await screen.findByRole("article", { name: "Кетоны: 3,2 ммоль/л" });
+    expect(screen.queryByRole("button", { name: /^Удалить/ })).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Изменить запись «Кетоны: 3,2 ммоль/л»",
+      }),
+    );
     await user.click(
       await screen.findByRole("button", {
         name: "Удалить запись «Кетоны: 3,2 ммоль/л»",
@@ -244,12 +278,21 @@ describe("записи дневника в Mini App", () => {
       ),
     );
     expect(await screen.findByText("Запись удалена")).toBeInTheDocument();
+    // Правка закрылась вместе с удалённой записью.
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Кетоны, ммоль/л")).toBeNull(),
+    );
   });
 
   it("отказ от удаления ничего не отправляет", async () => {
     const user = userEvent.setup();
     renderEntries();
 
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Изменить запись «Кетоны: 3,2 ммоль/л»",
+      }),
+    );
     await user.click(
       await screen.findByRole("button", {
         name: "Удалить запись «Кетоны: 3,2 ммоль/л»",
@@ -290,9 +333,13 @@ describe("записи дневника в Mini App", () => {
     (api.GET as Mock).mockImplementation(fakeGet(logs));
     renderEntries();
 
-    expect(await screen.findAllByText("Отмечено в меню")).toHaveLength(2);
+    const marks = await screen.findAllByRole("article", { name: "Еда" });
+    expect(marks).toHaveLength(2);
+    for (const mark of marks) {
+      expect(mark).toHaveTextContent("Еда · Отмечено в меню");
+    }
     expect(
-      screen.queryByRole("button", { name: "Исправить запись «Еда»" }),
+      screen.queryByRole("button", { name: "Изменить запись «Еда»" }),
     ).toBeNull();
     // Подсказка — один раз над лентой, а не под каждой отметкой.
     expect(
@@ -314,5 +361,91 @@ describe("записи дневника в Mini App", () => {
     expect(screen.queryByText(/в боте/)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Добавить запись" }));
     expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("строка — время без даты, автор только у чужой записи", async () => {
+    renderEntries();
+
+    const ketones = await screen.findByRole("article", {
+      name: "Кетоны: 3,2 ммоль/л",
+    });
+    const time = within(ketones).getByText(/^\d{2}:\d{2}$/);
+    expect(time.tagName).toBe("TIME");
+    // День назван заголовком группы — полной даты в строке нет.
+    expect(ketones.textContent).not.toMatch(/\d{2}\.\d{2}\.\d{4}/);
+    // Своя запись: «Записали вы» не повторяется на каждой строке.
+    expect(ketones).not.toHaveTextContent("Записал");
+    expect(
+      screen.getByRole("article", { name: "Вес: 18,4 кг" }),
+    ).toHaveTextContent("Записал(а): Бабушка Галя");
+  });
+
+  it("сегодня раскрыто, давние дни свёрнуты в строку и раскрываются", async () => {
+    const user = userEvent.setup();
+    const logs = defaultLogs();
+    const old = new Date();
+    old.setDate(old.getDate() - 4);
+    old.setHours(10, 56, 0, 0);
+    const at = old.toISOString();
+    logs.ketones = [
+      ...(logs.ketones ?? []),
+      {
+        ...(logs.ketones?.[0] as object),
+        id: "k2",
+        occurred_at: at,
+        value: 2.4,
+      },
+      {
+        ...(logs.ketones?.[0] as object),
+        id: "k3",
+        occurred_at: at,
+        value: 1.9,
+      },
+    ];
+    logs.weight = [
+      ...(logs.weight ?? []),
+      { ...(logs.weight?.[0] as object), id: "w2", occurred_at: at },
+    ];
+    (api.GET as Mock).mockImplementation(fakeGet(logs));
+    renderEntries();
+
+    const today = await screen.findByRole("button", { name: /^Сегодня/ });
+    expect(today).toHaveAttribute("aria-expanded", "true");
+
+    const older = screen.getByRole("button", {
+      name: /3 записи: кетоны 2, вес 1/,
+    });
+    expect(older).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Кетоны: 2,4 ммоль/л")).toBeNull();
+
+    await user.click(older);
+    expect(older).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Кетоны: 2,4 ммоль/л")).toBeInTheDocument();
+
+    // И сворачивается обратно тем же нажатием.
+    await user.click(today);
+    expect(today).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Кетоны: 3,2 ммоль/л")).toBeNull();
+  });
+
+  it("отбор по виду оставляет только записи этого вида", async () => {
+    const user = userEvent.setup();
+    renderEntries();
+
+    await screen.findByText("Вес: 18,4 кг");
+    const filter = screen.getByRole("group", { name: "Какие записи показать" });
+    expect(within(filter).getByRole("radio", { name: "Все" })).toBeChecked();
+    await user.click(within(filter).getByRole("radio", { name: "Кетоны" }));
+
+    expect(screen.getByText("Кетоны: 3,2 ммоль/л")).toBeInTheDocument();
+    expect(screen.queryByText("Вес: 18,4 кг")).toBeNull();
+    expect(screen.queryByText("Приступ: Тонико-клонический")).toBeNull();
+
+    await user.click(
+      within(filter).getByRole("radio", { name: "Самочувствие" }),
+    );
+    expect(
+      screen.getByText("Записей этого вида за две недели нет."),
+    ).toBeInTheDocument();
   });
 });

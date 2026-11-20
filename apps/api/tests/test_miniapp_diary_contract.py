@@ -1,8 +1,10 @@
 """Дневник и напоминания из Mini App — стык на стороне поставщика (ADR-0044).
 
 Потребители — вкладка «Дневник» (`apps/miniapp/src/features/diary`: лента,
-правка и с 07.10.2026 «Добавить запись») и блок
-«Напоминания» на главной (`apps/miniapp/src/features/reminders`). Их тесты
+правка, с 07.10.2026 «Добавить запись», с 21.11.2026 выбор типа приступа по
+прошлым типам ребёнка), блок «Лекарства сегодня»
+(`apps/miniapp/src/features/today/MedicationsToday.tsx`) и блок
+«Напоминания» (`apps/miniapp/src/features/reminders`). Их тесты
 работают с подделками ответов, а подделка повторяет представление автора о
 контракте, а не сам контракт. Поэтому здесь каждая ручка, которую они
 вызывают, вызывается сессией Mini App — открытой подписью Telegram, сужённой
@@ -343,6 +345,121 @@ class TestAddEntryFromMiniApp:
         assert other.status_code == 422, other.text
         # Экран печатает отказ словами сервера.
         assert other.json()["error"]["message"]
+
+
+class TestSeizurePickerFromMiniApp:
+    """Потребитель — `useRecentSeizureTypes` и `SeizureTypePicker` (аудит Mini App, Д3).
+
+    Выбор типа приступа начинается с типов прошлых записей ребёнка — та же
+    узкая ручка, что у бота, — и строит дерево по `ilae_ref` справочника.
+    """
+
+    async def test_recent_types_with_a_miniapp_session(
+        self, client, session, make_user, make_patient
+    ):
+        _, patient, headers = await _open_miniapp(client, session, make_user, make_patient)
+        seizure_type = await _seizure_type(session)
+        url = f"/api/v1/patients/{patient.id}/logs/seizures"
+        created = await client.post(
+            url,
+            headers=headers | {"Idempotency-Key": str(uuid.uuid4())},
+            json={
+                "occurred_at": (datetime.now(UTC) - timedelta(hours=1)).isoformat(),
+                "seizure_type_id": str(seizure_type.id),
+            },
+        )
+        assert created.status_code == 201, created.text
+
+        # Тот же запрос, что у экрана: четыре последних типа.
+        response = await client.get(f"{url}/recent-types", headers=headers, params={"limit": 4})
+
+        assert response.status_code == 200, response.text
+        assert response.json() == {"items": [str(seizure_type.id)]}
+
+    async def test_dictionary_carries_the_tree_and_the_retired_flag(
+        self, client, session, make_user, make_patient
+    ):
+        """`ilae_ref` строит дерево, `retired` прячет выведенный тип из выбора (ADR-0050)."""
+
+        _, _, headers = await _open_miniapp(client, session, make_user, make_patient)
+        await _seizure_type(session)
+
+        types = await client.get(
+            "/api/v1/dictionaries/seizure-types",
+            headers=headers,
+            params={"limit": 200, "offset": 0, "include_retired": True},
+        )
+        assert types.status_code == 200, types.text
+        assert {"id", "name_ru", "ilae_ref", "retired"} <= set(types.json()["items"][0])
+
+    async def test_another_childs_recent_types_stay_closed(
+        self, client, session, make_user, make_patient
+    ):
+        _, _, headers = await _open_miniapp(client, session, make_user, make_patient)
+        stranger = await make_patient()
+
+        response = await client.get(
+            f"/api/v1/patients/{stranger.id}/logs/seizures/recent-types", headers=headers
+        )
+        assert response.status_code == 403
+
+
+class TestMedicationsTodayFromMiniApp:
+    """Потребитель — `MedicationsToday` на «Сегодня» (аудит Mini App, Д4)."""
+
+    async def test_active_medications_for_today(self, client, session, make_user, make_patient):
+        _, patient, headers = await _open_miniapp(client, session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        active = await _medication(session, patient=patient, author=doctor)
+        stopped = await _medication(session, patient=patient, author=doctor)
+        stopped.stopped_at = date.today() - timedelta(days=1)
+        await session.flush()
+
+        response = await client.get(
+            f"/api/v1/patients/{patient.id}/medications",
+            headers=headers,
+            params={"active_on": date.today().isoformat(), "limit": 200, "offset": 0},
+        )
+
+        assert response.status_code == 200, response.text
+        items = response.json()["items"]
+        assert [item["id"] for item in items] == [str(active.id)]
+        # Поля, которые печатает блок: имя, доза, кратность, границы приёма.
+        assert {
+            "id",
+            "drug_name",
+            "dose",
+            "frequency_code",
+            "frequency",
+            "started_at",
+            "stopped_at",
+        } <= set(items[0])
+
+    async def test_mark_and_undo_with_a_miniapp_session(
+        self, client, session, make_user, make_patient
+    ):
+        """«Дали» отдаёт `id` новой записи — по нему «Отменить» её удаляет."""
+
+        _, patient, headers = await _open_miniapp(client, session, make_user, make_patient)
+        doctor = await make_user(UserRole.DOCTOR)
+        medication = await _medication(session, patient=patient, author=doctor)
+        url = f"/api/v1/patients/{patient.id}/logs/medications"
+
+        created = await client.post(
+            url,
+            headers=headers | {"Idempotency-Key": str(uuid.uuid4())},
+            json={
+                "occurred_at": datetime.now(UTC).replace(second=0, microsecond=0).isoformat(),
+                "medication_id": str(medication.id),
+                "taken": True,
+            },
+        )
+        assert created.status_code == 201, created.text
+        log_id = created.json()["id"]
+
+        undone = await client.delete(f"{url}/{log_id}", headers=headers)
+        assert undone.status_code == 204
+        assert (await client.get(url, headers=headers)).json()["total"] == 0
 
 
 class TestRemindersFromMiniApp:

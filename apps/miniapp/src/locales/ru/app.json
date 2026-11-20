@@ -217,11 +217,8 @@
     "loadError": "Записи не загрузились",
     "loadErrorHint": "Проверьте связь и попробуйте ещё раз.",
     "wroteBy": "Записал(а): {{name}}",
-    "wroteByMe": "Записали вы",
     "fromMenuHint": "Отметки «съедено» исправляют в меню.",
-    "edit": "Исправить",
-    "editAria": "Исправить запись «{{title}}»",
-    "delete": "Удалить",
+    "editAria": "Изменить запись «{{title}}»",
     "deleteAria": "Удалить запись «{{title}}»",
     "deleting": "Удаляем…",
     "confirmTitle": "Удалить запись «{{title}}»?",
@@ -295,7 +292,8 @@
       "durationEstimated": "Со слов, примерно",
       "choose": "Выберите",
       "seizureTypeRequired": "Выберите, какой был приступ.",
-      "takenQuestion": "Лекарство дали?"
+      "takenQuestion": "Лекарство дали?",
+      "seizureTypeNone": "Не выбран"
     },
     "next": "Далее",
     "back": "Назад",
@@ -315,6 +313,46 @@
         "meals": "Еда",
         "side-effects": "Самочувствие"
       }
+    },
+    "deleteEntry": "Удалить запись",
+    "view": {
+      "label": "Что показать",
+      "entries": "Записи",
+      "chart": "График"
+    },
+    "filter": {
+      "label": "Какие записи показать",
+      "all": "Все",
+      "seizures": "Приступы",
+      "ketones": "Кетоны",
+      "weight": "Вес",
+      "medications": "Лекарства",
+      "meals": "Еда",
+      "side-effects": "Самочувствие",
+      "empty": "Записей этого вида за две недели нет."
+    },
+    "daySummary_one": "{{count}} запись: {{kinds}}",
+    "daySummary_few": "{{count}} записи: {{kinds}}",
+    "daySummary_many": "{{count}} записей: {{kinds}}",
+    "dayKind": "{{kind}} {{number}}",
+    "dayKinds": {
+      "seizures": "приступы",
+      "ketones": "кетоны",
+      "weight": "вес",
+      "medications": "лекарства",
+      "meals": "еда",
+      "side-effects": "самочувствие"
+    },
+    "seizurePicker": {
+      "ask": "Какой был приступ?",
+      "group": "Какой был приступ? Выберите группу.",
+      "subtype": "{{group}}: какой именно?",
+      "groupItself": "{{name}}, точнее не знаю",
+      "other": "Другой тип",
+      "unknown": "Не знаю",
+      "change": "Изменить тип",
+      "loadFailed": "Не удалось загрузить список типов приступов",
+      "empty": "В списке нет типов приступов — сообщите врачу."
     }
   },
   "reminders": {
@@ -647,6 +685,32 @@
       "next": "Сейчас — приём {{index}}",
       "allEaten": "Всё из меню на сегодня отмечено съеденным.",
       "open": "Открыть меню"
+    },
+    "medications": {
+      "title": "Лекарства сегодня",
+      "loadError": "Лекарства не загрузились",
+      "give": "Дали",
+      "skip": "Пропустили",
+      "giveAria": "Дали: {{name}}",
+      "skipAria": "Пропустили: {{name}}",
+      "givenAt": "дали в {{time}}",
+      "skippedAt": "пропустили в {{time}}",
+      "markedGiven": "Отмечено: дали {{name}}",
+      "markedSkipped": "Отмечено: пропустили {{name}}",
+      "markFailed": "Не удалось отметить",
+      "undo": "Отменить",
+      "undone": "Отметка отменена",
+      "undoFailed": "Не удалось отменить отметку",
+      "showRest": "Показать остальные: {{count}}",
+      "collapse": "Свернуть список",
+      "frequency": {
+        "once_daily": "1 раз в сутки",
+        "twice_daily": "2 раза в сутки",
+        "three_times_daily": "3 раза в сутки",
+        "four_times_daily": "4 раза в сутки",
+        "every_other_day": "Через день",
+        "as_needed": "По требованию"
+      }
     }
   },
   "dishes": {

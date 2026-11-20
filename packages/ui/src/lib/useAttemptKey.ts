@@ -11,7 +11,7 @@ import { useRef } from "react";
  * там рекомендован, а не обязателен, и шестнадцатеричная запись в класс
  * укладывается.
  */
-function randomKey(): string {
+export function randomKey(): string {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
 
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
