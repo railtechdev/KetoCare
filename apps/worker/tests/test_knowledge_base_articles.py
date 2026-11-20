@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from core.knowledge.documents import article_paths, read_article, split_article
-from worker.ai.guard import check, check_answer
+from core.textguard.assistant_guard import check, check_answer
 
 REPO_KB = Path(__file__).resolve().parents[3] / "docs" / "knowledge-base"
 

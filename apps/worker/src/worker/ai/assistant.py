@@ -33,9 +33,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.models.enums import AiJobKind
 from core.repositories import knowledge_base as kb
+from core.textguard.assistant_guard import Kind, check, check_answer
 
 from .client import AiClient, AiError, AiLimitExceeded
-from .guard import Kind, check, check_answer
 
 #: Ответ на всё, чего помощнику касаться нельзя. Формулировка — из раздела 10.4
 #: ТЗ, дословно: она согласована как продуктовый текст, и переписывать её на

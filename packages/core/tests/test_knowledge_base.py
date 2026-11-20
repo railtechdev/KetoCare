@@ -10,10 +10,33 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from sqlalchemy import text
 
 from core.knowledge.documents import ArticleError, article_paths, read_article, split_article
 from core.knowledge.indexer import reindex
 from core.repositories import knowledge_base as kb
+
+
+async def clear_knowledge_base(session) -> None:
+    """Пустая база знаний внутри транзакции теста.
+
+    Тесты идут по базе разработки с откатом, а в ней могут лежать статьи от
+    `make kb-index`: без очистки поиск находил бы и их.
+    """
+
+    await session.execute(text("DELETE FROM kb_chunks"))
+    await session.execute(
+        text("UPDATE kb_articles SET live_version_id = NULL, status = 'withdrawn'")
+    )
+    await session.execute(text("DELETE FROM kb_article_versions"))
+    await session.execute(text("DELETE FROM kb_articles"))
+
+
+@pytest.fixture
+async def session(session):
+    await clear_knowledge_base(session)
+    return session
+
 
 PRODUCT = """---
 id: how-to-record-ketones

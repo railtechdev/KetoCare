@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { PageLayout } from "../../components/PageLayout";
+import { ProductArticlesPage } from "../articles/ProductArticlesPage";
 import { CatalogPage } from "../products/CatalogPage";
 import { AiSection } from "./AiSettingsPanel";
 import { AuditPanel } from "./AuditPanel";
@@ -43,6 +44,9 @@ export function AdminPage({ section }: { section?: string }) {
 
   const current = sectionFromRoute(section);
   if (current === "products") return <CatalogPage />;
+  // Статьи о приложении — свои экраны списка, статьи и правки (ADR-0093):
+  // открытая статья живёт в адресе (`?item=`) и получает свой заголовок.
+  if (current === "productArticles") return <ProductArticlesPage />;
 
   return (
     // Разделы админки — таблицы: учётки, справочники, журнал. Это страницы,

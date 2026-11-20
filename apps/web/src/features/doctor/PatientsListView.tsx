@@ -24,6 +24,7 @@ import { useNavigate } from "@tanstack/react-router";
 
 import { PageLayout } from "../../components/PageLayout";
 import { errorMessageOf } from "../../lib/api";
+import { ArticlesAwaitingReview } from "../articles/ArticlesAwaitingReview";
 import { usePatients, type TherapyFilter } from "../patients/usePatients";
 import { NudgeFamilyButton } from "./NudgeFamilyButton";
 import { PatientFlagsLegend, PatientFlagsView } from "./PatientFlagsView";
@@ -322,6 +323,9 @@ export function PatientsListView() {
         </Button>
       }
     >
+      {/* Статьи семей, ждущие второй пары глаз (ADR-0093): врач работает
+          отсюда, и в раздел статей без повода не заходит. */}
+      <ArticlesAwaitingReview />
       <div className="flex flex-col gap-field">
         <SegmentedControl
           label={t("list.quickFilters.label")}

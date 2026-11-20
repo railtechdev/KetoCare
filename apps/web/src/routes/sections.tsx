@@ -1,4 +1,6 @@
 import {
+  BookMarked,
+  BookOpen,
   Bot,
   Calculator,
   CalendarDays,
@@ -45,6 +47,11 @@ const AdminPage = lazy(() =>
 const AssistantPage = lazy(() =>
   import("../features/assistant/AssistantPage").then((m) => ({
     default: m.AssistantPage,
+  })),
+);
+const ClinicalArticlesPage = lazy(() =>
+  import("../features/articles/ClinicalArticlesPage").then((m) => ({
+    default: m.ClinicalArticlesPage,
   })),
 );
 const CalculatorPage = lazy(() =>
@@ -171,10 +178,13 @@ export const SECTION_SCREENS: Record<string, SectionScreen> = {
     ) : (
       <ProductsPage />
     ),
+  // Клинические статьи помощника семьи — врач и диетолог (ADR-0093).
+  articles: () => <ClinicalArticlesPage />,
   users: () => <AdminPage section="users" />,
   leads: () => <AdminPage section="leads" />,
   dictionaries: () => <AdminPage section="dictionaries" />,
   ai: () => <AdminPage section="ai" />,
+  productArticles: () => <AdminPage section="productArticles" />,
   letterhead: () => <AdminPage section="letterhead" />,
   audit: () => <AdminPage section="audit" />,
   child: () => <ChildPage />,
@@ -206,6 +216,8 @@ export const SECTION_ICONS: Record<string, LucideIcon> = {
   calculator: Calculator,
   products: ShoppingBasket,
   recipes: Salad,
+  articles: BookOpen,
+  productArticles: BookMarked,
   menu: CalendarDays,
   diary: NotebookPen,
   reports: FileText,
@@ -240,6 +252,8 @@ export type SectionId =
   | "leads"
   | "dictionaries"
   | "ai"
+  | "articles"
+  | "productArticles"
   | "letterhead"
   | "audit"
   | "profile";
@@ -256,6 +270,7 @@ export const SECTION_GROUPS: Record<string, SectionGroup> = {
   menu: "nutrition",
   recipes: "nutrition",
   products: "nutrition",
+  articles: "nutrition",
   patients: "daily",
   reports: "clinical",
   child: "management",
@@ -264,6 +279,7 @@ export const SECTION_GROUPS: Record<string, SectionGroup> = {
   leads: "management",
   dictionaries: "management",
   ai: "management",
+  productArticles: "management",
   letterhead: "management",
   audit: "management",
   profile: "account",

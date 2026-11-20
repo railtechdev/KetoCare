@@ -50,6 +50,11 @@ class Article:
     body: str
     path: str
     sha256: str
+    #: Подпись клинической статьи из заголовка файла. С ADR-0093 клиническая
+    #: статья переносится из файла в кабинет один раз, и подпись становится
+    #: первой опубликованной редакцией.
+    approved_by: str | None = None
+    approved_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +109,15 @@ def read_article(path: Path, *, root: Path) -> Article:
     kind = fields["kind"]
     if kind not in KINDS:
         raise ArticleError(f"{path.name}: kind должен быть одним из {KINDS}")
+    folder = _indexed_folder(path, root=root)
+    if folder is not None and folder != kind:
+        # Каталог и вид обязаны совпадать: хук защищает от правки только
+        # `clinical/`, и клиническая статья, положенная в `product/`, иначе
+        # прошла бы в помощник мимо и защиты, и проверки специалистом.
+        raise ArticleError(
+            f"{path.name}: kind «{kind}» не совпадает с каталогом «{folder}/» — "
+            f"статья вида «{kind}» лежит только в «{kind}/»"
+        )
     if fields["status"] not in STATUSES:
         raise ArticleError(f"{path.name}: status должен быть одним из {STATUSES}")
 
@@ -130,43 +144,69 @@ def read_article(path: Path, *, root: Path) -> Article:
         body=body,
         path=str(path.relative_to(root.parent if root.name else root)),
         sha256=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+        approved_by=fields.get("approved_by") or None,
+        approved_at=fields.get("approved_at") or None,
     )
 
 
+def _indexed_folder(path: Path, *, root: Path) -> str | None:
+    """Каталог индекса (`product` или `clinical`), в котором лежит файл."""
+
+    try:
+        parts = path.resolve().relative_to(root.resolve()).parts
+    except ValueError:
+        return None
+    if len(parts) > 1 and parts[0] in INDEXED_DIRS:
+        return parts[0]
+    return None
+
+
 def split_article(article: Article) -> list[Chunk]:
-    """Разрезать статью по заголовкам второго уровня.
+    """Разрезать статью из файла по заголовкам второго уровня — см. `split_text`."""
+
+    return split_text(article.title, article.body)
+
+
+def split_text(title: str, body: str) -> list[Chunk]:
+    """Разрезать текст статьи по заголовкам второго уровня.
 
     Режется по разделам, а не по числу символов: раздел — это законченная
     мысль, а кусок, оборванный посреди списка, приезжает модели без половины
     условий. Каждый кусок несёт путь заголовков — без него текст теряет
     контекст, и модель отвечает про кетоны словами про вес.
+
+    Одна функция на статьи из файлов и на статьи кабинета: и индекс, и проверка
+    черновика постфильтром режут текст ровно так, как его прочтёт модель.
     """
 
-    headings = list(_HEADING.finditer(article.body))
+    headings = list(_HEADING.finditer(body))
     if not headings:
-        return [Chunk(ord=0, heading_path=article.title, body=article.body.strip())]
+        return [Chunk(ord=0, heading_path=title, body=body.strip())]
 
     chunks: list[Chunk] = []
+    # Текст вне разделов — до первого заголовка или сразу под заголовком
+    # первого уровня — тоже кусок, с заголовком статьи в пути. В файлах его нет
+    # (статья начинается с H1, за ним сразу `##`), а в кабинете он обычен:
+    # вступление перед первым разделом или документ Word, где разделы — это
+    # «Заголовок 1». Выбрасывать его значило бы молча не показать модели часть
+    # опубликованного текста.
+    preamble = body[: headings[0].start()].strip()
+    if preamble:
+        chunks.append(Chunk(ord=0, heading_path=title, body=preamble))
     for index, heading in enumerate(headings):
         level = len(heading.group(1))
-        if level == 1:
-            # H1 — заголовок статьи, он уже есть в `title`.
-            continue
         start = heading.end()
-        end = headings[index + 1].start() if index + 1 < len(headings) else len(article.body)
-        body = article.body[start:end].strip()
-        if not body:
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(body)
+        section = body[start:end].strip()
+        if not section:
             continue
-        chunks.append(
-            Chunk(
-                ord=len(chunks),
-                heading_path=f"{article.title} › {heading.group(2)}",
-                body=body,
-            )
-        )
+        name = heading.group(2)
+        # H1 с текстом заголовка статьи — сам заголовок, его текст в `title`.
+        path = title if level == 1 and name == title else f"{title} › {name}"
+        chunks.append(Chunk(ord=len(chunks), heading_path=path, body=section))
 
     if not chunks:
-        return [Chunk(ord=0, heading_path=article.title, body=article.body.strip())]
+        return [Chunk(ord=0, heading_path=title, body=body.strip())]
     return chunks
 
 

@@ -61,6 +61,10 @@ export const AUDIT_ENTITIES = [
   "app_settings",
   // Предупреждение о бюджете моделей: 80 % и исчерпание (ADR-0081).
   "ai_budget",
+  // Статьи помощника (ADR-0093). Клинические видны только фактом, без
+  // содержания: к клиническим текстам у администратора доступа нет.
+  "kb_clinical_articles",
+  "kb_product_articles",
   // Записи дневника: правка и удаление пишутся с именем таблицы вида
   // (`services/logs.py`, находка Н1).
   "seizure_logs",
@@ -78,6 +82,19 @@ export const AUDIT_ACTIONS = [
   "delete",
   "publish",
   "unpublish",
+  // Статьи помощника (ADR-0093): проверка клинической статьи вторым
+  // специалистом, снятие, новая редакция, скрытие встроенной и шаг выката.
+  "submit",
+  "return",
+  "withdraw",
+  "new_version",
+  "discard_draft",
+  "hide",
+  "show",
+  "release_add",
+  "release_update",
+  "release_withdraw",
+  "release_restore",
   "merge",
   // Закрытие стандарта питания (ADR-0057).
   "lock",

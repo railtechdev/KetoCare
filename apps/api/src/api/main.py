@@ -25,6 +25,7 @@ from .routers import (
     dish_fit,
     food_standards,
     intake,
+    kb_articles,
     knowledge_base,
     leads,
     letterhead,
@@ -121,6 +122,9 @@ def create_app() -> FastAPI:
     v1.include_router(letterhead.router)
     v1.include_router(letterhead.admin_router)
     v1.include_router(knowledge_base.router)
+    v1.include_router(kb_articles.clinical_router)
+    v1.include_router(kb_articles.text_router)
+    v1.include_router(kb_articles.admin_router)
     v1.include_router(telegram.router)
     v1.include_router(telegram.bot_router)
     v1.include_router(monitor_health_router)
