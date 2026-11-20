@@ -18,6 +18,7 @@ import { AccountNotices } from "../features/auth/AccountNotices";
 import { type Role, navSectionsFor } from "../features/auth/roles";
 import { NAV } from "./navWidth";
 import { useSession } from "../features/auth/useSession";
+import { useClinicBrand } from "../features/letterhead/useClinicBrand";
 import { isPatientView } from "../features/doctor/patientViews";
 import { PatientSwitcher } from "../features/patients/PatientSwitcher";
 import { PRIMARY_MOBILE_SECTIONS, SECTION_ICONS } from "../routes/sections";
@@ -252,32 +253,51 @@ function MobileBottomNav({
 }
 
 /**
- * Знак и название. Там, где подпись скрыта визуально, она остаётся
- * скринридеру: полоса значков — та же навигация, и она обязана называть, куда
- * пользователь попал.
+ * Знак и название — клиники из бланка (ADR-0092), пока бланк не задан —
+ * продукта. Там, где подпись скрыта визуально, она остаётся скринридеру:
+ * полоса значков — та же навигация, и она обязана называть, куда пользователь
+ * попал. Пока бланк едет, место знака пустое, а не «KetoCare» на секунду.
  */
 function Brand({ labels }: { labels: NavLabels }) {
   const { t } = useTranslation();
+  const brand = useClinicBrand();
+  const wide = labels === "always";
 
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-field",
+        "flex min-w-0 items-center justify-center gap-field",
         labels === "responsive" && "2xl:justify-start",
-        labels === "always" && "justify-start",
+        wide && "justify-start",
       )}
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-        <Activity aria-hidden="true" className="size-5" />
-      </span>
+      {brand.logoUrl !== undefined ? (
+        <img
+          src={brand.logoUrl}
+          alt=""
+          className={cn(
+            "h-9 w-auto max-w-16 shrink-0 object-contain",
+            labels === "responsive" && "2xl:max-w-28",
+            wide && "max-w-28",
+          )}
+        />
+      ) : brand.noLogo ? (
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <Activity aria-hidden="true" className="size-5" />
+        </span>
+      ) : (
+        <span aria-hidden="true" className="size-9 shrink-0" />
+      )}
       <span
+        title={brand.name}
         className={cn(
-          "text-lg font-bold text-foreground",
+          "line-clamp-2 min-w-0 text-base leading-tight font-bold text-foreground",
           labels === "responsive" && "sr-only 2xl:not-sr-only",
           (labels === "never" || labels === "stacked") && "sr-only",
+          brand.name === undefined && "sr-only 2xl:sr-only",
         )}
       >
-        {t("app.name")}
+        {brand.name ?? t("app.name")}
       </span>
     </div>
   );
