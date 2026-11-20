@@ -16,6 +16,7 @@ import {
   WEIGHT_MIN_KG,
   diaryFieldErrors,
   formatMeasured,
+  formatOccurredAt,
   formatWeight,
   ketoneBody,
   ketoneSchema,
@@ -37,6 +38,8 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { RemoveButton } from "../../components/RemoveButton";
+import { TelegramConfirmDialog } from "../../components/TelegramConfirmDialog";
 import { errorMessageOf } from "../../lib/api";
 import { useOnline } from "../../lib/connectivity";
 import {
@@ -44,11 +47,17 @@ import {
   useTelegramBack,
   useUnsavedGuard,
 } from "../../lib/useTelegram";
-import type {
-  CreatableKind,
-  DiaryLog,
-  MedicationOption,
-  NamedOption,
+import {
+  SeizureTypePicker,
+  type SeizurePickerLevel,
+} from "./SeizureTypePicker";
+import {
+  DICTIONARY_READY,
+  type CreatableKind,
+  type DiaryLog,
+  type DictionaryStatus,
+  type MedicationOption,
+  type NamedOption,
 } from "./useDiary";
 
 type Values = Record<string, string | boolean>;
@@ -174,6 +183,17 @@ export interface EntryEditSheetProps {
   /** Подзаголовок панели: какая запись правится или какого вида новая. */
   title: string;
   seizureTypes: NamedOption[];
+  /**
+   * Загрузка справочника типов: пустой список выше — это и «ещё идёт», и
+   * «ждёт связи», и «сервер отказал», а сказать выбор обязан разное.
+   */
+  seizureTypesStatus?: DictionaryStatus;
+  /**
+   * Типы прошлых приступов ребёнка — первый экран выбора типа (Д3). Пусто —
+   * выбор начинается с групп классификации; `null` — ответ ещё идёт, и
+   * первый экран ждёт его, а не рисуется дважды.
+   */
+  recentSeizureTypes?: readonly string[] | null;
   durationOptions: NamedOption[];
   medications: MedicationOption[];
   pending: boolean;
@@ -196,6 +216,14 @@ export interface EntryEditSheetProps {
    * вида, у правки — то же, что закрыть.
    */
   onBack?: () => void;
+  /**
+   * Удалить запись — только у правки своей записи. Удаление живёт здесь, а не
+   * кнопкой в ленте: в строке ленты оно стояло рядом с «Исправить» и съедало
+   * ширину значения (аудит Mini App 21.11.2026, Д2).
+   */
+  onDelete?: () => void;
+  /** Удаление уже отправлено — кнопка ждёт ответа. */
+  deleting?: boolean;
 }
 
 /**
@@ -208,6 +236,8 @@ export function EntryEditSheet({
   target,
   title,
   seizureTypes,
+  seizureTypesStatus = DICTIONARY_READY,
+  recentSeizureTypes = [],
   durationOptions,
   medications,
   pending,
@@ -215,6 +245,8 @@ export function EntryEditSheet({
   onSave,
   onClose,
   onBack = onClose,
+  onDelete,
+  deleting = false,
 }: EntryEditSheetProps) {
   const { t } = useTranslation();
   const creating = "kind" in target;
@@ -228,6 +260,14 @@ export function EntryEditSheet({
   const [values, setValues] = useState<Values>(initial);
   const [errors, setErrors] = useState<Errors>({});
   const [step, setStep] = useState(1);
+  // Выбор типа приступа — стопка уровней (Д3). У нового приступа он открыт
+  // сразу: тип — первый вопрос, как в боте; у правки — по «Изменить тип».
+  const [picker, setPicker] = useState<SeizurePickerLevel[] | null>(() =>
+    creating && kind === "seizures" ? [{ at: "first" }] : null,
+  );
+  const level = picker?.at(-1) ?? null;
+  // Выведенные типы новой записью не выбираются (ADR-0050).
+  const activeSeizureTypes = seizureTypes.filter((type) => !type.retired);
   const rules = RULES[kind];
   const online = useOnline();
   const attemptKey = useAttemptKey(`${kind}:${JSON.stringify(values)}`);
@@ -238,6 +278,7 @@ export function EntryEditSheet({
 
   const set = (name: string) => (value: string | boolean) =>
     setValues((current) => ({ ...current, [name]: value }));
+  const text = (name: string) => String(values[name] ?? "");
 
   // Незаконченная правка: Telegram спросит «закрыть?», а жест вниз по форме
   // не свернёт приложение вместе с ней.
@@ -249,8 +290,25 @@ export function EntryEditSheet({
   // «Назад» Telegram — шаг назад в форме, а с первого шага — закрыть её.
   // Без этого аппаратная «Назад» на Android закрывала весь Mini App.
   const back = () => {
+    if (picker !== null) {
+      // Уровень выше; с первого уровня — к форме, а у нового приступа без
+      // выбранного типа — туда, откуда форму открыли: формы без типа нет.
+      if (picker.length > 1) setPicker(picker.slice(0, -1));
+      else if (creating && text("seizureTypeId") === "") onBack();
+      else setPicker(null);
+      return;
+    }
     if (step === 2) setStep(1);
     else onBack();
+  };
+  const pickType = (typeId: string) => {
+    set("seizureTypeId")(typeId);
+    setErrors((current) => {
+      const next = { ...current };
+      delete next.seizureTypeId;
+      return next;
+    });
+    setPicker(null);
   };
   useTelegramBack(pending ? null : back);
 
@@ -263,15 +321,21 @@ export function EntryEditSheet({
   // «Сохранить» и «Отмена» — родными кнопками Telegram внизу экрана (Bot API
   // 7.10): над клавиатурой, на привычном месте. Вне Telegram и в старом
   // клиенте — кнопками формы.
-  const native = useBottomButtons({
-    main: {
-      text: primaryLabel,
-      onClick: () => submit(),
-      disabled: blockedOffline,
-      progress: pending,
-    },
-    secondary: { text: secondaryLabel, onClick: back, disabled: pending },
-  });
+  // Пока открыт выбор типа, сохранять нечего: вариант выбирается нажатием,
+  // а «Назад» — кнопка Telegram.
+  const native = useBottomButtons(
+    picker !== null
+      ? null
+      : {
+          main: {
+            text: primaryLabel,
+            onClick: () => submit(),
+            disabled: blockedOffline,
+            progress: pending,
+          },
+          secondary: { text: secondaryLabel, onClick: back, disabled: pending },
+        },
+  );
 
   function submit() {
     const found = diaryFieldErrors(rules.schema, values);
@@ -317,56 +381,108 @@ export function EntryEditSheet({
       // полноэкранном режиме и домашняя полоса закрывали бы её края.
       className="pt-(--safe-top,0px) pb-(--safe-bottom,0px)"
     >
-      <form
-        noValidate
-        className="flex flex-col gap-section"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <EntryFields
-          kind={kind}
-          creating={creating}
-          step={step}
-          values={values}
-          errors={errors}
-          set={set}
-          seizureTypes={seizureTypes}
-          durationOptions={durationOptions}
-          medications={medications}
-        />
-
-        {blockedOffline && <StatusNote>{t("errors.network")}</StatusNote>}
-
-        {error != null && (
-          <p role="alert" className="m-0 text-destructive">
-            {errorMessageOf(error) ?? t("diary.saveFailed")}
-          </p>
-        )}
-
-        {!native && (
-          <div className="flex flex-col gap-field">
-            <Button
-              type="submit"
-              className="min-h-touch w-full"
-              disabled={pending || blockedOffline}
-              aria-busy={pending || undefined}
-            >
-              {primaryLabel}
-            </Button>
+      {level !== null ? (
+        <div className="flex flex-col gap-section">
+          <SeizureTypePicker
+            level={level}
+            types={activeSeizureTypes}
+            dictionary={seizureTypesStatus}
+            recent={recentSeizureTypes}
+            onPick={pickType}
+            onOpen={(next) => setPicker([...(picker ?? []), next])}
+          />
+          {!native && (
             <Button
               type="button"
               variant="outline"
               className="min-h-touch w-full"
-              disabled={pending}
               onClick={back}
             >
-              {secondaryLabel}
+              {t("diary.back")}
             </Button>
-          </div>
-        )}
-      </form>
+          )}
+        </div>
+      ) : (
+        <form
+          noValidate
+          className="flex flex-col gap-section"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <EntryFields
+            kind={kind}
+            creating={creating}
+            step={step}
+            values={values}
+            errors={errors}
+            set={set}
+            seizureTypes={seizureTypes}
+            canChangeType={activeSeizureTypes.length > 0}
+            onChangeType={() => setPicker([{ at: "first" }])}
+            durationOptions={durationOptions}
+            medications={medications}
+          />
+
+          {blockedOffline && <StatusNote>{t("errors.network")}</StatusNote>}
+
+          {error != null && (
+            <p role="alert" className="m-0 text-destructive">
+              {errorMessageOf(error) ?? t("diary.saveFailed")}
+            </p>
+          )}
+
+          {!native && (
+            <div className="flex flex-col gap-field">
+              <Button
+                type="submit"
+                className="min-h-touch w-full"
+                disabled={pending || blockedOffline}
+                aria-busy={pending || undefined}
+              >
+                {primaryLabel}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch w-full"
+                disabled={pending}
+                onClick={back}
+              >
+                {secondaryLabel}
+              </Button>
+            </div>
+          )}
+
+          {onDelete !== undefined && (
+            // Вторичное и опасное — последним, под сохранением, и только с
+            // подтверждением: вернуть удалённую запись семья сама не может.
+            <TelegramConfirmDialog
+              trigger={
+                <RemoveButton
+                  label={
+                    deleting ? t("diary.deleting") : t("diary.deleteEntry")
+                  }
+                  disabled={deleting || pending}
+                  aria-label={t("diary.deleteAria", { title })}
+                  className="self-center"
+                />
+              }
+              title={t("diary.confirmTitle", { title })}
+              description={t("diary.confirmBody", {
+                when:
+                  "entry" in target
+                    ? formatOccurredAt(new Date(target.entry.occurred_at))
+                    : "",
+              })}
+              confirmLabel={t("diary.confirmYes")}
+              cancelLabel={t("actions.cancel")}
+              onConfirm={onDelete}
+            />
+          )}
+        </form>
+      )}
     </FormSheet>
   );
 }
@@ -379,6 +495,8 @@ function EntryFields({
   errors,
   set,
   seizureTypes,
+  canChangeType,
+  onChangeType,
   durationOptions,
   medications,
 }: {
@@ -389,6 +507,9 @@ function EntryFields({
   errors: Errors;
   set: (name: string) => (value: string | boolean) => void;
   seizureTypes: NamedOption[];
+  /** Есть из чего выбрать: без справочника тип не меняется. */
+  canChangeType: boolean;
+  onChangeType: () => void;
   durationOptions: NamedOption[];
   medications: MedicationOption[];
 }) {
@@ -420,33 +541,16 @@ function EntryFields({
       return step === 1 ? (
         <>
           {occurredAt}
-          {/* Без справочника тип не меняется: он уезжает на сервер прежним,
-              придумать идентификатор нельзя. У новой записи поле стоит всегда:
-              тип обязателен, и ошибка «выберите» должна быть под полем. */}
-          {(creating || seizureTypes.length > 0) && (
-            <SelectField
-              label={t("diary.form.seizureType")}
-              autoFocus
-              value={text("seizureTypeId")}
-              onChange={set("seizureTypeId")}
-              // Выведенный тип остаётся в списке только у записи, которая на
-              // нём стоит: новый приступ — по ILAE 2025 (ADR-0050).
-              options={[
-                ...choose,
-                ...withCurrent(
-                  seizureTypes.filter(
-                    (type) =>
-                      !type.retired || type.id === text("seizureTypeId"),
-                  ),
-                  text("seizureTypeId"),
-                  t,
-                ),
-              ]}
-              error={
-                errors.seizureTypeId && t("diary.form.seizureTypeRequired")
-              }
-            />
-          )}
+          {/* Тип выбран на своём экране (Д3); здесь он назван, и его можно
+              сменить. Без справочника тип не меняется: он уезжает на сервер
+              прежним, придумать идентификатор нельзя. Выведенный тип
+              записи называется по-прежнему (ADR-0050). */}
+          <SeizureTypeRow
+            name={seizureTypeName(seizureTypes, text("seizureTypeId"), t)}
+            canChange={canChangeType}
+            onChange={onChangeType}
+            error={errors.seizureTypeId && t("diary.form.seizureTypeRequired")}
+          />
           <DurationField
             values={values}
             errors={errors}
@@ -675,6 +779,55 @@ function DurationField({
           ]}
           error={errors.durationOptionId && t("diary.form.durationBoth")}
         />
+      )}
+    </div>
+  );
+}
+
+/** Название записанного типа — или честное «как записано раньше». */
+function seizureTypeName(
+  types: NamedOption[],
+  current: string,
+  t: (key: string) => string,
+): string | null {
+  if (current === "") return null;
+  return (
+    types.find((type) => type.id === current)?.name ??
+    t("diary.form.unknownOption")
+  );
+}
+
+/** «Какой приступ: …» и «Изменить тип» — вместо списка из 25 терминов. */
+function SeizureTypeRow({
+  name,
+  canChange,
+  onChange,
+  error,
+}: {
+  name: string | null;
+  canChange: boolean;
+  onChange: () => void;
+  error?: string | false;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm font-medium">{t("diary.form.seizureType")}</span>
+      <p className="m-0">{name ?? t("diary.form.seizureTypeNone")}</p>
+      {canChange && (
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-touch self-start"
+          onClick={onChange}
+        >
+          {t("diary.seizurePicker.change")}
+        </Button>
+      )}
+      {error && (
+        <p role="alert" className="m-0 text-sm text-destructive">
+          {error}
+        </p>
       )}
     </div>
   );

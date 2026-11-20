@@ -188,20 +188,24 @@ describe("«Добавить запись» в Mini App", () => {
     });
   });
 
-  it("приступ: тип обязателен, интервал со слов уходит ссылкой, а не секундами", async () => {
+  it("приступ: сначала тип, интервал со слов уходит ссылкой, а не секундами", async () => {
     const user = userEvent.setup();
     renderAdd();
 
     await choose(user, "Приступ");
-    // Тип не подставлен: запись ушла бы с приступом, которого не выбирали.
-    const type = await screen.findByLabelText("Какой приступ");
-    expect(type).toHaveValue("");
-    await user.click(screen.getByRole("button", { name: "Далее" }));
-    expect(
-      await screen.findByText("Выберите, какой был приступ."),
-    ).toBeInTheDocument();
+    // Тип — первый вопрос, как в боте (Д3), и не подставлен: запись ушла бы
+    // с приступом, которого не выбирали.
+    expect(await screen.findByText("Какой был приступ?")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Далее" })).toBeNull();
+    await user.click(
+      await screen.findByRole("button", { name: "Тонико-клонический" }),
+    );
 
-    await user.selectOptions(type, "t1");
+    // Выбранный тип назван на шаге и сменяется кнопкой.
+    expect(await screen.findByText("Тонико-клонический")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Изменить тип" }),
+    ).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText(/^Примерно/), "d1");
     await user.click(screen.getByRole("button", { name: "Далее" }));
     expect(await screen.findByLabelText("Сколько раз")).toHaveValue(1);

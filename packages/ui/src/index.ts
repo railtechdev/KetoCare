@@ -10,7 +10,7 @@ export {
   RATIO_MIN,
   RATIO_STEP,
 } from "./lib/ratioChoices";
-export { useAttemptKey } from "./lib/useAttemptKey";
+export { randomKey, useAttemptKey } from "./lib/useAttemptKey";
 export { useFrozenAttempt } from "./lib/useFrozenAttempt";
 export type { FrozenAttempt } from "./lib/useFrozenAttempt";
 export { RETRYABLE_ERROR_CODES, canRetry } from "./lib/retryable";
@@ -90,6 +90,20 @@ export type {
   WeightValues,
 } from "./lib/diaryEntry";
 export { DIARY_ENTRY_KEYS, describeDiaryEntry } from "./lib/describeDiaryEntry";
+export {
+  RECENT_SEIZURE_TYPES,
+  UNKNOWN_SEIZURE_REF,
+  hasSeizureTree,
+  seizureChildren,
+  seizureNodeByRef,
+  seizureParentRef,
+  unknownSeizureType,
+} from "./lib/seizureTree";
+export type { SeizureTreeChild, SeizureTreeNode } from "./lib/seizureTree";
+export {
+  AS_NEEDED_FREQUENCY,
+  describeMedicationFrequency,
+} from "./lib/medicationFrequency";
 export type {
   DescribableDiaryEntry,
   DiaryEntryDescription,
@@ -106,6 +120,7 @@ export {
   formatOccurredAt,
   formatDayTime,
   formatDayMonth,
+  formatTime,
   formatRatio,
   formatFactor,
   formatDose,

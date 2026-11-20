@@ -3,7 +3,7 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -46,6 +46,13 @@ beforeEach(() => {
   (api.GET as Mock).mockImplementation(fakeGet());
 });
 
+/** «Записи / График» → «График»: график живёт на своей половине (Д1). */
+async function openChart() {
+  await userEvent
+    .setup()
+    .click(await screen.findByRole("radio", { name: "График" }));
+}
+
 /** Кэш открытого экрана: чистим до возврата сети, чтобы паузы не снимались. */
 let screenClient: QueryClient | undefined;
 
@@ -82,25 +89,69 @@ describe("динамика в Mini App", () => {
     }
   });
 
-  it("записи — первыми, под ними один график с переключателем", async () => {
-    // Прежде над записями стояли три графика по 260 px (аудит 12.11.2026).
+  it("без сети в виде «График» пауза объясняется и у графика", async () => {
+    // Лента в этом виде скрыта, и её строка «нет связи» не видна: под
+    // переключателем оставался один заголовок без единого слова.
+    (api.GET as Mock).mockImplementation(() => new Promise(() => undefined));
+    onlineManager.setOnline(false);
+
+    try {
+      const { client } = renderScreen();
+      screenClient = client;
+      await openChart();
+
+      await screen.findByRole("heading", { name: "График за 30 дней" });
+      const visible = () =>
+        screen
+          .queryAllByText("Нет связи — покажем, как только она появится.")
+          .filter((element) => element.closest("[hidden]") === null);
+      await waitFor(() => expect(visible()).toHaveLength(1));
+    } finally {
+      screenClient?.clear();
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it("«Записи / График» наверху: сначала записи, график — переключателем", async () => {
+    // Прежде график стоял под лентой за две недели — на восемнадцатом экране
+    // (аудит Mini App 21.11.2026, Д1).
+    const user = userEvent.setup();
     renderScreen();
 
-    const entries = await screen.findByRole("heading", {
-      name: "Записи за 14 дней",
-    });
-    const chart = screen.getByRole("heading", { name: "График за 30 дней" });
+    const view = screen.getByRole("group", { name: "Что показать" });
+    expect(within(view).getByRole("radio", { name: "Записи" })).toBeChecked();
     expect(
-      entries.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      await screen.findByRole("heading", { name: "Записи за 14 дней" }),
+    ).toBeInTheDocument();
     expect(await screen.findByText("Кетоны: 3,2 ммоль/л")).toBeInTheDocument();
+    expect(screen.queryByRole("figure")).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "График за 30 дней" }),
+    ).toBeNull();
+    // «Добавить запись» — первым, над переключателем.
+    const add = screen.getByRole("button", { name: "Добавить запись" });
+    expect(
+      add.compareDocumentPosition(view) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.click(within(view).getByRole("radio", { name: "График" }));
+    expect(
+      screen.getByRole("heading", { name: "График за 30 дней" }),
+    ).toBeInTheDocument();
     expect(await screen.findAllByRole("figure")).toHaveLength(1);
     expect(screen.getByRole("radio", { name: "Кетоны" })).toBeChecked();
+    // Лента не размонтирована, а спрятана: раскрытые дни и отбор не теряются.
+    expect(screen.queryByText("Кетоны: 3,2 ммоль/л")).not.toBeVisible();
+
+    await user.click(within(view).getByRole("radio", { name: "Записи" }));
+    expect(screen.getByText("Кетоны: 3,2 ммоль/л")).toBeVisible();
+    expect(screen.queryByRole("figure")).toBeNull();
   });
 
   it("переключатель показывает другой вид — тем же графиком", async () => {
     const user = userEvent.setup();
     renderScreen();
+    await openChart();
     await screen.findAllByRole("figure");
 
     await user.click(screen.getByRole("radio", { name: "Вес" }));
@@ -121,6 +172,7 @@ describe("динамика в Mini App", () => {
     const user = userEvent.setup();
 
     renderScreen();
+    await openChart();
 
     expect(
       await screen.findByText("Записей за этот период нет."),
@@ -134,6 +186,7 @@ describe("динамика в Mini App", () => {
 
   it("с записями рисует график и молчит про пустоту", async () => {
     renderScreen();
+    await openChart();
 
     expect(await screen.findAllByRole("figure")).toHaveLength(1);
     expect(screen.queryByText("Записей за этот период нет.")).toBeNull();
@@ -147,8 +200,9 @@ describe("динамика в Mini App", () => {
     // где данные уже на экране, значит говорить о том, что и так видно.
     const { client } = renderScreen();
     screenClient = client;
-    expect(await screen.findAllByRole("figure")).toHaveLength(1);
     await screen.findByText("Кетоны: 3,2 ммоль/л");
+    await openChart();
+    expect(await screen.findAllByRole("figure")).toHaveLength(1);
 
     onlineManager.setOnline(false);
     try {
@@ -188,6 +242,7 @@ describe("динамика в Mini App", () => {
     );
 
     renderScreen();
+    await openChart();
 
     expect(
       await screen.findByText("История назначений не загрузилась."),
@@ -196,6 +251,7 @@ describe("динамика в Mini App", () => {
 
   it("просит период у сервера, а не режет выдачу на клиенте", async () => {
     renderScreen();
+    await openChart();
 
     const range = trendRange();
     await screen.findAllByRole("figure");

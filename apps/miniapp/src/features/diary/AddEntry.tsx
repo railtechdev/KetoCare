@@ -10,9 +10,12 @@ import { KIND_ICON } from "./kinds";
 import {
   DIARY_KINDS,
   type CreatableKind,
+  dictionaryStatusOf,
+  recentSeizureTypesOf,
   useDurationOptions,
   useEntryMutations,
   useMedications,
+  useRecentSeizureTypes,
   useSeizureTypes,
 } from "./useDiary";
 
@@ -53,6 +56,7 @@ export function AddEntry({
       : { at: "form", kind: initialKind },
   );
   const seizureTypes = useSeizureTypes();
+  const recentSeizureTypes = useRecentSeizureTypes(session.patientId);
   const durationOptions = useDurationOptions();
   const medications = useMedications(session.patientId);
   const { create } = useEntryMutations(session.patientId);
@@ -64,6 +68,8 @@ export function AddEntry({
         target={{ kind: step.kind }}
         title={t(`diary.add.kinds.${step.kind}`)}
         seizureTypes={seizureTypes.data ?? []}
+        seizureTypesStatus={dictionaryStatusOf(seizureTypes)}
+        recentSeizureTypes={recentSeizureTypesOf(recentSeizureTypes)}
         durationOptions={durationOptions.data ?? []}
         medications={medications.data ?? []}
         pending={create.isPending}

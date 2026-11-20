@@ -29,6 +29,7 @@ import { MealItem } from "../menu/MealItem";
 import { MenuScreen } from "../menu/MenuScreen";
 import { dayAt, isPlanChanged, useMarkEaten, useMenu } from "../menu/useMenu";
 import type { Session } from "../session/useSession";
+import { MedicationsToday } from "./MedicationsToday";
 
 /** Что открыто во вкладке: сводка дня или меню. */
 type View = { at: "summary" } | { at: "menu"; dayOffset: number };
@@ -44,7 +45,8 @@ export interface TodayRequest {
  * Прежде главная была сводкой с тремя блоками настроек под ней, и ни одного
  * действия на первом экране. Теперь на одном экране: назначение одной строкой,
  * быстрые записи («Приступ», «Кетоны», «Вес» — сразу форма, без выбора вида),
- * ближайший приём с отметками «съедено» и итоги дня одним блоком. Настройки
+ * лекарства на сегодня с «Дали / Пропустили» (Д4), ближайший приём с
+ * отметками «съедено» и итоги дня одним блоком. Настройки
  * ушли на свой экран (шестерёнка в шапке и пункт меню Telegram).
  *
  * Меню дня — экраном внутри этой же вкладки («Открыть меню»): это тот же
@@ -153,6 +155,7 @@ function TodaySummary({
             <Notices overview={overview.data} />
             <PrescriptionLine overview={overview.data} />
             <QuickRecords overview={overview.data} onPick={setQuick} />
+            <MedicationsToday session={session} />
             <NextMealBlock
               session={session}
               overview={overview.data}

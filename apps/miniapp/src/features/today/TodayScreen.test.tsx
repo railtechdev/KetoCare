@@ -91,9 +91,11 @@ function renderScreen() {
 function serve({
   overview,
   menu = null,
+  medications = [],
 }: {
   overview: unknown;
   menu?: unknown;
+  medications?: unknown[];
 }) {
   (api.GET as Mock).mockImplementation(async (path: string) => {
     if (path.endsWith("/overview")) {
@@ -117,6 +119,13 @@ function serve({
             response: { status: 404 },
           }
         : { data: menu, response: { status: 200 } };
+    }
+    // Схема препаратов и сегодняшние отметки — блок «Лекарства сегодня».
+    if (path.endsWith("/medications")) {
+      return {
+        data: { items: medications, total: medications.length },
+        response: { status: 200 },
+      };
     }
     return { data: [], response: { status: 200 } };
   });
@@ -420,5 +429,50 @@ describe("«Сегодня» в Mini App", () => {
       expect(value).toHaveFocus();
     });
     expect(screen.queryByText("Что записать?")).toBeNull();
+  });
+
+  it("лекарства на сегодня — блоком после быстрых записей (Д4)", async () => {
+    serve({
+      overview: BASE,
+      medications: [
+        {
+          id: "m1",
+          drug_name: "Депакин",
+          dose: "150 мг",
+          frequency_code: "once_daily",
+          frequency: null,
+          started_at: "2020-01-01",
+          stopped_at: null,
+        },
+      ],
+    });
+    renderScreen();
+
+    const block = await screen.findByRole("heading", {
+      name: "Лекарства сегодня",
+    });
+    const quick = screen.getByRole("heading", { name: "Записать" });
+    expect(
+      quick.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Дали: Депакин" }),
+    ).toBeInTheDocument();
+    // Быстрые записи остались прежними.
+    expect(screen.getByRole("button", { name: /^Кетоны/ })).toBeInTheDocument();
+  });
+
+  it("без препаратов блока лекарств нет", async () => {
+    renderScreen();
+
+    await screen.findByRole("heading", { name: "Записать" });
+    await waitFor(() =>
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/medications",
+        expect.anything(),
+      ),
+    );
+    expect(screen.queryByText("Лекарства сегодня")).toBeNull();
+    expect(screen.queryByText("Лекарства не загрузились")).toBeNull();
   });
 });

@@ -1,3 +1,5 @@
+import { describeMedicationFrequency } from "@ketocare/ui";
+
 import type { Medication } from "./types";
 
 export type MedicationFrequency = NonNullable<Medication["frequency_code"]>;
@@ -38,8 +40,6 @@ export function describeFrequency(
   medication: Pick<Medication, "frequency_code" | "frequency">,
   labelOf: (code: MedicationFrequency) => string,
 ): string {
-  const note = medication.frequency ?? "";
-  const code = medication.frequency_code;
-  if (code === null || code === undefined || code === "other") return note;
-  return note === "" ? labelOf(code) : `${labelOf(code)} — ${note}`;
+  // Правило одно на кабинет и Mini App — в ките.
+  return describeMedicationFrequency(medication, labelOf);
 }

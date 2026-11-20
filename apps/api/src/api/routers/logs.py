@@ -67,8 +67,8 @@ async def list_seizure_logs(
     )
 
 
-#: How many recent types the bot shows as «like last time» buttons; the
-#: ceiling keeps the first seizure screen short (ADR-0076).
+#: How many recent types the bot and the Mini App show as «like last time»
+#: buttons; the ceiling keeps the first seizure screen short (ADR-0076).
 RECENT_SEIZURE_TYPES_MAX = 10
 
 
@@ -83,11 +83,14 @@ async def recent_seizure_types(
     _: PatientAccessDep,
     limit: Annotated[int, Query(ge=1, le=RECENT_SEIZURE_TYPES_MAX)] = 4,
 ) -> RecentSeizureTypesRead:
-    """Consumer: the bot's «Приступ» scenario (`BotApi.recent_seizure_types`).
+    """Consumers: the bot's «Приступ» scenario (`BotApi.recent_seizure_types`)
+    and the Mini App seizure type picker (`useRecentSeizureTypes` in
+    `apps/miniapp/src/features/diary/useDiary.ts`, audit item Д3).
 
     A separate narrow read instead of the diary list: the list carries
     durations, notes and triggers, and the bot channel has no business reading
-    them (`BOT_ALLOWED_ROUTES` opens no diary read).
+    them (`BOT_ALLOWED_ROUTES` opens no diary read). Both channels ask for the
+    same four types and render them the same way.
     """
 
     return RecentSeizureTypesRead(
