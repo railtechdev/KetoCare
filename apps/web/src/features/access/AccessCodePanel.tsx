@@ -17,6 +17,7 @@ import { PrintButton } from "../../components/PrintButton";
 import { PrintedSheets } from "../../components/print/PrintedSheets";
 import { QrCode } from "../../components/QrCode";
 import { useDocumentFrame } from "../letterhead/useDocumentFrame";
+import { usePatient } from "../patients/usePatient";
 import { AccessCodeSheet } from "./AccessCodeSheet";
 import { errorMessageOf } from "../../lib/api";
 import { LinesSkeleton } from "../doctor/skeletons";
@@ -75,6 +76,7 @@ export function AccessCodePanel({
   const voice = (key: string) => t(`panel.${audience}.${key}`);
   // Бланк клиники на листе «Доступ для семьи» (ADR-0092).
   const frame = useDocumentFrame();
+  const patient = usePatient(patientId);
 
   const issue = useIssueAccessCode(patientId, PURPOSE);
   const revoke = useRevokeAccessCode(patientId);
@@ -261,6 +263,9 @@ export function AccessCodePanel({
                     {
                       key: issued.code,
                       title: t("sheet.sheetTitle"),
+                      // Имя ребёнка — на листе: код без имени легко отдать не
+                      // той семье, а это чужая карта.
+                      aside: patient.data?.full_name,
                       code: "KC-ACCESS-1",
                       content: <AccessCodeSheet issued={issued} />,
                     },

@@ -14,12 +14,15 @@ from __future__ import annotations
 import csv
 import io
 import uuid
-from datetime import date, datetime
+from collections.abc import Sequence
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.clock import local_date, local_day_bounds
-from core.models import Patient
+from core.config import get_settings
+from core.models import Patient, Prescription
 from core.models.enums import KetoneMethod
 from core.repositories import medications as medications_repo
 from core.repositories import prescriptions as prescriptions_repo
@@ -66,6 +69,28 @@ def _series(points: list[MeasurementPoint]) -> MeasurementSeries:
         # среднее с пятнадцатью знаками читается как ложная точность.
         mean=round(sum(values) / len(values), 2),
     )
+
+
+def prescriptions_in_force(
+    history: Sequence[Prescription], period_from: date, period_to: date
+) -> list[Prescription]:
+    """Назначения, по которым ребёнок жил в периоде, в порядке их действия.
+
+    Действующее на день выбирает одно правило (`prescriptions_repo.active_on`,
+    ADR-0078), и здесь оно спрашивается на каждый день периода: версия,
+    перекрытая поправкой врача или сменённая до начала периода, в отчёт не
+    попадает. Последнее в списке — действующее на конец периода: по нему отчёт
+    и подписывает «назначение».
+    """
+
+    in_force: list[Prescription] = []
+    day = period_from
+    while day <= period_to:
+        active = prescriptions_repo.active_on(history, day)
+        if active is not None and all(active.id != item.id for item in in_force):
+            in_force.append(active)
+        day += timedelta(days=1)
+    return in_force
 
 
 async def build_report(
@@ -147,9 +172,6 @@ async def build_report(
             height_cm=float(patient.height_cm) if patient.height_cm is not None else None,
             clinic_card_number=patient.clinic_card_number,
         ),
-        # Назначения, действовавшие в периоде: те, что начались не позже его
-        # конца. Более раннее назначение тоже действовало — оно и есть то, по
-        # которому семья жила в начале периода.
         prescriptions=[
             ReportPrescription(
                 ratio=float(item.ratio),
@@ -160,8 +182,7 @@ async def build_report(
                 effective_from=item.effective_from,
                 created_at=item.created_at,
             )
-            for item in history
-            if item.effective_from <= period_to
+            for item in prescriptions_in_force(history, period_from, period_to)
         ],
         seizures=SeizureSection(
             entries=len(seizures),
@@ -196,6 +217,10 @@ async def build_report(
                 stopped_at=item.stopped_at,
             )
             for item in medications
+            # Препараты, которые принимались в периоде: отменённый до его начала
+            # и назначенный после его конца к этим неделям не относятся.
+            if item.started_at <= period_to
+            and (item.stopped_at is None or item.stopped_at >= period_from)
         ],
         side_effects=[
             SideEffectRow(
@@ -229,6 +254,25 @@ def _decimal(value: float) -> str:
     return f"{value:g}".replace(".", ",")
 
 
+def _local_moment(moment: datetime) -> str:
+    """Момент записи по часам клиники: «2026-11-14 12:02».
+
+    Сутки отчёта местные, и время в файле — тоже: момент в UTC сдвигал ночной
+    замер на предыдущий день, а в соседней строке «приступы по дням» тот же
+    день стоял местным. Смещение названо один раз, строкой «часовой пояс».
+    """
+
+    return f"{moment.astimezone(ZoneInfo(get_settings().tz)):%Y-%m-%d %H:%M}"
+
+
+def _utc_offset() -> str:
+    offset = datetime.now(ZoneInfo(get_settings().tz)).utcoffset() or timedelta(0)
+    minutes = int(offset.total_seconds() // 60)
+    sign = "+" if minutes >= 0 else "−"
+    hours, rest = divmod(abs(minutes), 60)
+    return f"UTC{sign}{hours}" + (f":{rest:02d}" if rest else "")
+
+
 def report_to_csv(report: PatientReport) -> str:
     """Отчёт в CSV — для переноса в статистику и в чужие инструменты.
 
@@ -240,48 +284,57 @@ def report_to_csv(report: PatientReport) -> str:
     часть — через запятую, кодировка UTF-8 с BOM. С запятой-разделителем
     Excel видел одну колонку, а «3.4» с точкой он читает как дату «03.апр».
     Даты — ISO, их Excel понимает в любой локали.
+
+    Подписи — по-русски: файл открывает врач, а не программа, и строка
+    «seizures_by_type» ему ничего не говорила.
     """
 
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=";")
-    writer.writerow(["section", "key", "value", "extra"])
+    writer.writerow(["Раздел", "Показатель", "Значение", "Уточнение"])
 
-    writer.writerow(["patient", "full_name", report.patient.full_name, ""])
-    writer.writerow(["patient", "birth_date", report.patient.birth_date.isoformat(), ""])
-    writer.writerow(["period", "from", report.period.from_date.isoformat(), ""])
-    writer.writerow(["period", "to", report.period.to_date.isoformat(), ""])
+    writer.writerow(["Пациент", "ФИО", report.patient.full_name, ""])
+    writer.writerow(["Пациент", "Дата рождения", report.patient.birth_date.isoformat(), ""])
+    if report.patient.clinic_card_number:
+        writer.writerow(["Пациент", "Номер карты клиники", report.patient.clinic_card_number, ""])
+    writer.writerow(["Период", "С", report.period.from_date.isoformat(), ""])
+    writer.writerow(["Период", "По", report.period.to_date.isoformat(), ""])
+    writer.writerow(["Период", "Часовой пояс времени в файле", _utc_offset(), ""])
 
     for prescription in report.prescriptions:
         writer.writerow(
             [
-                "prescription",
-                prescription.effective_from.isoformat(),
-                f"{_decimal(prescription.ratio)}:1",
-                f"{prescription.kcal_per_day} ккал, белок {_decimal(prescription.protein_g)} г, "
-                f"углеводы до {_decimal(prescription.carbs_limit_g)} г, "
-                f"приёмов {prescription.meals_per_day}",
+                "Назначение",
+                f"действует с {prescription.effective_from.isoformat()}",
+                f"{_decimal(prescription.ratio)} : 1",
+                f"{prescription.kcal_per_day} ккал в сутки, "
+                f"белок не меньше {_decimal(prescription.protein_g)} г, "
+                f"углеводы не больше {_decimal(prescription.carbs_limit_g)} г, "
+                f"приёмов в день {prescription.meals_per_day}",
             ]
         )
 
-    writer.writerow(["seizures", "total_count", report.seizures.count, ""])
-    writer.writerow(["seizures", "total_entries", report.seizures.entries, ""])
+    writer.writerow(["Приступы", "Всего приступов", report.seizures.count, ""])
+    writer.writerow(["Приступы", "Записей в дневнике", report.seizures.entries, ""])
     for by_type in report.seizures.by_type:
-        writer.writerow(["seizures_by_type", by_type.name_ru, by_type.count, by_type.code or ""])
+        writer.writerow(["Приступы по типам", by_type.name_ru, by_type.count, by_type.code or ""])
     for day, count in report.seizures.by_day.items():
-        writer.writerow(["seizures_by_day", day, count, ""])
+        writer.writerow(["Приступы по дням", day, count, ""])
 
-    # Метод — в последней колонке: строка «ketones» без него смешивала кровь и мочу.
-    for method, series in (("blood", report.ketones_blood), ("urine", report.ketones_urine)):
+    # Метод — в последней колонке: кровь и моча — разные шкалы.
+    for method, series in (("кровь", report.ketones_blood), ("моча", report.ketones_urine)):
         for point in series.points:
-            writer.writerow(["ketones", point.at.isoformat(), _decimal(point.value), method])
+            writer.writerow(
+                ["Кетоны, ммоль/л", _local_moment(point.at), _decimal(point.value), method]
+            )
     for point in report.weight.points:
-        writer.writerow(["weight", point.at.isoformat(), _decimal(point.value), ""])
+        writer.writerow(["Вес, кг", _local_moment(point.at), _decimal(point.value), ""])
 
     for medication in report.medications:
         stopped = f" по {medication.stopped_at.isoformat()}" if medication.stopped_at else ""
         writer.writerow(
             [
-                "medication",
+                "Препарат",
                 medication.drug_name,
                 medication.dose,
                 f"{medication.frequency}; с {medication.started_at.isoformat()}{stopped}",
@@ -291,22 +344,22 @@ def report_to_csv(report: PatientReport) -> str:
     for effect in report.side_effects:
         writer.writerow(
             [
-                "side_effect",
-                effect.occurred_at.isoformat(),
+                "Нежелательное явление",
+                _local_moment(effect.occurred_at),
                 effect.symptom,
                 effect.description or "",
             ]
         )
 
-    writer.writerow(["menu", "days_planned", report.menu.days_planned, ""])
-    writer.writerow(["menu", "items_planned", report.menu.items_planned, ""])
-    writer.writerow(["menu", "items_eaten", report.menu.items_eaten, ""])
+    writer.writerow(["Меню", "Дней в плане", report.menu.days_planned, ""])
+    writer.writerow(["Меню", "Позиций в плане", report.menu.items_planned, ""])
+    writer.writerow(["Меню", "Отмечено съеденным", report.menu.items_eaten, ""])
 
     for summary in report.summaries:
         writer.writerow(
             [
-                "summary",
-                f"{summary.period_start.isoformat()}..{summary.period_end.isoformat()}",
+                "Сводка врача",
+                f"{summary.period_start.isoformat()} — {summary.period_end.isoformat()}",
                 summary.approved_md,
                 "",
             ]

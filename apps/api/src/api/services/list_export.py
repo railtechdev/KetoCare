@@ -14,7 +14,7 @@ from __future__ import annotations
 import io
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 import xlsxwriter
@@ -53,6 +53,17 @@ def _header_text(value: str) -> str:
     return value.replace("&", "&&")[:120]
 
 
+def _utc_offset(moment: datetime) -> str:
+    """«UTC+5»: по каким часам стоит время выгрузки. Название города было бы
+    зашито в код и неверно для клиники в другом поясе."""
+
+    offset = moment.utcoffset() or timedelta(0)
+    minutes = int(offset.total_seconds() // 60)
+    sign = "+" if minutes >= 0 else "−"
+    hours, rest = divmod(abs(minutes), 60)
+    return f"UTC{sign}{hours}" + (f":{rest:02d}" if rest else "")
+
+
 def build_workbook(
     export: ListExport,
     *,
@@ -64,13 +75,17 @@ def build_workbook(
 ) -> bytes:
     buffer = io.BytesIO()
     book = xlsxwriter.Workbook(buffer, {"in_memory": True, "remove_timezone": True})
-    clinic = letterhead.name_ru or letterhead.name_uz or letterhead.short_name
+    # Пока бланк не заполнен, клиники у документа нет: название продукта в
+    # строке «Клиника» выдавало бы его за клинику.
+    clinic = (letterhead.name_ru or letterhead.name_uz) if letterhead.configured else None
     book.set_properties(
         {
             "title": export.title,
             "author": author or letterhead.short_name,
-            "company": clinic,
-            "created": generated_at.replace(tzinfo=None),
+            **({"company": clinic} if clinic else {}),
+            # Свойство файла — в UTC: Excel читает его как UTC, и местное время
+            # здесь сдвигало бы «создан» на смещение пояса.
+            "created": generated_at.astimezone(UTC).replace(tzinfo=None),
             "comments": f"KetoCare · {export.code}",
         }
     )
@@ -102,8 +117,12 @@ def build_workbook(
                     datetime(value.year, value.month, value.day),
                     formats["date"],
                 )
-            elif column.kind in ("int", "decimal"):
-                sheet.write_number(row_index, col_index, float(value), formats[column.kind])
+            elif column.kind == "int":
+                sheet.write_number(row_index, col_index, round(float(value)), formats["int"])
+            elif column.kind == "decimal":
+                # Два знака: хвост двоичной дроби («99,09999999999999») в строке
+                # формул читался бы как неточность справочника.
+                sheet.write_number(row_index, col_index, round(float(value), 2), formats["decimal"])
             else:
                 sheet.write_string(row_index, col_index, str(value), formats["text"])
     # «Умная таблица»: заголовки с фильтром, полосы строк; у пустого списка —
@@ -154,9 +173,9 @@ def build_workbook(
     wrap = book.add_format({"text_wrap": True, "valign": "top"})
     lines: list[tuple[str, str]] = [
         ("Документ", export.title),
-        ("Клиника", clinic),
+        *([("Клиника", clinic)] if clinic else []),
         *([("Выгрузил(а)", author)] if author else []),
-        ("Когда", f"{generated_at:%d.%m.%Y %H:%M} (Ташкент)"),
+        ("Когда", f"{generated_at:%d.%m.%Y %H:%M} ({_utc_offset(generated_at)})"),
         *export.about,
         ("Строк", str(len(export.rows))),
         ("Версия", f"KetoCare, расчёт {engine_version} · {export.code}"),

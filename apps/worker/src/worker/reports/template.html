@@ -96,7 +96,7 @@
     </div>
     <div class="footer">
       Медицинские сведения, конфиденциально{% if author_line %} · сформировал(а) {{ author_line }}{% endif %}
-      · {{ generated_text }} (Ташкент) · KetoCare{% if engine_version %}, расчёт {{ engine_version }}{% endif %} · {{ template_code }}
+      · {{ generated_text }} · KetoCare · {{ template_code }}
     </div>
 
     <div class="letterhead">
@@ -131,7 +131,7 @@
         {{ current_prescription.meals_per_day }} {{ current_prescription.meals_per_day | meals }} в день · действует с {{ current_prescription.effective_from | day }}
       </p>
     {% else %}
-      <p class="rx">Назначение за период не оформлялось.</p>
+      <p class="rx">На конец периода назначения нет.</p>
     {% endif %}
 
     <table class="metrics"><tr>
@@ -143,12 +143,12 @@
       <td>
         <p class="label">Кетоны в крови, среднее</p>
         <p class="value">{% if ketones_blood.mean is not none %}{{ ketones_blood.mean | num }} <span style="font-size: 9pt">ммоль/л</span>{% else %}—{% endif %}</p>
-        <p class="note">{% if ketones_blood.points %}от {{ ketones_blood.min | num }} до {{ ketones_blood.max | num }} · {{ ketones_blood.points | length }} замеров{% else %}замеров нет{% endif %}</p>
+        <p class="note">{% if ketones_blood.points %}{% if ketones_blood.min != ketones_blood.max %}от {{ ketones_blood.min | num }} до {{ ketones_blood.max | num }} · {% endif %}{{ ketones_blood.points | length }} {{ ketones_blood.points | length | readings }}{% else %}замеров нет{% endif %}</p>
       </td>
       <td>
         <p class="label">Вес, среднее</p>
         <p class="value">{% if weight.mean is not none %}{{ weight.mean | num }} <span style="font-size: 9pt">кг</span>{% else %}—{% endif %}</p>
-        <p class="note">{% if weight.points %}от {{ weight.min | num }} до {{ weight.max | num }}{% else %}взвешиваний нет{% endif %}</p>
+        <p class="note">{% if weight.points %}{% if weight.min != weight.max %}от {{ weight.min | num }} до {{ weight.max | num }} · {% endif %}{{ weight.points | length }} {{ weight.points | length | weighings }}{% else %}взвешиваний нет{% endif %}</p>
       </td>
       <td>
         <p class="label">Меню, отмечено съеденным</p>
@@ -183,7 +183,7 @@
       </figure>
     {% endif %}
 
-    <h2>Назначения в периоде</h2>
+    <h2>Назначения, действовавшие в периоде</h2>
     {% if prescriptions %}
       <table class="data">
         <thead>
@@ -206,11 +206,10 @@
         </tbody>
       </table>
     {% else %}
-      <p class="muted">Назначение за период не оформлялось.</p>
+      <p class="muted">В периоде назначение не действовало.</p>
     {% endif %}
 
     <h2>Приступы</h2>
-    <p>Всего приступов: {{ seizures.count }} · записей в дневнике: {{ seizures.entries }}</p>
     {% if seizures.by_type %}
       <table class="data">
         <thead>
@@ -266,7 +265,7 @@
         </tbody>
       </table>
     {% else %}
-      <p class="muted">Схема терапии не заполнена.</p>
+      <p class="muted">В периоде препаратов в схеме терапии нет.</p>
     {% endif %}
 
     {% if side_effects %}
@@ -285,12 +284,6 @@
       </table>
     {% endif %}
 
-    <h2>Выполнение меню</h2>
-    <p>
-      Дней спланировано: {{ menu.days_planned }} · позиций в меню: {{ menu.items_planned }} ·
-      отмечено съеденными: {{ menu.items_eaten }}
-    </p>
-
     {% if summaries %}
       <h2>Сводки врача</h2>
       {% for item in summaries %}
@@ -304,8 +297,8 @@
     {% endif %}
 
     <p class="muted closing">
-      Отчёт собран автоматически из записей дневника и назначений. Сводки
-      включены только в подтверждённом врачом виде.
+      Отчёт собран автоматически из записей дневника и назначений.{% if summaries %} Сводки
+      включены только в подтверждённом врачом виде.{% endif %}
     </p>
   </body>
 </html>

@@ -18,6 +18,11 @@ import {
   type WeekDay,
 } from "./dayPrintModel";
 
+/** «ср, 18 ноября» в заголовке листа — с прописной. */
+function capitalized(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /**
  * День меню на одном листе (ADR-0092, макет «Меню на день»): итоги дня рядом с
  * назначением, исключённое ребёнку и приёмы с составом строкой. Граммы и
@@ -30,7 +35,7 @@ export function DayOverviewSheet({ day }: { day: WeekDay }) {
 
   return (
     <div className="flex flex-col gap-[5mm] text-[12pt] leading-snug">
-      <SheetHeading title={formatDayLabel(day.date)} />
+      <SheetHeading title={capitalized(formatDayLabel(day.date))} />
       {metrics.length > 0 && <SheetMetrics metrics={metrics} />}
       {excluded.length > 0 && (
         <SheetNotice tone="warning" title={t("week.print.excluded")}>

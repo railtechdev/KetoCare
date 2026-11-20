@@ -10,7 +10,14 @@ import os
 
 import pytest
 
-from worker.reports.render import FONTS, age_text, format_number, html_to_pdf, render_html
+from worker.reports.render import (
+    FONTS,
+    age_text,
+    format_number,
+    format_period,
+    html_to_pdf,
+    render_html,
+)
 from worker.reports.task import report_path
 
 REPORT = {
@@ -76,7 +83,9 @@ def test_report_contains_key_numbers():
 
     assert "Аня Иванова" in html
     assert "4.0 : 1" in html
-    assert "Всего приступов: 6" in html
+    # Число приступов стоит один раз — в сводных числах, без повтора строкой.
+    assert '<p class="value">6</p>' in html
+    assert "Всего приступов" not in html
     assert "Леветирацетам" in html
 
 
@@ -95,7 +104,6 @@ LETTERHEAD = {
 DOCUMENT = {
     "letterhead": LETTERHEAD,
     "author": {"name": "Иванова Анна Петровна", "role": "doctor"},
-    "engine_version": "1.12.0",
 }
 
 
@@ -122,9 +130,11 @@ def test_letterhead_author_and_footer():
     assert "сформировал(а) Иванова Анна Петровна, врач" in html
     assert "Медицинские сведения, конфиденциально" in html
     assert "KC-REPORT-2" in html
-    assert "расчёт 1.12.0" in html
-    # 10:00 UTC — 15:00 в Ташкенте: время подписывается по времени клиники.
-    assert "01.09.2026 в 15:00 (Ташкент)" in html
+    # Версии расчётного ядра в отчёте нет: рассчитанных ядром чисел он не несёт.
+    assert "расчёт" not in html
+    # 10:00 UTC — 15:00 по часам клиники; пояс назван смещением, а не городом,
+    # зашитым в шаблон.
+    assert "01.09.2026 в 15:00 (UTC+5)" in html
 
 
 def test_without_a_letterhead_the_product_signs_it():
@@ -185,9 +195,10 @@ def test_empty_sections_say_so_instead_of_disappearing():
 
     html = render_html(quiet, title="Отчёт по пациенту")
 
-    assert "Назначение за период не оформлялось." in html
+    assert "На конец периода назначения нет." in html
+    assert "В периоде назначение не действовало." in html
     assert "За период приступов не записано." in html
-    assert "Схема терапии не заполнена." in html
+    assert "В периоде препаратов в схеме терапии нет." in html
 
 
 def test_user_input_is_escaped():
@@ -311,3 +322,44 @@ def test_pdf_refuses_outside_resources():
         with pytest.raises(ValueError):
             fetcher.fetch(url)
     fetcher.fetch((FONTS / "NotoSans-Regular.ttf").as_uri())
+
+
+def test_counts_agree_with_their_words_and_a_single_reading_has_no_range():
+    """Аудит документов 20.11.2026: «1 замеров» и «от 18,0 до 18,0» при одном
+    взвешивании — мелочи, по которым врач судит, можно ли верить листу."""
+
+    one = {
+        **REPORT,
+        "ketones_blood": {
+            "points": [{"at": "2026-08-10T04:00:00+00:00", "value": 3.2}],
+            "min": 3.2,
+            "max": 3.2,
+            "mean": 3.2,
+        },
+        "weight": {
+            "points": [{"at": "2026-08-10T04:00:00+00:00", "value": 18.0}],
+            "min": 18.0,
+            "max": 18.0,
+            "mean": 18.0,
+        },
+    }
+
+    html = render_html(one, title="Отчёт")
+
+    assert "1 замер<" in html
+    assert "1 взвешивание<" in html
+    assert "от 18,0 до 18,0" not in html
+    assert "от 3,2 до 3,2" not in html
+
+
+def test_one_day_period_is_one_date():
+    assert format_period("2026-11-05", "2026-11-05") == "5 ноября 2026 г."
+    assert format_period("2026-11-01", "2026-11-18") == "1–18 ноября 2026 г."
+
+
+def test_summaries_are_mentioned_only_when_the_report_has_them():
+    """Фраза «сводки включены в подтверждённом виде» в отчёте без сводок —
+    у семьи их нет никогда — обещала раздел, которого на листе нет."""
+
+    html = render_html(REPORT, title="Отчёт")
+    assert "Сводки" not in html.split("<body>")[1]

@@ -2,6 +2,7 @@ import { formatMass } from "@ketocare/ui";
 import type { TFunction } from "i18next";
 
 import type { SheetMetric, WeighLine } from "../../components/print/SheetParts";
+import { numberedSteps } from "../../components/print/steps";
 import type { WordBlock } from "../../lib/wordExport";
 
 /** Полоса чисел листа в Word — таблицей: подписи, числа, с чем сравнить. */
@@ -34,7 +35,7 @@ export function dishCardBlocks(
     footnote?: string;
   },
 ): WordBlock[] {
-  const steps = card.steps?.trim() ?? "";
+  const steps = numberedSteps(card.steps);
   const blocks: WordBlock[] = [];
   if (card.kicker !== undefined) {
     blocks.push({

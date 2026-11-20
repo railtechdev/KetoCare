@@ -2,6 +2,8 @@ import { formatMass } from "@ketocare/ui";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { cookingSteps } from "./steps";
+
 /**
  * Части листа на печать (ADR-0092) — одни на все листы, чтобы назначение, день
  * меню и карточка блюда читались одним документом, а не тремя. Размеры — в
@@ -210,10 +212,7 @@ export function WeighTable({
 /** Шаги приготовления: строка текста — шаг; одна строка — абзац, не список. */
 export function CookingSteps({ text }: { text: string | null | undefined }) {
   const { t } = useTranslation("common");
-  const steps = (text ?? "")
-    .split("\n")
-    .map((step) => step.trim())
-    .filter((step) => step !== "");
+  const steps = cookingSteps(text);
   if (steps.length === 0) return null;
   return (
     <div className="flex flex-col gap-[2mm]">

@@ -60,25 +60,55 @@ export function shoppingList(week: MenuWeek): {
   };
 }
 
-/** Лист «Что взвесить за неделю» (ADR-0092, этап 6). */
+/**
+ * Сколько строк списка помещается на лист с запасом на перенос длинного
+ * названия. Длинный список делится на листы: у каждого своя шапка с именем
+ * ребёнка и свой номер страницы — лист, перетёкший на вторую страницу сам,
+ * остался бы там без шапки, а «Стр. X из Y» считало бы его одной страницей.
+ */
+export const SHOPPING_ROWS_PER_SHEET = 20;
+
+/** Список, нарезанный на листы; приправы и примечание — на последнем. */
+export function shoppingPages(
+  lines: readonly ShoppingLine[],
+): ShoppingLine[][] {
+  const pages: ShoppingLine[][] = [];
+  for (let at = 0; at < lines.length; at += SHOPPING_ROWS_PER_SHEET) {
+    pages.push(lines.slice(at, at + SHOPPING_ROWS_PER_SHEET));
+  }
+  return pages;
+}
+
+/** Лист «Что взвесить за неделю» (ADR-0092, этап 6) — один из листов списка. */
 export function ShoppingListSheet({
-  week,
+  lines,
+  seasonings,
   rangeLabel,
+  days,
+  first,
+  last,
 }: {
-  week: MenuWeek;
+  lines: readonly ShoppingLine[];
+  seasonings: readonly string[];
   rangeLabel: string;
+  /** Сколько дней недели с меню сложено в список. */
+  days: number;
+  /** Первый лист несёт заголовок и пояснение, последний — приправы и примечание. */
+  first: boolean;
+  last: boolean;
 }) {
   const { t } = useTranslation("menu");
-  const { lines, seasonings } = shoppingList(week);
 
   return (
     <div className="flex flex-col gap-[5mm] text-[12pt] leading-snug">
       <div className="flex flex-col gap-[1.5mm]">
         <h1 className="m-0 text-[20pt] leading-tight font-bold">
-          {t("shopping.title")}
+          {first
+            ? t("shopping.title")
+            : t("shopping.continued", { title: t("shopping.title") })}
         </h1>
         <p className="m-0 text-[#3d4556]">
-          {t("shopping.intro", { range: rangeLabel })}
+          {t("shopping.intro", { range: rangeLabel, days })}
         </p>
       </div>
       <table className="w-full border-collapse">
@@ -126,12 +156,14 @@ export function ShoppingListSheet({
           ))}
         </tbody>
       </table>
-      {seasonings.length > 0 && (
+      {last && seasonings.length > 0 && (
         <p className="m-0">
           <b>{t("shopping.seasonings")}</b> {seasonings.join(", ")}
         </p>
       )}
-      <p className="m-0 text-[10.5pt] text-[#4a5263]">{t("shopping.note")}</p>
+      {last && (
+        <p className="m-0 text-[10.5pt] text-[#4a5263]">{t("shopping.note")}</p>
+      )}
     </div>
   );
 }

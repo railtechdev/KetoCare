@@ -59,10 +59,10 @@ describe("day of the menu on paper (ADR-0092)", () => {
     render(<DayOverviewSheet day={DAY} />);
 
     expect(screen.getByText(/1\s295 ккал/)).toBeInTheDocument();
-    expect(screen.getByText(/из 1\s300/)).toBeInTheDocument();
+    expect(screen.getByText(/из 1\s300 ккал/)).toBeInTheDocument();
     expect(screen.getByText("назначено 4.0 : 1")).toBeInTheDocument();
-    expect(screen.getByText("не меньше 20,0")).toBeInTheDocument();
-    expect(screen.getByText("не больше 15,0")).toBeInTheDocument();
+    expect(screen.getByText("не меньше 20,0 г")).toBeInTheDocument();
+    expect(screen.getByText("не больше 15,0 г")).toBeInTheDocument();
     expect(screen.getByText("Арахис")).toBeInTheDocument();
   });
 

@@ -19,9 +19,10 @@ export function patientKey(patientId: string) {
  * Заодно карта перестала ждать список: открытая по ссылке, она грузит одного
  * пациента вместо двухсот.
  */
-export function usePatient(patientId: string) {
+export function usePatient(patientId: string, enabled = true) {
   return useQuery({
     queryKey: patientKey(patientId),
+    enabled,
     // «Нет такой карты» и «нет доступа» повтором не лечатся.
     retry: (failures, error) => {
       const code = errorCodeOf(error);

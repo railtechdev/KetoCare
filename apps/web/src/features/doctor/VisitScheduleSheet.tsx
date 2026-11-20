@@ -14,9 +14,13 @@ export function upcomingVisits(
 
 /**
  * Лист «График визитов и анализов» для семьи (ADR-0092, этап 6): даты
- * контрольных визитов, что сдать к каждому и перечни анализов клиники.
- * Перечни — справочник клиники как есть (вопросы 17 и 34): лист их не
- * сокращает и не толкует.
+ * контрольных визитов и что пройти к каждому — перечень клиники как есть
+ * (вопросы 17 и 34).
+ *
+ * Перечня «еженедельно» на листе нет: клиника не сказала, сколько недель идёт
+ * еженедельный контроль (`core/control_schedule.py`, TODO(med) к вопросу 34),
+ * и семья прочла бы его как «сдавать кровь каждую неделю всё время диеты».
+ * Врач видит оба перечня в карте.
  */
 export function VisitScheduleSheet({
   schedule,
@@ -89,27 +93,6 @@ export function VisitScheduleSheet({
           ))}
         </tbody>
       </table>
-
-      {(schedule.weekly_labs.length > 0 ||
-        schedule.periodic_labs.length > 0) && (
-        <div className="flex flex-col gap-[2mm]">
-          <h2 className="m-0 text-[14pt] font-bold">
-            {t("course.sheet.labsTitle")}
-          </h2>
-          {schedule.weekly_labs.length > 0 && (
-            <p className="m-0">
-              <b>{t("course.labs.weekly")}:</b>{" "}
-              {schedule.weekly_labs.join(", ")}
-            </p>
-          )}
-          {schedule.periodic_labs.length > 0 && (
-            <p className="m-0">
-              <b>{t("course.labs.periodic")}:</b>{" "}
-              {schedule.periodic_labs.join(", ")}
-            </p>
-          )}
-        </div>
-      )}
 
       <div className="flex gap-[3mm] rounded-[1.5mm] border border-[#8a93a3] bg-[#f2f4f8] px-[4mm] py-[3mm]">
         <svg

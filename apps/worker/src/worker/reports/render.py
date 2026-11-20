@@ -21,7 +21,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -69,6 +69,8 @@ def _env() -> Environment:
         day=format_date,
         kcal=format_kcal,
         meals=lambda n: _plural(int(n), "приём", "приёма", "приёмов"),
+        readings=lambda n: _plural(int(n), "замер", "замера", "замеров"),
+        weighings=lambda n: _plural(int(n), "взвешивание", "взвешивания", "взвешиваний"),
     )
     return env
 
@@ -107,9 +109,25 @@ def format_period(start: str | date, end: str | date) -> str:
     """Период словами: «1–18 ноября 2026 г.», через месяцы — числами."""
 
     a, b = _as_date(start), _as_date(end)
+    if a == b:
+        return f"{a.day} {_MONTHS_GENITIVE[a.month - 1]} {a.year} г."
     if a.year == b.year and a.month == b.month:
         return f"{a.day}–{b.day} {_MONTHS_GENITIVE[b.month - 1]} {b.year} г."
     return f"{format_date(a)} – {format_date(b)}"
+
+
+def utc_offset(moment: datetime) -> str:
+    """«UTC+5», «UTC+5:30»: часы, по которым стоит время на листе.
+
+    Смещение берётся из самого момента: название города было бы зашито в код и
+    неверно для клиники в другом поясе.
+    """
+
+    offset = moment.utcoffset() or timedelta(0)
+    minutes = int(offset.total_seconds() // 60)
+    sign = "+" if minutes >= 0 else "−"
+    hours, rest = divmod(abs(minutes), 60)
+    return f"UTC{sign}{hours}" + (f":{rest:02d}" if rest else "")
 
 
 def _local(value: str, tz: str) -> datetime:
@@ -197,10 +215,12 @@ def ketone_chart(report: dict[str, Any], tz: str) -> Chart | None:
     ticks = [(x(date.fromordinal(d)), date.fromordinal(d).strftime("%d.%m")) for d in tick_days]
     low = min(daily, key=lambda item: item[1])
     high = max(daily, key=lambda item: item[1])
-    label = (
-        f"Кетоны в крови от {format_number(low[1])} до {format_number(high[1])} ммоль/л"
-        f", приступов за период: {report['seizures']['count']}"
+    spread = (
+        f"{format_number(low[1])}"
+        if low[1] == high[1]
+        else f"от {format_number(low[1])} до {format_number(high[1])}"
     )
+    label = f"Кетоны в крови {spread} ммоль/л, приступов за период: {report['seizures']['count']}"
     return Chart(
         width=width,
         height=196,
@@ -253,13 +273,14 @@ def render_html(
             title=title,
             letterhead=letterhead,
             author_line=author_line,
-            generated_text=f"{generated:%d.%m.%Y} в {generated:%H:%M}",
+            generated_text=f"{generated:%d.%m.%Y} в {generated:%H:%M} ({utc_offset(generated)})",
             period_text=format_period(period["from_date"], period["to_date"]),
             age=age_text(patient["birth_date"], period["to_date"]),
+            # Список идёт в порядке действия (`prescriptions_in_force` в API):
+            # последнее — то, что действовало на конец периода.
             current_prescription=(report["prescriptions"] or [None])[-1],
             chart=ketone_chart(report, tz),
             template_code=TEMPLATE_CODE,
-            engine_version=document.get("engine_version"),
             **report,
         )
     )

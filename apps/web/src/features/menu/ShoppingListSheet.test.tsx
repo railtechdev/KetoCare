@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import i18n from "../../lib/i18n";
 import menuRu from "../../locales/ru/menu.json";
-import { ShoppingListSheet, shoppingList } from "./ShoppingListSheet";
+import {
+  SHOPPING_ROWS_PER_SHEET,
+  ShoppingListSheet,
+  shoppingList,
+  shoppingPages,
+} from "./ShoppingListSheet";
 import type { MenuWeek } from "./useWeek";
 
 i18n.addResourceBundle("ru", "menu", menuRu, true, true);
@@ -60,17 +65,57 @@ describe("shopping list (ADR-0092)", () => {
     expect(seasonings).toEqual(["Соль"]);
   });
 
-  it("prints the weights and the seasonings without grams", () => {
-    render(<ShoppingListSheet week={WEEK} rangeLabel="16–22.11.2026" />);
+  it("prints the weights, the days covered and the seasonings without grams", () => {
+    const { lines, seasonings } = shoppingList(WEEK);
+    render(
+      <ShoppingListSheet
+        lines={lines}
+        seasonings={seasonings}
+        rangeLabel="16–22.11.2026"
+        days={2}
+        first
+        last
+      />,
+    );
 
+    // Неделя собрана не вся: лист называет, сколько дней в нём сложено.
     expect(
       screen.getByText(
-        "Неделя 16–22.11.2026: все продукты меню, граммы сложены по дням.",
+        "Неделя 16–22.11.2026, дней с меню: 2. Граммы сложены по этим дням.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("105 г")).toBeInTheDocument();
     expect(
       screen.getByText(/Приправы по вкусу/).parentElement,
     ).toHaveTextContent("Соль");
+  });
+
+  it("splits a long list into sheets, notes only on the last one", () => {
+    const many = Array.from(
+      { length: SHOPPING_ROWS_PER_SHEET + 3 },
+      (_, i) => ({
+        productId: `p${i}`,
+        name: `Продукт ${i}`,
+        grams: 10,
+        days: 1,
+      }),
+    );
+    const pages = shoppingPages(many);
+    expect(pages.map((page) => page.length)).toEqual([
+      SHOPPING_ROWS_PER_SHEET,
+      3,
+    ]);
+
+    render(
+      <ShoppingListSheet
+        lines={pages[0]!}
+        seasonings={["Соль"]}
+        rangeLabel="16–22.11.2026"
+        days={7}
+        first
+        last={false}
+      />,
+    );
+    expect(screen.queryByText(/Приправы по вкусу/)).toBeNull();
   });
 });
