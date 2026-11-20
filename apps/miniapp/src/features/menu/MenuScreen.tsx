@@ -5,9 +5,8 @@ import {
   Section,
   WarningBanner,
   formatDayTime,
-  formatMass,
 } from "@ketocare/ui";
-import { ArrowLeft, ChefHat, Plus } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -28,6 +27,7 @@ import {
   withDish,
   withoutItem,
 } from "./dayPlan";
+import { ItemDetails } from "./ItemDetails";
 import { MealItem } from "./MealItem";
 import type { Menu, MenuItem } from "./useMenu";
 import {
@@ -160,6 +160,7 @@ export function MenuScreen({
       <RecipeCard
         recipeId={recipeId}
         patientId={session.patientId}
+        backLabel={t("recipes.backToMenu")}
         onBack={() => setRecipeId(null)}
       />
     );
@@ -526,103 +527,6 @@ function DayPlan({
           verdict={verdict}
           composedBy={composedBy}
         />
-      )}
-    </div>
-  );
-}
-
-/**
- * «Что взвесить» и «Как готовить» под блюдом.
- *
- * Граммы приходят с сервера уже на эту позицию (М1): доумножать их здесь
- * нечем. Раскрывается кнопкой, а не системным `<details>`: тот на телефоне
- * рисуется по-своему в каждом браузере и не держит высоту касания.
- */
-function ItemDetails({
-  item,
-  onOpenRecipe,
-}: {
-  item: MenuItem;
-  onOpenRecipe: (recipeId: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [stepsOpen, setStepsOpen] = useState(false);
-  const lines = item.ingredients ?? [];
-  const recipeId = item.recipe_id;
-  // Блюдо ребёнка хранит шаги своего рецепта (ADR-0088): у него нет экрана
-  // рецепта, поэтому шаги раскрываются здесь же. Без этого семья не видела, как
-  // готовить блюдо, подобранное диетологом (аудит интерфейса 18.11.2026).
-  const steps = recipeId === null ? (item.instructions ?? "").trim() : "";
-  if (lines.length === 0 && recipeId === null && steps === "") return null;
-
-  return (
-    <div className="flex flex-col gap-1 pl-8 text-sm">
-      <div className="flex flex-wrap gap-x-field">
-        {lines.length > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="min-h-touch px-2 text-muted-foreground"
-            aria-expanded={open}
-            onClick={() => setOpen((value) => !value)}
-          >
-            {t("menu.composition")}
-          </Button>
-        )}
-        {/* Рецепт ↔ меню в обе стороны: из меню — к тому, как готовить. */}
-        {recipeId !== null && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="min-h-touch px-2 text-muted-foreground"
-            onClick={() => onOpenRecipe(recipeId)}
-          >
-            <ChefHat aria-hidden="true" className="size-4" />
-            {t("menu.howToCook")}
-          </Button>
-        )}
-        {steps !== "" && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="min-h-touch px-2 text-muted-foreground"
-            aria-expanded={stepsOpen}
-            onClick={() => setStepsOpen((value) => !value)}
-          >
-            <ChefHat aria-hidden="true" className="size-4" />
-            {t("menu.howToCook")}
-          </Button>
-        )}
-      </div>
-      {stepsOpen && (
-        <p className="m-0 whitespace-pre-line break-words">{steps}</p>
-      )}
-      {open && (
-        <ul className="m-0 flex list-none flex-col gap-1 p-0">
-          {lines.map((line) => (
-            <li
-              key={line.product_id}
-              className="flex flex-wrap justify-between gap-field"
-            >
-              <span className="min-w-0 break-words">
-                {line.name_ru}
-                {/* Приправу взвешивают, но в итогах дня её нет (ADR-0054). */}
-                {line.counts_in_calculation === false && (
-                  <span className="ml-2 text-muted-foreground">
-                    {t("menu.uncounted")}
-                  </span>
-                )}
-              </span>
-              <span className="text-muted-foreground tabular-nums">
-                {t("menu.grams", { value: formatMass(line.grams) })}
-              </span>
-            </li>
-          ))}
-        </ul>
       )}
     </div>
   );

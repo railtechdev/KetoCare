@@ -2101,3 +2101,196 @@ class TestDayIsJudgedByItsOwnPrescription:
 
         missing = await client.get(url, headers=auth_headers(owner))
         assert missing.status_code == 422
+
+
+class TestDeletedChildDishInTheDay:
+    """A child's dish deleted while it stands in a day (Mini App audit, stage 3).
+
+    The family deletes dishes from the Mini App «Блюда» tab. The day keeps the
+    item by its snapshot; it must neither be reported as a changed recipe nor
+    block the next save of the day — the day is always saved whole, and an
+    eaten item cannot be dropped from it (ADR-0041).
+    """
+
+    async def _planned_and_deleted(self, client, session, make_user, make_patient, auth_headers):
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        dish = await _custom_dish(session, patient, ingredients=[(butter, 40)])
+        saved = await client.put(
+            _url(patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "custom_dish_id": str(dish.id)}]},
+            headers=auth_headers(parent),
+        )
+        assert saved.status_code == 200, saved.text
+        item_id = saved.json()["items"][0]["id"]
+        marked = await client.post(
+            f"{_url(patient)}/items/{item_id}/eaten",
+            json={"eaten": True},
+            headers=auth_headers(parent),
+        )
+        assert marked.status_code == 200, marked.text
+        deleted = await client.delete(
+            f"/api/v1/patients/{patient.id}/custom-dishes/{dish.id}",
+            headers=auth_headers(parent),
+        )
+        assert deleted.status_code == 204, deleted.text
+        return parent, patient, butter, dish, item_id, saved.json()["totals"]
+
+    async def test_deleted_dish_is_not_reported_as_changed(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient, butter, _, _, _ = await self._planned_and_deleted(
+            client, session, make_user, make_patient, auth_headers
+        )
+
+        read = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+
+        [item] = read.json()["items"]
+        assert item["changed_since_saved"] is False
+        # Name and grams stay from the snapshot; the steps go with the dish.
+        assert item["title"] == "Своё блюдо"
+        assert [(row["product_id"], row["grams"]) for row in item["ingredients"]] == [
+            (str(butter.id), 40)
+        ]
+
+    async def test_day_with_a_deleted_dish_takes_one_more_item(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient, butter, dish, item_id, totals = await self._planned_and_deleted(
+            client, session, make_user, make_patient, auth_headers
+        )
+        other = await _custom_dish(session, patient, ingredients=[(butter, 10)])
+
+        again = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [
+                    {"meal_index": 1, "custom_dish_id": str(dish.id)},
+                    {"meal_index": 2, "custom_dish_id": str(other.id)},
+                ],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert again.status_code == 200, again.text
+        kept = next(item for item in again.json()["items"] if item["meal_index"] == 1)
+        assert kept["id"] == item_id and kept["eaten"] is True
+        assert kept["title"] == "Своё блюдо"
+        assert again.json()["totals"]["kcal"] > totals["kcal"]
+
+    async def test_deleted_dish_is_not_put_into_a_day_anew(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """«Как вчера» copying a deleted dish into another day is refused by
+        name — the family has to know which dish stands in the way."""
+
+        parent, patient, _, dish, _, _ = await self._planned_and_deleted(
+            client, session, make_user, make_patient, auth_headers
+        )
+
+        copied = await client.put(
+            _url(patient),
+            json={
+                "date": "2026-03-03",
+                "items": [{"meal_index": 1, "custom_dish_id": str(dish.id)}],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert copied.status_code == 422, copied.text
+        error = copied.json()["error"]
+        assert "«Своё блюдо»" in error["message"]
+        assert error["details"]["reason"] == "dish_deleted"
+
+    async def test_a_second_copy_of_the_deleted_dish_is_a_new_item(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient, _, dish, _, _ = await self._planned_and_deleted(
+            client, session, make_user, make_patient, auth_headers
+        )
+
+        doubled = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [{"meal_index": 1, "custom_dish_id": str(dish.id)}] * 2,
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert doubled.status_code == 422, doubled.text
+        assert doubled.json()["error"]["details"]["reason"] == "dish_deleted"
+
+        # The refusal rolls the whole save back: the day is as it was.
+        read = await client.get(
+            _url(patient), params={"date": MENU_DATE}, headers=auth_headers(parent)
+        )
+        [item] = read.json()["items"]
+        assert item["eaten"] is True and item["meal_index"] == 1
+
+    async def test_deleted_dish_is_not_moved_to_another_meal(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Moving it is putting it anew: the stored item is matched by its meal."""
+
+        parent, patient, _, dish, _, _ = await self._planned_and_deleted(
+            client, session, make_user, make_patient, auth_headers
+        )
+
+        moved = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [
+                    {"meal_index": 1, "custom_dish_id": str(dish.id)},
+                    {"meal_index": 2, "custom_dish_id": str(dish.id)},
+                ],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert moved.status_code == 422, moved.text
+        assert moved.json()["error"]["details"]["reason"] == "dish_deleted"
+
+    async def test_deleted_dish_of_another_child_is_not_named(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        _, _, _, dish, _, _ = await self._planned_and_deleted(
+            client, session, make_user, make_patient, auth_headers
+        )
+        stranger, other_patient = await _linked_parent(session, make_user, make_patient)
+
+        taken = await client.put(
+            _url(other_patient),
+            json={"date": MENU_DATE, "items": [{"meal_index": 1, "custom_dish_id": str(dish.id)}]},
+            headers=auth_headers(stranger),
+        )
+
+        assert taken.status_code == 422, taken.text
+        error = taken.json()["error"]
+        # The name of somebody else's dish is never told (it is quoted «…» when it is).
+        assert "«Своё блюдо»" not in error["message"]
+        assert error["details"].get("reason") != "dish_deleted"
+
+    async def test_refresh_of_an_item_with_a_deleted_dish_is_refused(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        parent, patient, _, _, item_id, _ = await self._planned_and_deleted(
+            client, session, make_user, make_patient, auth_headers
+        )
+        unmarked = await client.post(
+            f"{_url(patient)}/items/{item_id}/eaten",
+            json={"eaten": False},
+            headers=auth_headers(parent),
+        )
+        assert unmarked.status_code == 200, unmarked.text
+
+        refreshed = await client.post(
+            f"{_url(patient)}/items/{item_id}/refresh", headers=auth_headers(parent)
+        )
+
+        assert refreshed.status_code == 422, refreshed.text
+        assert refreshed.json()["error"]["details"]["reason"] == "dish_deleted"

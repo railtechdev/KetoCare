@@ -7,27 +7,26 @@ import {
   SEARCH_DELAY_MS,
   Section,
   StatusNote,
-  WarningBanner,
   cn,
   formatGrams,
   formatKcal,
   formatMass,
-  type ProductName,
   useDebouncedValue,
 } from "@ketocare/ui";
 import { ArrowLeft } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { AddToPlan } from "../menu/AddToPlan";
 import { useTelegramBack } from "../../lib/useTelegram";
+import { ProductComposition } from "./ProductComposition";
 import {
   RECIPE_CATEGORIES,
   type Recipe,
   type RecipeCategory,
-  useProductNames,
   useRecipe,
+  useRecipePhoto,
   useRecipeSearch,
 } from "./useRecipes";
 
@@ -182,10 +181,10 @@ function RecipeList({
                     </span>
                   )}
                 </span>
-                <RatioBadge
-                  ratio={recipe.per_portion?.ratio ?? null}
-                  withinTolerance={recipe.ratio_fits_prescription ?? undefined}
-                />
+                {/* Значок нейтральный, как у блюда ребёнка: красный у рецепта
+                    рядом с серым у блюда с тем же расхождением читался как
+                    «рецепт хуже» (М4). О расхождении говорит строка сервера. */}
+                <RatioBadge ratio={recipe.per_portion?.ratio ?? null} />
               </button>
             </li>
           ))}
@@ -220,11 +219,14 @@ export function RecipeCard({
   recipeId,
   patientId,
   onBack,
+  backLabel,
   embedded = false,
 }: {
   recipeId: string;
   patientId: string;
   onBack: () => void;
+  /** Куда ведёт «Назад» — словами того места, откуда открыли. */
+  backLabel?: string;
   embedded?: boolean;
 }) {
   const { t } = useTranslation();
@@ -244,7 +246,7 @@ export function RecipeCard({
         onClick={onBack}
       >
         <ArrowLeft aria-hidden className="size-4" />
-        {t("recipes.back")}
+        {backLabel ?? t("recipes.back")}
       </Button>
 
       {/* Строка о связи стоит НАВЕРХУ, а не под содержимым: у длинного
@@ -298,10 +300,15 @@ function RecipeBody({
   const portion = recipe.per_portion;
   const Title = level === 1 ? "h1" : "h2";
 
+  // Порядок — как готовят (М5 аудита Mini App): что это за блюдо, из чего и
+  // как его делать, и только потом — куда поставить. «Добавить в меню» над
+  // составом заслоняло то, ради чего карточку открывают у плиты.
   return (
     <div className="flex flex-col gap-section">
       {/* Название рецепта из базы бывает длинным словом без пробелов. */}
       <Title className="m-0 break-words text-page-title">{recipe.title}</Title>
+
+      <RecipePhoto recipeId={recipe.id} photoPath={recipe.photo_path} />
 
       {/* Показатели ПОРЦИИ, а не всего выхода: у плиты считают порцию, и
           подменить одно другим — это ошибка в разы, а не в процентах. */}
@@ -310,10 +317,9 @@ function RecipeBody({
           <p className="text-muted-foreground">{t("recipes.notComputed")}</p>
         ) : (
           <div className="flex flex-wrap items-center gap-field">
-            <RatioBadge
-              ratio={portion.ratio}
-              withinTolerance={recipe.ratio_fits_prescription ?? undefined}
-            />
+            {/* Нейтральный значок, как у блюда ребёнка (М4); расхождение с
+                назначением — строкой сервера ниже. */}
+            <RatioBadge ratio={portion.ratio} />
             <span className="tabular-nums">
               {t("recipes.kcal", { kcal: formatKcal(portion.kcal) })}
             </span>
@@ -332,21 +338,11 @@ function RecipeBody({
             yield: formatMass(recipe.yield_g),
           })}
         </p>
-      </Section>
-
-      {recipe.ratio_fits_prescription === false && (
-        <p className="m-0 text-sm text-warning-strong">
-          {t("recipes.ratioDiffers")}
-        </p>
-      )}
-
-      {/* Рецепт ↔ меню в обе стороны (ADR-0075): из карточки — сразу в
-          приём дня, одна порция. */}
-      <Section title={t("recipes.toMenu")} density="compact">
-        <AddToPlan
-          patientId={patientId}
-          dish={{ kind: "recipe", id: recipe.id }}
-        />
+        {recipe.ratio_fits_prescription === false && (
+          <p className="m-0 text-sm text-warning-strong">
+            {t("recipes.ratioDiffers")}
+          </p>
+        )}
       </Section>
 
       {/* По карточке готовят: показатели порции без «из чего и сколько» —
@@ -368,82 +364,66 @@ function RecipeBody({
           </p>
         </Section>
       )}
+
+      {/* Рецепт ↔ меню в обе стороны (ADR-0075): из карточки — сразу в
+          приём дня, одна порция. Последним: сначала читают, потом ставят. */}
+      <Section title={t("recipes.toMenu")} density="compact">
+        <AddToPlan
+          patientId={patientId}
+          dish={{ kind: "recipe", id: recipe.id }}
+        />
+      </Section>
     </div>
   );
 }
 
-/** Имя продукта словами: известное, удалённое, не дошедшее или ещё в пути. */
-function productName(state: ProductName, t: (key: string) => string): string {
-  switch (state.kind) {
-    case "name":
-      return state.name;
-    case "missing":
-      return t("recipes.unknownProduct");
-    case "unavailable":
-      return t("recipes.nameUnavailable");
-    case "pending":
-      return t("recipes.loadingName");
-  }
+/**
+ * Фото рецепта (Б2): есть — картинка, нет или не загрузилось — ничего.
+ *
+ * Пустой рамки «фото нет» здесь нет намеренно: в кабинете она держит сетку
+ * карточек, а на телефоне это пол-экрана пустоты над составом. Картинка
+ * декоративная (`alt` пустой): название стоит над ней.
+ */
+function RecipePhoto({
+  recipeId,
+  photoPath,
+}: {
+  recipeId: string;
+  photoPath: string | null;
+}) {
+  const photo = useRecipePhoto(recipeId, photoPath);
+  const blob = photo.data ?? null;
+  const [src, setSrc] = useState<string | null>(null);
+
+  // Адрес объекта держит картинку в памяти, пока его не отзовут: отзывается
+  // при смене фото и при закрытии карточки.
+  useEffect(() => {
+    if (blob === null) {
+      setSrc(null);
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    setSrc(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [blob]);
+
+  if (src === null) return null;
+  return (
+    <img
+      src={src}
+      alt=""
+      className="aspect-[4/3] w-full rounded-xl object-cover"
+    />
+  );
 }
 
 function Ingredients({ recipe }: { recipe: Recipe }) {
-  const { t } = useTranslation();
-  const names = useProductNames(
-    recipe.ingredients.map((ingredient) => ingredient.product_id),
-  );
-
-  if (recipe.ingredients.length === 0) {
-    return (
-      <p className="text-muted-foreground">{t("recipes.noComposition")}</p>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-field">
-      {/* Показатели рецепта посчитаны в том числе по выведенному продукту —
-          знать об этом нужно до того, как по рецепту приготовят. Та же
-          оговорка, что в кабинете: по обеим карточкам готовят одинаково. */}
-      {Object.keys(names.withdrawn).length > 0 && (
-        <WarningBanner level="warning" title={t("recipes.withdrawnTitle")}>
-          {t("recipes.withdrawnBody", {
-            list: Object.values(names.withdrawn).join(", "),
-          })}
-        </WarningBanner>
-      )}
-
-      <ul className="flex list-none flex-col gap-1 p-0">
-        {recipe.ingredients.map((ingredient) => (
-          <li
-            key={ingredient.product_id}
-            className="flex flex-wrap justify-between gap-field"
-          >
-            {/* Граммовка видна всегда, даже пока имена в пути: состав,
-                спрятанный целиком, — это карточка без рецепта, а по ней
-                готовят. */}
-            <span className="min-w-0 break-words">
-              {productName(names.stateOf(ingredient.product_id), t)}
-              {names.withdrawn[ingredient.product_id] !== undefined && (
-                <span className="ml-2 text-sm text-warning-strong">
-                  {t("recipes.withdrawn")}
-                </span>
-              )}
-              {/* По списку из сохранённого расчёта, а не по живой отметке
-                  продукта: пометка говорит о показателях рецепта, а они
-                  посчитаны так, как там записано (ADR-0054). */}
-              {recipe.computed?.uncounted_product_ids?.includes(
-                ingredient.product_id,
-              ) && (
-                <span className="ml-2 text-sm text-muted-foreground">
-                  {t("recipes.uncounted")}
-                </span>
-              )}
-            </span>
-            <span className="text-muted-foreground tabular-nums">
-              {t("recipes.grams", { value: formatMass(ingredient.grams) })}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ProductComposition
+      ingredients={recipe.ingredients}
+      uncountedIds={recipe.computed?.uncounted_product_ids ?? []}
+    />
   );
 }

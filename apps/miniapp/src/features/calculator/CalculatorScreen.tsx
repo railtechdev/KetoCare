@@ -31,6 +31,7 @@ import {
 } from "@ketocare/ui";
 import type { MacroFit } from "@ketocare/ui";
 import {
+  useContext,
   useEffect,
   useId,
   useMemo,
@@ -42,19 +43,22 @@ import { useTranslation } from "react-i18next";
 
 import { errorCodeOf, errorMessageOf } from "../../lib/api";
 import { hideKeyboard } from "../../lib/telegram";
-import { useUnsavedGuard } from "../../lib/useTelegram";
+import { TabVisibleContext, useUnsavedGuard } from "../../lib/useTelegram";
 import { RemoveButton } from "../../components/RemoveButton";
+import { TelegramConfirmDialog } from "../../components/TelegramConfirmDialog";
 import type { Session } from "../session/useSession";
 import { usePatientOverview } from "../home/useOverview";
 import { SaveDish } from "./SaveDish";
 import {
   MIN_QUERY,
+  type CalculatorSeed,
   type DishRow,
   type ProductOption,
   type Targets,
   parseAmount,
   useProductSearch,
   useScale,
+  useSeedRows,
   useSolve,
   useVerify,
 } from "./useCalculator";
@@ -79,9 +83,60 @@ import {
  * посчитаны; правка человека важнее подставленного. Без назначения поля пусты,
  * и вердикта нет: сравнивать не с чем.
  */
-export function CalculatorScreen({ session }: { session: Session }) {
+export function CalculatorScreen({
+  session,
+  seed = null,
+}: {
+  session: Session;
+  /** Блюдо ребёнка, открытое в расчёте из «Блюд ребёнка» (Б1). */
+  seed?: CalculatorSeed | null;
+}) {
   const { t } = useTranslation();
   const [rows, setRows] = useState<DishRow[]>([]);
+
+  /**
+   * Состав из «Открыть в расчёте» встаёт в поля, как только пришли карточки
+   * продуктов. Собранное раньше молча не затирается: несохранённый ввод
+   * заменяется только после вопроса.
+   */
+  const seeded = useSeedRows(seed);
+  const [appliedSeed, setAppliedSeed] = useState<number | null>(null);
+  const pendingSeed = seed !== null && seed.key !== appliedSeed ? seed : null;
+  const seedReady = pendingSeed !== null && seeded.status === "ready";
+  // Что из блюда не встало в состав: удалённое из справочника и выведенное в
+  // архив. Говорит о составе на экране, поэтому снимается, как только человек
+  // меняет набор продуктов (убрал строку, добавил замену).
+  const [seedNotice, setSeedNotice] = useState<{
+    missing: number;
+    withdrawn: string[];
+  } | null>(null);
+  // Блюдо, состав которого сейчас в расчёте: «Сохранить изменения» пишет в
+  // него, а не заводит второе блюдо рядом с ошибочным.
+  const [editing, setEditing] = useState<{ id: string; title: string } | null>(
+    null,
+  );
+  const applySeed = () => {
+    if (!seedReady) return;
+    setAppliedSeed(pendingSeed.key);
+    setRows(seeded.rows);
+    setSeedNotice(
+      seeded.missing > 0 || seeded.withdrawn.length > 0
+        ? { missing: seeded.missing, withdrawn: seeded.withdrawn }
+        : null,
+    );
+    setEditing({ id: pendingSeed.dishId, title: pendingSeed.title });
+  };
+  if (seedReady && rows.length === 0) {
+    // Состояние по ходу отрисовки, а не в эффекте: так новый состав виден в
+    // первой же отрисовке, без кадра с пустым расчётом.
+    applySeed();
+  }
+  // Вопрос «заменить собранное?» — только на видимом расчёте. Окно уходит
+  // порталом в `body`, и скрытый раздел или вкладка его не прячут: карточки
+  // продуктов, пришедшие, пока человек смотрит рецепты, открыли бы вопрос
+  // поверх них, а «Назад» Telegram его бы не закрыл. Отложенный состав ждёт,
+  // пока расчёт снова покажут.
+  const visible = useContext(TabVisibleContext);
   // Собранный состав — несохранённый ввод: случайный жест вниз или крестик
   // Telegram не должны стирать его без вопроса.
   useUnsavedGuard(rows.length > 0);
@@ -409,14 +464,67 @@ export function CalculatorScreen({ session }: { session: Session }) {
     errorMessageOf(actionError) === errorMessageOf(verify.error);
 
   return (
+    // Раздел вкладки «Блюда» (ADR-0075) назван подписью, а не заголовком:
+    // «Расчёт» уже написан на переключателе разделов и на блоке итогов, и
+    // третье слово подряд было шумом (Б3 аудита Mini App). Видимые заголовки
+    // блоков остаются.
     <section
-      aria-labelledby="calculator-title"
+      aria-label={t("calculator.title")}
       className="flex flex-col gap-section"
     >
-      {/* Раздел вкладки «Блюда» (ADR-0075): заголовок второго уровня. */}
-      <h2 id="calculator-title" className="text-section-title">
-        {t("calculator.title")}
-      </h2>
+      {/* Блюдо из «Блюд ребёнка» ещё в пути или не загрузилось. */}
+      {pendingSeed !== null && seeded.status === "loading" && (
+        <StatusNote>
+          {t("calculator.seed.loading", { title: pendingSeed.title })}
+        </StatusNote>
+      )}
+      {pendingSeed !== null && seeded.status === "error" && (
+        <WarningBanner level="danger" title={t("calculator.seed.failed")}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-1 min-h-touch"
+            onClick={seeded.retry}
+          >
+            {t("actions.retry")}
+          </Button>
+        </WarningBanner>
+      )}
+      {seedNotice !== null && (
+        <WarningBanner level="warning" title={t("calculator.seed.missing")}>
+          {seedNotice.withdrawn.length > 0 && (
+            <p className="m-0">
+              {t("calculator.seed.withdrawnBody", {
+                list: seedNotice.withdrawn.join(", "),
+              })}
+            </p>
+          )}
+          {seedNotice.missing > 0 && (
+            <p className="m-0">
+              {t("calculator.seed.missingBody", { count: seedNotice.missing })}
+            </p>
+          )}
+        </WarningBanner>
+      )}
+      {visible && seedReady && rows.length > 0 && (
+        <TelegramConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setAppliedSeed(pendingSeed.key);
+          }}
+          title={t("calculator.seed.replaceTitle", {
+            title: pendingSeed.title,
+          })}
+          description={t("calculator.seed.replaceBody")}
+          confirmLabel={t("calculator.seed.replace")}
+          cancelLabel={t("calculator.seed.keep")}
+          onConfirm={() => {
+            applySeed();
+            dropStaleResults();
+          }}
+        />
+      )}
 
       <Section title={t("calculator.composition")} density="compact">
         <ProductPicker
@@ -427,6 +535,7 @@ export function CalculatorScreen({ session }: { session: Session }) {
                 ? current
                 : [...current, { product, grams: "" }],
             );
+            setSeedNotice(null);
             dropStaleResults();
           }}
         />
@@ -480,7 +589,12 @@ export function CalculatorScreen({ session }: { session: Session }) {
                         name: row.product.name,
                       })}
                       onClick={() => {
-                        setRows(rows.filter((_, i) => i !== index));
+                        const next = rows.filter((_, i) => i !== index);
+                        setRows(next);
+                        setSeedNotice(null);
+                        // Убрано всё — дальше собирается другое блюдо, и
+                        // «Сохранить изменения» в прежнее уже не к месту.
+                        if (next.length === 0) setEditing(null);
                         dropStaleResults();
                       }}
                     />
@@ -812,11 +926,15 @@ export function CalculatorScreen({ session }: { session: Session }) {
           посчитанное было некуда унести: у семьи из Telegram кабинета нет. */}
       {saveOffered && (
         <SaveDish
+          key={editing?.id ?? "new"}
           patientId={session.patientId}
           rows={rows}
+          editing={editing}
           blockedBy={saveBlockedBy}
           onNew={() => {
             setRows([]);
+            setSeedNotice(null);
+            setEditing(null);
             dropStaleResults();
             window.scrollTo(0, 0);
           }}

@@ -437,3 +437,94 @@ describe("сохранённое блюдо — в план дня", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("блюдо ребёнка, открытое в расчёте (Б1)", () => {
+  function renderSeeded() {
+    const served = (api.GET as Mock).getMockImplementation() as (
+      path: string,
+      init?: unknown,
+    ) => Promise<unknown>;
+    (api.GET as Mock).mockImplementation((path: string, init?: unknown) =>
+      path.endsWith("{product_id}")
+        ? Promise.resolve({ data: PRODUCT, response: { status: 200 } })
+        : served(path, init),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <CalculatorScreen
+          session={SESSION}
+          seed={{
+            key: 1,
+            dishId: "d1",
+            title: "Масло Амины",
+            ingredients: [{ product_id: "p1", grams: 30 }],
+          }}
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("«Сохранить изменения» исправляет это блюдо, а не заводит второе", async () => {
+    // Прежде исправленная граммовка уходила новым блюдом с названием из
+    // продуктов и без шагов, а ошибочное оставалось в выборе под своим именем.
+    (api.PUT as Mock).mockResolvedValue({
+      data: { ...SAVED, id: "d1", title: "Масло Амины" },
+      response: { status: 200 },
+    });
+    const user = userEvent.setup();
+    renderSeeded();
+
+    // Форма появляется после расчёта; кнопка берётся заново, когда он готов:
+    // пересчёт по пришедшему назначению перерисовывает форму.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Сохранить изменения" }),
+      ).toBeEnabled(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Сохранить как новое блюдо" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Название блюда")).toHaveValue("Масло Амины");
+    const update = screen.getByRole("button", { name: "Сохранить изменения" });
+    await user.click(update);
+
+    expect(
+      await screen.findByText("Блюдо «Масло Амины» сохранено."),
+    ).toBeInTheDocument();
+    expect(saveCalls()).toHaveLength(0);
+    expect(api.PUT).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/custom-dishes/{dish_id}",
+      {
+        params: { path: { patient_id: SESSION.patientId, dish_id: "d1" } },
+        // Без `instructions`: так сервер оставляет шаги блюда (ADR-0088).
+        body: {
+          title: "Масло Амины",
+          ingredients: [{ product_id: "p1", grams: 30 }],
+        },
+      },
+    );
+  });
+
+  it("новое блюдо — вторым, явно названным действием", async () => {
+    const user = userEvent.setup();
+    renderSeeded();
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Сохранить как новое блюдо" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Сохранить как новое блюдо" }),
+    );
+
+    await waitFor(() => expect(saveCalls()).toHaveLength(1));
+    expect(api.PUT).not.toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/custom-dishes/{dish_id}",
+      expect.anything(),
+    );
+  });
+});

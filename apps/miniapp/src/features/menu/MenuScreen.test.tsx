@@ -308,6 +308,38 @@ describe("план дня в Mini App", () => {
     expect(screen.getByText("50 г")).toBeInTheDocument();
   });
 
+  it("«Что взвесить» — кнопка раскрытия со стрелкой и состоянием (М1)", async () => {
+    // Серая надпись без рамки не читалась как то, на что нажимают.
+    (api.GET as Mock).mockResolvedValue({
+      data: menu({
+        items: [
+          {
+            ...menu().items[0],
+            ingredients: [
+              { product_id: "prod-1", name_ru: "Яйцо куриное", grams: 50 },
+            ],
+          },
+        ],
+      }),
+      response: { status: 200 },
+    });
+    const user = userEvent.setup();
+    renderScreen();
+
+    const toggle = await screen.findByRole("button", { name: "Что взвесить" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).toHaveClass("min-h-touch");
+    expect(toggle.querySelector("svg")).not.toBeNull();
+    expect(screen.queryByText("Яйцо куриное")).toBeNull();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const panel = document.getElementById(
+      toggle.getAttribute("aria-controls") ?? "",
+    );
+    expect(panel).toHaveTextContent("Яйцо куриное");
+  });
+
   it("приправу взвешивают, но строка говорит, что в итогах дня её нет", async () => {
     // ADR-0054: граммы перца без пометки выглядели бы частью посчитанного.
     (api.GET as Mock).mockResolvedValue({
@@ -334,9 +366,9 @@ describe("план дня в Mini App", () => {
 
     await user.click(await screen.findByText("Что взвесить"));
 
-    expect(await screen.findByText("Перец чёрный")).toHaveTextContent(
-      "приправа, не учитывается",
-    );
+    expect(
+      (await screen.findByText("Перец чёрный")).closest("li"),
+    ).toHaveTextContent("приправа, не учитывается");
     expect(screen.getByText("Яйцо куриное")).not.toHaveTextContent(
       "не учитывается",
     );
@@ -1352,6 +1384,37 @@ describe("сборка по приёмам (ADR-0075)", () => {
     ).toBeInTheDocument();
   });
 
+  it("значок соотношения одинаковый у рецепта и блюда ребёнка (М4)", async () => {
+    // Рецепт красным рядом с серым блюдом с тем же расхождением читался как
+    // «рецепт хуже». Пометку словами ставит только сервер — у рецепта.
+    const user = userEvent.setup();
+    respond({
+      recipes: [{ ...RECIPE, ratio_fits_prescription: false }],
+      dishes: [
+        {
+          id: "44444444-4444-4444-8444-444444444444",
+          title: "Блюдо Амины",
+          ingredients: [],
+          computed: { ...RECIPE.computed, ratio: 2.5 },
+        },
+      ],
+    });
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Добавить блюдо в приём 1" }),
+    );
+    const recipe = await screen.findByRole("button", { name: /Запеканка/ });
+    const dish = screen.getByRole("button", { name: /Блюдо Амины/ });
+
+    const badgeOf = (row: HTMLElement) =>
+      row.querySelector("[data-state]")?.getAttribute("data-state");
+    expect(badgeOf(recipe)).toBe("neutral");
+    expect(badgeOf(dish)).toBe("neutral");
+    expect(recipe).toHaveTextContent("Кетосоотношение не как в назначении");
+    expect(dish).not.toHaveTextContent("не как в назначении");
+  });
+
   it("порция не числом — кнопка называет причину", async () => {
     const user = userEvent.setup();
     respond({ recipes: [RECIPE] });
@@ -1406,9 +1469,11 @@ describe("сборка по приёмам (ADR-0075)", () => {
       await screen.findByRole("heading", { level: 1, name: RECIPE.title }),
     ).toBeInTheDocument();
 
+    // Кнопка ведёт обратно в меню, а не к списку рецептов.
     expect(
-      await screen.findByRole("button", { name: "К списку" }),
+      await screen.findByRole("button", { name: "К меню" }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "К списку" })).toBeNull();
   });
 
   it("у блюда ребёнка шаги приготовления раскрываются под блюдом", async () => {

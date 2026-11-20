@@ -127,9 +127,10 @@ export {
   formatMeasured,
   formatWeight,
   formatLocale,
+  formatLongDate,
   setFormatLanguage,
 } from "./lib/format";
-export type { FormatLanguage } from "./lib/format";
+export type { FormatLanguage, LongDateOptions } from "./lib/format";
 export { formatPerGram, toPer100, toPerGram } from "./lib/perGram";
 
 export {

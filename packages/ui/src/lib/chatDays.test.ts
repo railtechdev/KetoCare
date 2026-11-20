@@ -31,8 +31,11 @@ describe("chatDayLabel", () => {
 
   it("месяц — на языке экрана", () => {
     setFormatLanguage("uz");
-    expect(chatDayLabel(new Date(2026, 10, 13, 12), NOW, WORDS)).not.toMatch(
-      /ноября/,
+    expect(chatDayLabel(new Date(2026, 10, 13, 12), NOW, WORDS)).toBe(
+      "13-noyabr",
+    );
+    expect(chatDayLabel(new Date(2025, 10, 13, 12), NOW, WORDS)).toBe(
+      "2025-yil 13-noyabr",
     );
   });
 });

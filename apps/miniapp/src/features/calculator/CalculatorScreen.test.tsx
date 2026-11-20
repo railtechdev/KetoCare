@@ -1935,3 +1935,215 @@ describe("калькулятор в Mini App", () => {
     });
   });
 });
+
+describe("блюдо ребёнка в расчёте (Б1) и заголовок раздела (Б3)", () => {
+  const BUTTER = { ...PRODUCT };
+  const CREAM = {
+    ...PRODUCT,
+    id: "p2",
+    name_ru: "Сливки 33%",
+    kcal_100g: 322,
+  };
+
+  /** Карточки продуктов по идентификатору; чего нет в словаре — 404. */
+  function mockProducts(products: Record<string, unknown>) {
+    (api.GET as Mock).mockImplementation(
+      (
+        path: string,
+        options?: { params?: { path?: { product_id?: string } } },
+      ) => {
+        if (path.endsWith("{product_id}")) {
+          const product = products[options?.params?.path?.product_id ?? ""];
+          return Promise.resolve(
+            product === undefined
+              ? { response: { status: 404 } }
+              : { data: product, response: { status: 200 } },
+          );
+        }
+        if (path.includes("overview")) {
+          return Promise.resolve({
+            data: {
+              patient_id: SESSION.patientId,
+              date: "2026-08-31",
+              prescription: PRESCRIPTION,
+              day: null,
+            },
+          });
+        }
+        return Promise.resolve({ data: { items: [PRODUCT], total: 1 } });
+      },
+    );
+  }
+
+  function renderSeeded(seed: Parameters<typeof CalculatorScreen>[0]["seed"]) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = (next: typeof seed) => (
+      <QueryClientProvider client={client}>
+        <CalculatorScreen session={SESSION} seed={next} />
+      </QueryClientProvider>
+    );
+    const result = render(view(seed));
+    return {
+      ...result,
+      reseed: (next: typeof seed) => result.rerender(view(next)),
+    };
+  }
+
+  it("состав блюда встаёт в поля с сохранёнными граммами", async () => {
+    mockProducts({ p1: BUTTER, p2: CREAM });
+    renderSeeded({
+      key: 1,
+      dishId: "d1",
+      title: "Масло со сливками",
+      ingredients: [
+        { product_id: "p1", grams: 12.5 },
+        { product_id: "p2", grams: 40 },
+      ],
+    });
+
+    expect(await screen.findByLabelText(/Масло сливочное, граммы/)).toHaveValue(
+      "12,5",
+    );
+    expect(screen.getByLabelText(/Сливки 33%, граммы/)).toHaveValue("40");
+  });
+
+  it("собранное раньше не затирается без вопроса", async () => {
+    mockProducts({ p1: BUTTER, p2: CREAM });
+    const user = userEvent.setup();
+    const { reseed } = renderSeeded({
+      key: 1,
+      dishId: "d1",
+      title: "Масло",
+      ingredients: [{ product_id: "p1", grams: 10 }],
+    });
+    await screen.findByLabelText(/Масло сливочное, граммы/);
+
+    reseed({
+      key: 2,
+      dishId: "d2",
+      title: "Сливки",
+      ingredients: [{ product_id: "p2", grams: 40 }],
+    });
+
+    expect(
+      await screen.findByRole("alertdialog", {
+        name: "Заменить состав в расчёте блюдом «Сливки»?",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue("10");
+
+    await user.click(screen.getByRole("button", { name: "Заменить" }));
+
+    expect(await screen.findByLabelText(/Сливки 33%, граммы/)).toHaveValue(
+      "40",
+    );
+    expect(screen.queryByLabelText(/Масло сливочное, граммы/)).toBeNull();
+  });
+
+  it("«Оставить собранное» — состав прежний, вопрос не повторяется", async () => {
+    mockProducts({ p1: BUTTER, p2: CREAM });
+    const user = userEvent.setup();
+    const { reseed } = renderSeeded({
+      key: 1,
+      dishId: "d1",
+      title: "Масло",
+      ingredients: [{ product_id: "p1", grams: 10 }],
+    });
+    await screen.findByLabelText(/Масло сливочное, граммы/);
+    reseed({
+      key: 2,
+      dishId: "d2",
+      title: "Сливки",
+      ingredients: [{ product_id: "p2", grams: 40 }],
+    });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Оставить собранное" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+    expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue("10");
+    expect(screen.queryByLabelText(/Сливки 33%, граммы/)).toBeNull();
+  });
+
+  it("продукта больше нет в справочнике — сказано, остальное в составе", async () => {
+    mockProducts({ p1: BUTTER });
+    renderSeeded({
+      key: 1,
+      dishId: "d1",
+      title: "Масло со сливками",
+      ingredients: [
+        { product_id: "p1", grams: 10 },
+        { product_id: "gone", grams: 40 },
+      ],
+    });
+
+    expect(
+      await screen.findByText("Не весь состав встал в расчёт"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue("10");
+  });
+
+  it("продукт из архива в расчёт не встаёт, и он назван", async () => {
+    // Поиск семьи выведенный продукт не предлагает; молча посчитать по его
+    // прежним числам и сохранить из них новое блюдо нельзя.
+    mockProducts({
+      p1: BUTTER,
+      p2: { ...CREAM, name_ru: "Сливки старые", is_active: false },
+    });
+    renderSeeded({
+      key: 1,
+      dishId: "d1",
+      title: "Масло со сливками",
+      ingredients: [
+        { product_id: "p1", grams: 10 },
+        { product_id: "p2", grams: 40 },
+      ],
+    });
+
+    expect(
+      await screen.findByText("Не весь состав встал в расчёт"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/В архиве: Сливки старые — в расчёт не встали/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue("10");
+    expect(screen.queryByLabelText(/Сливки старые, граммы/)).toBeNull();
+    // Удалённых из справочника нет — строки о них нет.
+    expect(screen.queryByText(/больше нет в справочнике/)).toBeNull();
+  });
+
+  it("строка «не весь состав» уходит, когда состав поменяли", async () => {
+    mockProducts({ p1: BUTTER });
+    const user = userEvent.setup();
+    renderSeeded({
+      key: 1,
+      dishId: "d1",
+      title: "Масло со сливками",
+      ingredients: [
+        { product_id: "p1", grams: 10 },
+        { product_id: "gone", grams: 40 },
+      ],
+    });
+    expect(
+      await screen.findByText("Не весь состав встал в расчёт"),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /Убрать Масло сливочное/ }),
+    );
+
+    expect(screen.queryByText("Не весь состав встал в расчёт")).toBeNull();
+  });
+
+  it("«Расчёт» — один заголовок, у блока итогов; раздел назван подписью", () => {
+    renderScreen();
+
+    expect(screen.getAllByRole("heading", { name: "Расчёт" })).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "Расчёт" })).toBeInTheDocument();
+  });
+});

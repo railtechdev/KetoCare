@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict, deque
 from collections.abc import Sequence
 from typing import Any
 
@@ -145,7 +146,11 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
                 title=None if item.snapshot is None else item.snapshot.get("title"),
                 ingredients=_snapshot_ingredients(item),
                 has_snapshot=item.snapshot is not None,
-                changed_since_saved=_changed_since_saved(item, live.get(item.id, [])),
+                # Удалённое своё блюдо — не «изменившееся»: живого состава у
+                # позиции нет (`_live_compositions` её пропускает), и сравнивать
+                # снимок не с чем. Иначе семья читала бы «рецепт изменился» и
+                # пересобирала день без причины.
+                changed_since_saved=item.id in live and _changed_since_saved(item, live[item.id]),
                 instructions=steps.get(item.id),
             )
             for item in items
@@ -325,7 +330,10 @@ async def _live_compositions(
             ]
         elif item.custom_dish_id is not None:
             dish = dishes.get(item.custom_dish_id)
-            raw[item.id] = [] if dish is None else _dish_composition(dish)
+            # Удалённого блюда нет вовсе, а не «состав пуст»: пустой состав
+            # читался бы как правка блюда (`changed_since_saved`).
+            if dish is not None:
+                raw[item.id] = _dish_composition(dish)
 
     product_ids = list({pid for rows in raw.values() for pid, _ in rows})
     products = await products_repo.get_by_ids(session, product_ids=product_ids)
@@ -455,6 +463,72 @@ def dish_usage(rows: Sequence[menus_repo.UsageRow]) -> DishUsageRead:
 
 
 async def build_snapshots(
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    items: Sequence[MenuItemWrite],
+    stored: Sequence[MenuItem] = (),
+) -> list[dict[str, Any]]:
+    """Snapshot of every item; see `_fresh_snapshots` for what goes into one.
+
+    `stored` are the items this day holds now. An item of the new plan that
+    matches a stored one by key (meal, recipe, child's dish) is that same item
+    kept in the plan (`menus_repo.replace_items` reuses it with its snapshot).
+    When its child's dish has been deleted since, the stored snapshot stands in
+    for a new one: the day is saved whole, and without this a family that
+    deleted a dish could not add anything to a day already holding it — an
+    eaten item cannot even be dropped (ADR-0041). Only a dish put into the day
+    anew must be alive.
+    """
+
+    frozen = await _kept_with_deleted_dish(
+        session, patient_id=patient_id, items=items, stored=stored
+    )
+    fresh = [item for index, item in enumerate(items) if index not in frozen]
+    built = iter(await _fresh_snapshots(session, patient_id=patient_id, items=fresh))
+    return [frozen[index] if index in frozen else next(built) for index in range(len(items))]
+
+
+async def _kept_with_deleted_dish(
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    items: Sequence[MenuItemWrite],
+    stored: Sequence[MenuItem],
+) -> dict[int, dict[str, Any]]:
+    """Positions of `items` that keep a stored item whose dish was deleted,
+    with that item's snapshot. Matched one to one, as `replace_items` reuses:
+    a second copy of the deleted dish in the same meal is a new item."""
+
+    if not stored:
+        return {}
+    dish_ids = list({item.custom_dish_id for item in items if item.custom_dish_id is not None})
+    if not dish_ids:
+        return {}
+    alive = await menus_repo.get_custom_dishes_by_ids(
+        session, patient_id=patient_id, dish_ids=dish_ids
+    )
+
+    gone: dict[tuple[int, uuid.UUID], deque[dict[str, Any]]] = defaultdict(deque)
+    for kept in stored:
+        if (
+            kept.custom_dish_id is not None
+            and kept.custom_dish_id not in alive
+            and kept.snapshot is not None
+        ):
+            gone[(kept.meal_index, kept.custom_dish_id)].append(kept.snapshot)
+
+    frozen: dict[int, dict[str, Any]] = {}
+    for index, item in enumerate(items):
+        if item.custom_dish_id is None:
+            continue
+        bucket = gone.get((item.meal_index, item.custom_dish_id))
+        if bucket:
+            frozen[index] = bucket.popleft()
+    return frozen
+
+
+async def _fresh_snapshots(
     session: AsyncSession, *, patient_id: uuid.UUID, items: Sequence[MenuItemWrite]
 ) -> list[dict[str, Any]]:
     """Снимок каждой позиции: всё, что нужно для повторного расчёта без
@@ -677,12 +751,33 @@ async def _custom_dishes(
         session, patient_id=patient_id, dish_ids=dish_ids
     )
 
-    missing = sorted({str(did) for did in dish_ids if did not in dishes})
+    missing = sorted({did for did in dish_ids if did not in dishes}, key=str)
     if missing:
+        # Удалённое блюдо называется по имени: семья, нажавшая «Как вчера» или
+        # «Добавить», иначе не узнала бы, какое блюдо мешает.
+        deleted = await menus_repo.get_custom_dishes_by_ids(
+            session, patient_id=patient_id, dish_ids=missing, deleted=True
+        )
+        if deleted:
+            titles = ", ".join(f"«{deleted[did].title}»" for did in missing if did in deleted)
+            raise ApiError(
+                ErrorCode.VALIDATION_ERROR,
+                (
+                    f"Блюдо {titles} удалено, и поставить его в день снова нельзя. "
+                    "Выберите другое блюдо."
+                    if len(deleted) == 1
+                    else f"Блюда {titles} удалены, и поставить их в день снова нельзя. "
+                    "Выберите другие блюда."
+                ),
+                details={
+                    "reason": "dish_deleted",
+                    "custom_dish_ids": [str(did) for did in missing],
+                },
+            )
         raise ApiError(
             ErrorCode.VALIDATION_ERROR,
             "Своё блюдо не найдено у этого пациента.",
-            details={"custom_dish_ids": missing},
+            details={"custom_dish_ids": [str(did) for did in missing]},
         )
     return dishes
 

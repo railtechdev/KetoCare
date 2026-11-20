@@ -488,10 +488,18 @@ async def get_recipe_ingredients(
 
 
 async def get_custom_dishes_by_ids(
-    session: AsyncSession, *, patient_id: uuid.UUID, dish_ids: Sequence[uuid.UUID]
+    session: AsyncSession,
+    *,
+    patient_id: uuid.UUID,
+    dish_ids: Sequence[uuid.UUID],
+    deleted: bool = False,
 ) -> dict[uuid.UUID, CustomDish]:
-    """Свои блюда этого пациента. Чужие и удалённые не возвращаются вовсе —
-    так в меню ребёнка не может попасть блюдо, составленное для другого."""
+    """Свои блюда этого пациента. Чужие не возвращаются вовсе — так в меню
+    ребёнка не может попасть блюдо, составленное для другого.
+
+    По умолчанию — только живые блюда; `deleted=True` отдаёт, наоборот, только
+    удалённые: по ним отказ сохранения называет блюдо, а не идентификатор.
+    """
 
     if not dish_ids:
         return {}
@@ -500,7 +508,7 @@ async def get_custom_dishes_by_ids(
         select(CustomDish).where(
             CustomDish.id.in_(list(dish_ids)),
             CustomDish.patient_id == patient_id,
-            CustomDish.deleted_at.is_(None),
+            CustomDish.deleted_at.is_not(None) if deleted else CustomDish.deleted_at.is_(None),
         )
     )
     return {dish.id: dish for dish in rows}
