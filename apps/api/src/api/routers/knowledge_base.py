@@ -3,14 +3,18 @@
 The assistant names its sources under every reply, and the family must be able
 to open them: a source written as plain text is a promise without a page.
 
-Reading is open to everyone signed in, like `/letterhead`: articles are public
-material from `docs/knowledge-base`, not patient data, so no patient access
-check applies. The Telegram bot is still refused by `BOT_ALLOWED_ROUTES` — it
-shows no articles and the route is deliberately not listed there.
+Reading is open to everyone signed in, like `/letterhead`: published articles
+are material for families, not patient data, so no patient access
+check applies. The one exception is the administrator and a clinical article:
+clinical content is not his at all (rule 5 of CLAUDE.md, ADR-0093), and a
+guessable slug must not be a way around the 403 of the clinical section.
+The Telegram bot is still refused by `BOT_ALLOWED_ROUTES` — it shows no
+articles and the route is deliberately not listed there.
 
-The text comes from the search index (`kb_chunks`), not from the file: the
-index is exactly what the assistant read, and an article withdrawn or still in
-draft is absent from both.
+The text comes from the search index (`kb_chunks`), not from the article
+tables: the index is exactly what the assistant read — the live version of a
+published, not hidden article (ADR-0093) — and an article withdrawn, hidden or
+still in draft is absent from both.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Path
 from pydantic import BaseModel
 
+from core.models.enums import UserRole
 from core.repositories import knowledge_base as kb_repo
 
 from ..deps.auth import CurrentUserDep, SessionDep
@@ -47,10 +52,12 @@ class KbArticleRead(BaseModel):
 )
 async def read_article(
     slug: Annotated[str, Path(pattern=SLUG_PATTERN)],
-    _user: CurrentUserDep,
+    user: CurrentUserDep,
     session: SessionDep,
 ) -> KbArticleRead:
     found = await kb_repo.article(session, slug)
     if found is None:
         raise ApiError(ErrorCode.NOT_FOUND, "Статья не найдена.")
+    if found.kind == "clinical" and user.role == UserRole.ADMIN:
+        raise ApiError(ErrorCode.FORBIDDEN, "Клинические статьи администратору недоступны.")
     return KbArticleRead.model_validate(found, from_attributes=True)

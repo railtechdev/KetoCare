@@ -19,6 +19,7 @@ from api.deps.bot import BOT_ALLOWED_ROUTES
 from core.knowledge.documents import read_article, split_article
 from core.models import KbChunk
 from core.models.enums import UserRole
+from core.repositories import kb_articles as kb_articles_repo
 
 from .test_bot_diary_contract import _bot_headers, _linked
 from .test_miniapp_auth import _linked_family, bot_token, init_data  # noqa: F401
@@ -28,8 +29,39 @@ ROUTE = "/knowledge-base/articles/{slug}"
 KB_ROOT = Path(__file__).resolve().parents[3] / "docs" / "knowledge-base"
 
 
-def _chunk(slug: str, title: str, ord_: int, heading: str, body: str, kind: str) -> KbChunk:
+async def _holder(session, *, slug: str, kind: str, title: str) -> dict[str, uuid.UUID]:
+    """The published article a hand-made chunk belongs to (ADR-0093): a chunk
+    without its article and live version does not exist."""
+
+    article, version = await kb_articles_repo.create(
+        session,
+        slug=slug,
+        kind=kind,
+        origin="cabinet",
+        title=title,
+        body_md="текст",
+        sources=None,
+        created_by=None,
+        author_id=None,
+        author_label="test",
+    )
+    await kb_articles_repo.publish(
+        session, article=article, draft=version, reviewed_by=None, approver_label="test"
+    )
+    return {"article_id": article.id, "version_id": version.id}
+
+
+def _chunk(
+    slug: str,
+    title: str,
+    ord_: int,
+    heading: str,
+    body: str,
+    kind: str,
+    holder: dict[str, uuid.UUID],
+) -> KbChunk:
     return KbChunk(
+        **holder,
         doc_slug=slug,
         doc_title=title,
         heading_path=f"{title} › {heading}",
@@ -44,11 +76,12 @@ def _chunk(slug: str, title: str, ord_: int, heading: str, body: str, kind: str)
 async def _seed(session, *, kind: str = "product") -> str:
     slug = f"plan-day-{uuid.uuid4().hex[:8]}"
     title = "Как составить день"
+    holder = await _holder(session, slug=slug, kind=kind, title=title)
     # Inserted out of order: the text must follow `ord`, not insertion.
     session.add_all(
         [
-            _chunk(slug, title, 1, "Подробно", "Второй раздел.\n\n- пункт", kind),
-            _chunk(slug, title, 0, "Короткий ответ", "Первый раздел.", kind),
+            _chunk(slug, title, 1, "Подробно", "Второй раздел.\n\n- пункт", kind, holder),
+            _chunk(slug, title, 0, "Короткий ответ", "Первый раздел.", kind, holder),
         ]
     )
     await session.flush()
@@ -97,8 +130,10 @@ async def test_real_article_reads_like_its_file(client, session, make_user, auth
 
     source = read_article(KB_ROOT / "product" / "how-to-mark-eaten.md", root=KB_ROOT)
     slug = f"real-{uuid.uuid4().hex[:8]}"
+    holder = await _holder(session, slug=slug, kind=source.kind, title=source.title)
     session.add_all(
         KbChunk(
+            **holder,
             doc_slug=slug,
             doc_title=source.title,
             heading_path=chunk.heading_path,
@@ -125,9 +160,9 @@ async def test_real_article_reads_like_its_file(client, session, make_user, auth
 async def test_article_without_sections_has_no_title_in_body(
     client, session, make_user, auth_headers, tmp_path: Path
 ) -> None:
-    """An article with only an H1 and text is indexed as one bare-title chunk
-    whose body still starts with `# Title`. The screen prints `title` as the
-    heading, so the H1 must not come back in `body_md` too."""
+    """An article with only an H1 and text is indexed as one bare-title chunk.
+    The screen prints `title` as the heading, so the H1 must not come back in
+    `body_md` too."""
 
     slug = f"short-{uuid.uuid4().hex[:8]}"
     path = tmp_path / "product" / f"{slug}.md"
@@ -148,8 +183,10 @@ async def test_article_without_sections_has_no_title_in_body(
     source = read_article(path, root=tmp_path)
     chunks = split_article(source)
     assert [chunk.heading_path for chunk in chunks] == ["Короткая статья"]
+    holder = await _holder(session, slug=slug, kind=source.kind, title=source.title)
     session.add_all(
         KbChunk(
+            **holder,
             doc_slug=slug,
             doc_title=source.title,
             heading_path=chunk.heading_path,
@@ -175,13 +212,41 @@ async def test_article_without_sections_has_no_title_in_body(
     "role", [UserRole.PARENT, UserRole.DOCTOR, UserRole.DIETITIAN, UserRole.ADMIN]
 )
 async def test_everyone_signed_in_reads(client, session, make_user, auth_headers, role) -> None:
-    """Articles are public material, not patient data."""
+    """Product articles are public material, not patient data."""
 
     slug = await _seed(session)
 
     response = await client.get(f"{URL}/{slug}", headers=auth_headers(await make_user(role)))
 
     assert response.status_code == 200, response.text
+
+
+async def test_administrator_does_not_read_clinical_text(
+    client, session, make_user, auth_headers
+) -> None:
+    """Clinical content is not the administrator's at all (rule 5 of CLAUDE.md,
+    ADR-0093): a guessable slug is no way around the clinical section's 403."""
+
+    slug = await _seed(session, kind="clinical")
+
+    response = await client.get(
+        f"{URL}/{slug}", headers=auth_headers(await make_user(UserRole.ADMIN))
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "forbidden"
+
+
+@pytest.mark.parametrize("role", [UserRole.PARENT, UserRole.DOCTOR, UserRole.DIETITIAN])
+async def test_family_and_specialists_read_clinical_text(
+    client, session, make_user, auth_headers, role
+) -> None:
+    slug = await _seed(session, kind="clinical")
+
+    response = await client.get(f"{URL}/{slug}", headers=auth_headers(await make_user(role)))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["kind"] == "clinical"
 
 
 async def test_unknown_article_is_not_found(client, make_user, auth_headers) -> None:

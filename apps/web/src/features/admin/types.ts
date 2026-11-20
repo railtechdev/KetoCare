@@ -29,6 +29,8 @@ export const ADMIN_SECTIONS = [
   "dictionaries",
   // Ключ, модели, бюджеты и лимиты ИИ (ADR-0080).
   "ai",
+  // Статьи помощника о работе приложения (ADR-0093).
+  "productArticles",
   // Логотип, название и реквизиты клиники на документах (ADR-0092).
   "letterhead",
   "audit",

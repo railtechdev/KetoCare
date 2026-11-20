@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import get_args
 
 from api.services.admin import create_dictionary_entry
+from core.knowledge.indexer import AUDIT_ENTITY as KB_AUDIT_ENTITIES
 from core.repositories.diary import DiaryLog
 
 REPO = Path(__file__).resolve().parents[3]
@@ -91,7 +92,9 @@ def _diary_entities() -> frozenset[str]:
 
 
 def test_filter_knows_every_written_entity() -> None:
-    written = _written("entity") | _dictionary_entities() | _diary_entities()
+    # Статьи помощника пишут сущность по виду статьи (`AUDIT_ENTITY`, ADR-0093).
+    kb_entities = frozenset(KB_AUDIT_ENTITIES.values())
+    written = _written("entity") | _dictionary_entities() | _diary_entities() | kb_entities
     listed = _filter_list("AUDIT_ENTITIES")
 
     assert written - listed == set(), "API пишет сущности, которых нет в фильтре журнала"

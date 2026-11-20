@@ -53,8 +53,24 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
   // которым ничего нет (правило П3 канона). AI-сводка это пункт 21 ТЗ, этап 4;
   // раздел вернётся вместе со своей работой, как вернутся «Ассистент» и
   // «Отчёты» у родителя.
-  doctor: ["patients", "recipes", "products", "calculator", "profile"],
-  dietitian: ["patients", "recipes", "products", "calculator", "profile"],
+  // «Статьи для семей» — клинические статьи помощника семьи (ADR-0093): пишет
+  // и публикует врач или диетолог, публикует всегда второй человек.
+  doctor: [
+    "patients",
+    "recipes",
+    "products",
+    "articles",
+    "calculator",
+    "profile",
+  ],
+  dietitian: [
+    "patients",
+    "recipes",
+    "products",
+    "articles",
+    "calculator",
+    "profile",
+  ],
   admin: [
     "home",
     "users",
@@ -63,6 +79,9 @@ export const SECTIONS_BY_ROLE: Record<Role, readonly string[]> = {
     "recipes",
     "dictionaries",
     "ai",
+    // Статьи помощника о работе приложения (ADR-0093). Клинических статей
+    // администратор не видит: к клиническому содержимому доступа у него нет.
+    "productArticles",
     "letterhead",
     "audit",
     "profile",

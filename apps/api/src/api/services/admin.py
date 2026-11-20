@@ -50,6 +50,11 @@ AUDIT_PAYLOAD_VISIBLE_ENTITIES = frozenset(
         "product_categories",
         "product_revisions",
         "recipes",
+        # Product articles of the assistant (ADR-0093): how the app works, the
+        # administrator's own content. Clinical articles are journalled under
+        # `kb_clinical_articles` and deliberately absent here: their text is
+        # not the administrator's to read (rule 5 of CLAUDE.md).
+        "kb_product_articles",
         "seizure_types",
         "ketone_methods",
         # AI settings and budget warnings (ADR-0080, ADR-0081): models, sums

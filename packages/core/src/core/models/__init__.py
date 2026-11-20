@@ -55,7 +55,7 @@ from .diary import (
 )
 from .files import Attachment
 from .idempotency import IdempotencyKey
-from .knowledge import KbChunk
+from .knowledge import KbArticle, KbArticleVersion, KbChunk
 from .marketing import Lead
 from .settings import AppSetting
 
@@ -118,6 +118,8 @@ __all__ = [
     "ReportJob",
     "AuditLog",
     # marketing
+    "KbArticle",
+    "KbArticleVersion",
     "KbChunk",
     "Lead",
 ]

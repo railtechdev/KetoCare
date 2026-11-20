@@ -17,14 +17,37 @@ import pytest
 from core.models import KbChunk
 from core.models.enums import UserRole
 from core.repositories import ai_conversations as conversations_repo
+from core.repositories import kb_articles as kb_articles_repo
 from core.repositories import patients as patients_repo
 from core.schemas.ai_conversations import new_message
 
 pytestmark = pytest.mark.asyncio
 
 
-def _chunk(slug: str, title: str, ord_: int = 0) -> KbChunk:
+async def _holder(session, slug: str, title: str) -> dict[str, uuid.UUID]:
+    """The published article the chunks belong to (ADR-0093)."""
+
+    article, version = await kb_articles_repo.create(
+        session,
+        slug=slug,
+        kind="product",
+        origin="cabinet",
+        title=title,
+        body_md="текст",
+        sources=None,
+        created_by=None,
+        author_id=None,
+        author_label="test",
+    )
+    await kb_articles_repo.publish(
+        session, article=article, draft=version, reviewed_by=None, approver_label="test"
+    )
+    return {"article_id": article.id, "version_id": version.id}
+
+
+def _chunk(slug: str, title: str, holder: dict[str, uuid.UUID], ord_: int = 0) -> KbChunk:
     return KbChunk(
+        **holder,
         doc_slug=slug,
         doc_title=title,
         heading_path="",
@@ -46,7 +69,13 @@ async def test_reply_names_articles_by_title(
     slug = f"plan-day-{uuid.uuid4().hex[:8]}"
     gone = f"gone-{uuid.uuid4().hex[:8]}"
     # Два куска одной статьи — одна ссылка, а не две.
-    session.add_all([_chunk(slug, "Как составить день", 0), _chunk(slug, "Как составить день", 1)])
+    holder = await _holder(session, slug, "Как составить день")
+    session.add_all(
+        [
+            _chunk(slug, "Как составить день", holder, 0),
+            _chunk(slug, "Как составить день", holder, 1),
+        ]
+    )
     await session.flush()
 
     accepted = await client.post(

@@ -3,6 +3,7 @@ import { initReactI18next } from "react-i18next";
 
 import accessRu from "../locales/ru/access.json";
 import adminRu from "../locales/ru/admin.json";
+import articlesRu from "../locales/ru/articles.json";
 import assistantRu from "../locales/ru/assistant.json";
 import authRu from "../locales/ru/auth.json";
 import calculatorRu from "../locales/ru/calculator.json";
@@ -40,6 +41,7 @@ export const resources = {
     common: commonRu,
     access: accessRu,
     admin: adminRu,
+    articles: articlesRu,
     assistant: assistantRu,
     auth: authRu,
     calculator: calculatorRu,

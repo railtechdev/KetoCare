@@ -9,7 +9,7 @@
 **Ни один класс не ловится одним словом.** «Мг» встречается в безобидном «в
 100 г масла 82 г жира»; доза бывает без цифр вовсе — «по половине таблетки на
 ночь». Поэтому каждое правило перемножает два признака: что говорят и о чём.
-Списки признаков — в `lexicons.py`.
+Списки признаков — в `assistant_lexicons.py`.
 
 Ошибаться этот фильтр обязан в сторону блокировки: ложное срабатывание стоит
 семье шаблонного ответа вместо полезного, ложный пропуск — выполненного совета
@@ -22,6 +22,12 @@
 правило. С узбекским интерфейсом Mini App (ADR-0052) такой ответ стал вероятен.
 Вопрос этой проверке не подлежит: узбекский вопрос — не запрет, ответ на него
 модель даёт по русским материалам и проверяется уже здесь.
+
+**Живёт в `core`, а не в воркере** (ADR-0093): тем же фильтром API проверяет
+черновик статьи базы знаний, когда её отправляют на проверку и публикуют, —
+помощник цитирует статьи почти дословно, и кусок, на котором фильтр
+срабатывает, превратил бы ответ семье в шаблон отказа. Правила — одни на оба
+места: вторая копия разошлась бы с первой.
 """
 
 from __future__ import annotations
@@ -30,10 +36,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
-from core.textguard import find_any as _any
-from core.textguard import normalize as _normalize
-
-from .lexicons import (
+from .assistant_lexicons import (
     ABOUT_THE_CHILD,
     ASK_MODALS,
     CHANGE_VERBS,
@@ -50,6 +53,8 @@ from .lexicons import (
     SYMPTOMS,
     THERAPY_OBJECTS,
 )
+from .textscan import find_any as _any
+from .textscan import normalize as _normalize
 
 
 class Kind(StrEnum):

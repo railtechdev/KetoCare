@@ -209,6 +209,35 @@ beforeEach(() => {
 });
 
 describe("реестр пациентов", () => {
+  it("называет статьи для семей, ждущие проверки врача (ADR-0093)", async () => {
+    // Четыре глаза работают, только если вторая пара узнаёт о статье: врач
+    // работает отсюда и в раздел статей без повода не заходит.
+    const base = (api.GET as Mock).getMockImplementation();
+    (api.GET as Mock).mockImplementation(
+      (path: string, options: { params?: object }) =>
+        path === "/api/v1/knowledge-base/clinical-articles/review-count"
+          ? Promise.resolve({ data: { count: 2 } })
+          : base?.(path, options),
+    );
+    renderList();
+
+    expect(
+      await screen.findByText("Статьи для семей ждут вашей проверки: 2"),
+    ).toBeInTheDocument();
+    const link = screen.getByRole("link", {
+      name: "Открыть статьи на проверку",
+    });
+    expect(link.getAttribute("href")).toContain("/app/articles");
+    expect(link.getAttribute("href")).toContain("tab=review");
+  });
+
+  it("ничего не говорит о статьях, когда проверять нечего", async () => {
+    renderList();
+
+    expect(await screen.findByText("Нет замеров: 10 дн.")).toBeInTheDocument();
+    expect(screen.queryByText(/ждут вашей проверки/)).not.toBeInTheDocument();
+  });
+
   it("помечает молчание и выход соотношения за допуск, поднимая такие строки наверх", async () => {
     renderList();
 

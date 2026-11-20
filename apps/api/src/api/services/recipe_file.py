@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+import zlib
 from xml.etree import ElementTree
 
 from . import spreadsheet
@@ -87,7 +88,7 @@ def _raw_lines(content: bytes) -> list[str]:
             "Фотографии и сканы пока не читаются. Наберите или вставьте текст "
             "рецептов в поле «Вставить текст»."
         )
-    return _decode(content).splitlines()
+    return decode_text(content).splitlines()
 
 
 def _office_lines(content: bytes) -> list[str]:
@@ -141,11 +142,17 @@ def _xlsx_lines(content: bytes) -> list[str]:
     return lines
 
 
-def _xml_part(archive: zipfile.ZipFile, name: str) -> ElementTree.Element:
+def xml_part(archive: zipfile.ZipFile, name: str) -> ElementTree.Element:
     info = archive.getinfo(name)
     if info.file_size > _MAX_DOCUMENT_BYTES:
         raise UnreadableFile("Документ слишком большой. Разделите его на части.")
-    raw = archive.read(info)
+    try:
+        raw = archive.read(info)
+    except (zipfile.BadZipFile, RuntimeError, NotImplementedError, zlib.error, EOFError) as error:
+        # A damaged entry (bad CRC or header), an encrypted one, an unknown
+        # compression: the archive opened, its part does not. The author is told
+        # what to do, not shown a 500.
+        raise UnreadableFile("Файл повреждён: его не удалось прочитать.") from error
     # A Word document never carries a DTD. One that does is not a document but
     # an attempt to make the parser expand entities.
     # Word writes UTF-8; in another encoding the check below would see nothing.
@@ -167,7 +174,7 @@ def _heading_style_ids(archive: zipfile.ZipFile) -> set[str]:
     if "word/styles.xml" not in archive.namelist():
         return set()
     found: set[str] = set()
-    for style in _xml_part(archive, "word/styles.xml").iter(f"{_W}style"):
+    for style in xml_part(archive, "word/styles.xml").iter(f"{_W}style"):
         name = style.find(f"{_W}name")
         label = ((name.get(f"{_W}val") if name is not None else "") or "").lower()
         style_id = style.get(f"{_W}styleId")
@@ -177,7 +184,7 @@ def _heading_style_ids(archive: zipfile.ZipFile) -> set[str]:
 
 
 def _docx_lines(archive: zipfile.ZipFile) -> list[str]:
-    body = _xml_part(archive, "word/document.xml").find(f"{_W}body")
+    body = xml_part(archive, "word/document.xml").find(f"{_W}body")
     if body is None:
         return []
     headings = _heading_style_ids(archive)
@@ -230,7 +237,7 @@ def _paragraph_lines(paragraph: ElementTree.Element, headings: set[str]) -> list
     return lines
 
 
-def _decode(content: bytes) -> str:
+def decode_text(content: bytes) -> str:
     """Text files come from Windows as often as not: UTF-8 first, then the rest."""
 
     if content.startswith((b"\xff\xfe", b"\xfe\xff")):

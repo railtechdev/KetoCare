@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from core.knowledge.indexer import reindex
@@ -59,6 +60,12 @@ async def indexed(sessionmaker: async_sessionmaker, tmp_path):
     (tmp_path / "product").mkdir()
     (tmp_path / "product" / "how-to-record-ketones.md").write_text(ARTICLE, encoding="utf-8")
     async with sessionmaker() as session:
+        # The run is inside the test's outer transaction; articles left in the
+        # development database by `make kb-index` would answer too.
+        await session.execute(text("DELETE FROM kb_chunks"))
+        await session.execute(
+            text("UPDATE kb_articles SET live_version_id = NULL, status = 'withdrawn'")
+        )
         await reindex(session, root=tmp_path)
         await session.commit()
     return tmp_path

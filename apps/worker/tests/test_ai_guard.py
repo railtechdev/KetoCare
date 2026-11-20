@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from worker.ai.guard import RUSSIAN_SHARE_MIN, Kind, Verdict, check, check_answer
+from core.textguard.assistant_guard import RUSSIAN_SHARE_MIN, Kind, Verdict, check, check_answer
 
 CASES = Path(__file__).parent / "data" / "assistant_guard_cases.yaml"
 
@@ -95,7 +95,7 @@ class TestFailClosed:
     def test_internal_error_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Сломавшийся фильтр не должен превращаться в открытую дверь."""
 
-        import worker.ai.guard as guard
+        import core.textguard.assistant_guard as guard
 
         def boom(_: str) -> Verdict:
             raise RuntimeError("правило сломалось")
@@ -134,7 +134,7 @@ class TestLanguage:
         assert 0.5 <= RUSSIAN_SHARE_MIN <= 0.7
 
     def test_language_check_failure_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import worker.ai.guard as guard
+        import core.textguard.assistant_guard as guard
 
         def boom(_: str) -> Verdict:
             raise RuntimeError("правило сломалось")
@@ -161,6 +161,6 @@ class TestLanguage:
     def test_sentence_threshold_is_not_above_the_answer_threshold(self) -> None:
         """В одном предложении латинское название весит больше, чем в ответе."""
 
-        from worker.ai.guard import SENTENCE_RUSSIAN_SHARE_MIN
+        from core.textguard.assistant_guard import SENTENCE_RUSSIAN_SHARE_MIN
 
         assert SENTENCE_RUSSIAN_SHARE_MIN <= RUSSIAN_SHARE_MIN
