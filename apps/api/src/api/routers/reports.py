@@ -33,7 +33,6 @@ from core.repositories import audit as audit_repo
 from core.repositories import patients as patients_repo
 from core.repositories import report_jobs as jobs_repo
 from core.repositories import users as users_repo
-from keto_engine import ENGINE_VERSION
 
 from ..deps.auth import CurrentUserDep, PatientAccessDep, SessionDep, assert_patient_access
 from ..errors import ApiError, ErrorCode
@@ -169,7 +168,6 @@ async def request_pdf_report(
             "name": author.full_name if author is not None else None,
             "role": user.role.value,
         },
-        "engine_version": ENGINE_VERSION,
     }
     # Строка задачи коммитится до постановки в очередь: воркер, взявший задачу
     # раньше коммита, не нашёл бы её (`render_report` молча выходит на пустом

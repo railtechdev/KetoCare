@@ -1,3 +1,4 @@
+import { formatMass } from "@ketocare/ui";
 import type { TFunction } from "i18next";
 
 import type {
@@ -13,6 +14,7 @@ import {
   itemsOf,
   menuDishCard,
 } from "../menu/dayPrintModel";
+import { shoppingList } from "../menu/ShoppingListSheet";
 import { printableDays } from "../menu/WeekGrid";
 import { dishCardBlocks, metricsBlock } from "./printedDishWord";
 
@@ -39,7 +41,8 @@ export function weekWordSections(
   week: MenuWeek,
   patientName: string,
 ): WordSection[] {
-  return printableDays(week).flatMap((day) => {
+  const days = printableDays(week);
+  const sections: WordSection[] = days.flatMap((day) => {
     const metrics = dayMetrics(t, day);
     const excluded = day.menu?.excluded_products ?? [];
     const items = itemsOf(day);
@@ -79,6 +82,50 @@ export function weekWordSections(
       })),
     ];
   });
+
+  // «Что взвесить за неделю» — последним разделом, как последний лист печати.
+  const { lines, seasonings } = shoppingList(week);
+  if (lines.length > 0) {
+    const blocks: WordBlock[] = [
+      { kind: "heading", level: 1, text: t("menu:shopping.title") },
+      {
+        kind: "paragraph",
+        text: t("menu:shopping.intro", {
+          range: weekRangeLabel(week.start),
+          days: days.length,
+        }),
+      },
+      {
+        kind: "table",
+        header: [
+          t("menu:shopping.bought"),
+          t("menu:shopping.product"),
+          t("menu:shopping.weight"),
+          t("menu:shopping.days"),
+        ],
+        rows: lines.map((line) => [
+          "☐",
+          line.name,
+          t("menu:shopping.grams", { value: formatMass(line.grams) }),
+          String(line.days),
+        ]),
+        numeric: [2, 3],
+      },
+    ];
+    if (seasonings.length > 0) {
+      blocks.push({
+        kind: "paragraph",
+        text: `${t("menu:shopping.seasonings")} ${seasonings.join(", ")}`,
+      });
+    }
+    blocks.push({
+      kind: "paragraph",
+      small: true,
+      text: t("menu:shopping.note"),
+    });
+    sections.push({ blocks });
+  }
+  return sections;
 }
 
 export function weekWordModel(

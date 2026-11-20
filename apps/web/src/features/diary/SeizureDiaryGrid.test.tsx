@@ -52,10 +52,20 @@ describe("сетка приступов на печать (ADR-0092)", () => {
     return <QueryClientProvider client={client}>{node}</QueryClientProvider>;
   }
 
-  it("печать есть, когда известен ребёнок и сетка полная", () => {
+  const PERIOD = {
+    from: "2026-08-01T00:00:00+05:00",
+    to: "2026-08-31T23:59:59+05:00",
+  };
+
+  it("печать есть, когда известны ребёнок и период и сетка полная", () => {
     render(
       withClient(
-        <SeizureDiaryGrid logs={[LOG]} types={TYPES} patientName="Мария О." />,
+        <SeizureDiaryGrid
+          logs={[LOG]}
+          types={TYPES}
+          patientName="Мария О."
+          period={PERIOD}
+        />,
       ),
     );
 
@@ -71,8 +81,21 @@ describe("сетка приступов на печать (ADR-0092)", () => {
           logs={[LOG]}
           types={TYPES}
           patientName="Мария О."
+          period={PERIOD}
           complete={false}
         />,
+      ),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Распечатать сетку" }),
+    ).toBeNull();
+  });
+
+  it("без периода печати нет: «итог за период» на бумаге должен называть период", () => {
+    render(
+      withClient(
+        <SeizureDiaryGrid logs={[LOG]} types={TYPES} patientName="Мария О." />,
       ),
     );
 

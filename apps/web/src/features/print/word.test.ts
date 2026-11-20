@@ -72,8 +72,15 @@ describe("week in Word — the same sheets as the printed week", () => {
     const model = weekWordModel(t, WEEK, "Пациент");
 
     // День 16-го: обзор и две карточки; 17-е пусто и не выгружается; 18-е —
-    // обзор и одна карточка.
-    expect(model.sections).toHaveLength(5);
+    // обзор и одна карточка; последним — «Что взвесить за неделю», как на бумаге.
+    expect(model.sections).toHaveLength(6);
+    const shopping = textOf(model.sections[5]!.blocks);
+    expect(shopping[0]).toBe("Что взвесить за неделю");
+    expect(shopping).toContain(
+      "Неделя 16–22.11.2026, дней с меню: 2. Граммы сложены по этим дням.",
+    );
+    // Яйцо: 40 г в трёх позициях за два дня.
+    expect(shopping).toEqual(expect.arrayContaining(["Яйцо куриное", "120 г"]));
     const overview = textOf(model.sections[0]!.blocks);
     expect(overview.slice(0, 2)).toEqual([
       "Меню: Пациент",
@@ -97,7 +104,8 @@ describe("week in Word — the same sheets as the printed week", () => {
         "☐",
         "52,5 г",
         "Приготовление",
-        "Взбить.\nЗапечь.",
+        // Шаги пронумерованы так же, как на бумаге.
+        "1. Взбить.\n2. Запечь.",
       ]),
     );
     expect(textOf(model.sections[2]!.blocks)[1]).toBe("Суп");

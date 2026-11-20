@@ -3,7 +3,11 @@ import type { TFunction } from "i18next";
 import type { PrintedSheetSpec } from "../../components/print/PrintedSheets";
 import { weekRangeLabel } from "../print/weekWord";
 import { daySheets } from "./daySheets";
-import { ShoppingListSheet, shoppingList } from "./ShoppingListSheet";
+import {
+  ShoppingListSheet,
+  shoppingList,
+  shoppingPages,
+} from "./ShoppingListSheet";
 import type { MenuWeek } from "./useWeek";
 import { printableDays } from "./WeekGrid";
 
@@ -20,19 +24,25 @@ export function weekSheets(
   const sheets: PrintedSheetSpec[] = days.flatMap((day) =>
     daySheets(t, day, patientName),
   );
-  if (days.length > 0 && shoppingList(week).lines.length > 0) {
+  const { lines, seasonings } = shoppingList(week);
+  const pages = shoppingPages(lines);
+  pages.forEach((page, index) => {
     sheets.push({
-      key: "shopping",
+      key: `shopping-${index}`,
       title: t("menu:shopping.title"),
       aside: patientName,
       code: "KC-SHOP-1",
       content: (
         <ShoppingListSheet
-          week={week}
+          lines={page}
+          seasonings={seasonings}
           rangeLabel={weekRangeLabel(week.start)}
+          days={days.length}
+          first={index === 0}
+          last={index === pages.length - 1}
         />
       ),
     });
-  }
+  });
   return sheets;
 }

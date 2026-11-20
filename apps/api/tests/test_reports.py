@@ -10,7 +10,14 @@ from sqlalchemy import func, select
 
 from core.config import get_settings
 from core.models import AuditLog, KetoneLog, SeizureLog, SeizureType
-from core.models.enums import DiarySource, KetoneMethod, UserRole
+from core.models.enums import (
+    DiarySource,
+    KetoneMethod,
+    MedicationDoseUnit,
+    MedicationFrequency,
+    UserRole,
+)
+from core.repositories import medications as medications_repo
 from core.repositories import patients as patients_repo
 from core.repositories import prescriptions as prescriptions_repo
 
@@ -210,6 +217,75 @@ class TestReportContent:
 
         assert [item["ratio"] for item in body["prescriptions"]] == [4.0]
 
+    async def test_only_prescriptions_in_force_in_the_period_in_their_order(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Отчёт подписывает «назначение» последним в списке — действующим на
+        конец периода. Прежде в список шла вся история, новейшая первой, и PDF
+        печатал в шапке самое старое назначение (аудит документов 20.11.2026)."""
+
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+
+        async def prescribe(ratio: float, start: date):
+            item = await prescriptions_repo.create(
+                session,
+                patient_id=patient.id,
+                ratio=ratio,
+                kcal_per_day=1200,
+                protein_g=25.0,
+                carbs_limit_g=10.0,
+                meals_per_day=3,
+                restrictions=None,
+                author_id=doctor.id,
+                effective_from=start,
+            )
+            return item
+
+        # Сменено до периода и в отчёт не входит; действовало в начале периода;
+        # сменило его в середине; начнётся после периода.
+        for ratio, start in [
+            (2.0, date(2026, 6, 1)),
+            (3.0, date(2026, 7, 20)),
+            (4.0, date(2026, 8, 15)),
+            (2.5, date(2026, 9, 5)),
+        ]:
+            await prescribe(ratio, start)
+
+        body = (await client.get(_url(patient.id), headers=auth_headers(doctor))).json()
+
+        assert [item["ratio"] for item in body["prescriptions"]] == [3.0, 4.0]
+
+    async def test_only_medications_taken_in_the_period(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        doctor, patient = await _doctor_with_patient(session, make_user, make_patient)
+        for name, started, stopped in [
+            ("Отменён до периода", date(2026, 1, 1), date(2026, 7, 31)),
+            ("Принимался в периоде", date(2026, 1, 1), date(2026, 8, 10)),
+            ("Принимается", date(2026, 8, 20), None),
+            ("Назначен после периода", date(2026, 9, 1), None),
+        ]:
+            await medications_repo.create(
+                session,
+                patient_id=patient.id,
+                drug_name=name,
+                dose="250 мг",
+                dose_value=250,
+                dose_unit=MedicationDoseUnit.MG,
+                frequency_code=MedicationFrequency.TWICE_DAILY,
+                frequency=None,
+                started_at=started,
+                stopped_at=stopped,
+                author_id=doctor.id,
+            )
+
+        body = (await client.get(_url(patient.id), headers=auth_headers(doctor))).json()
+
+        assert {item["drug_name"] for item in body["medications"]} == {
+            "Принимался в периоде",
+            "Принимается",
+        }
+
 
 class TestReportAccess:
     async def test_stranger_gets_403(self, client, session, make_user, make_patient, auth_headers):
@@ -256,7 +332,7 @@ class TestCsvExport:
         assert response.text.startswith("﻿")
         # «;» и запятая в дробях — так русский Excel делит столбцы и читает числа
         # (ADR-0092); с «,» он видел одну колонку.
-        assert "seizures_by_day;2026-08-10;2" in response.text
+        assert "Приступы по дням;2026-08-10;2" in response.text
 
     async def test_csv_decimals_use_a_comma(
         self, client, session, make_user, make_patient, auth_headers
@@ -267,7 +343,10 @@ class TestCsvExport:
 
         response = await client.get(_url(patient.id, "csv"), headers=auth_headers(doctor))
 
-        assert ";3,4;blood" in response.text
+        # Время — по часам клиники, а не в UTC: ночной замер не уезжает на
+        # соседний день.
+        assert "Кетоны, ммоль/л;2026-08-10 07:00;3,4;кровь" in response.text
+        assert "Период;Часовой пояс времени в файле;UTC+5;" in response.text
 
     async def test_export_is_written_to_audit_log(
         self, client, session, make_user, make_patient, auth_headers
@@ -392,7 +471,6 @@ class TestPdfJob:
         assert report["patient"]["clinic_card_number"] == "0142"
         assert document["letterhead"]["short_name"] == "ДНЦ «Образец»"
         assert document["author"] == {"name": doctor.full_name, "role": "doctor"}
-        assert document["engine_version"]
 
     async def test_job_is_committed_before_it_is_queued(
         self, client, session, make_user, make_patient, auth_headers, monkeypatch

@@ -40,12 +40,18 @@ export function SeizureDiaryGrid({
   types,
   complete = true,
   patientName,
+  period,
   audience = "staff",
 }: {
   logs: readonly DiaryLog[];
   types: readonly DictionaryOption[];
   /** Ребёнок на листе печати; без него печати нет (ADR-0092). */
   patientName?: string;
+  /**
+   * Выбранный период — на листе печати: «итог за период» без названного
+   * периода на бумаге ничего не сообщает. Без него печати нет.
+   */
+  period?: { from: string; to: string } | null;
   /** Лист врача или семьи: у семьи в подвале телефон клиники. */
   audience?: "family" | "staff";
   /**
@@ -81,13 +87,18 @@ export function SeizureDiaryGrid({
       title={t("grid.title")}
       description={grid.rows.length === 0 ? undefined : t("grid.hint")}
       action={
-        patientName !== undefined && grid.rows.length > 0 && complete ? (
+        patientName !== undefined &&
+        period !== undefined &&
+        period !== null &&
+        grid.rows.length > 0 &&
+        complete ? (
           // Только полная сетка: итог по неполной странице занижал бы число
           // приступов, а на бумаге оговорку «не все записи» не прочтут.
           <GridPrintButton
             grid={grid}
             legend={legend}
             patientName={patientName}
+            period={period}
             audience={audience}
           />
         ) : undefined
@@ -177,34 +188,46 @@ export function SeizureDiaryGrid({
   );
 }
 
-/** Сетка на бумаге: те же клетки, чёрные линии, строка заголовков повторяется. */
+/**
+ * Сколько дней помещается на лист. Длинная сетка делится на листы со своей
+ * шапкой и номером страницы: перетёкшая сама, она осталась бы на второй
+ * странице без имени ребёнка.
+ */
+export const GRID_ROWS_PER_SHEET = 28;
+
+/** Сетка на бумаге: те же клетки, чёрные линии; итог — на последнем листе. */
 function PrintedSeizureGrid({
-  grid,
+  rows,
+  total,
   legend,
   patientName,
+  period,
+  first,
 }: {
-  grid: ReturnType<typeof buildSeizureGrid>;
+  rows: ReturnType<typeof buildSeizureGrid>["rows"];
+  /** Итог за период; `null` — лист не последний. */
+  total: number | null;
   legend: string;
   patientName: string;
+  period: { from: string; to: string };
+  first: boolean;
 }) {
   const { t } = useTranslation("diary");
-  // Сетка идёт по возрастанию дат: первый и последний день с записями.
-  const first = grid.rows[0]?.date;
-  const last = grid.rows[grid.rows.length - 1]?.date;
-  const day = (value: string | undefined) =>
-    value === undefined ? "" : FULL_DATE.format(new Date(`${value}T00:00:00`));
+  const day = (value: string) => FULL_DATE.format(new Date(value));
 
   return (
     <div className="flex flex-col gap-[4mm] text-[11pt]">
       <div className="flex flex-col gap-[1mm]">
         <h1 className="m-0 text-[18pt] leading-tight font-bold">
-          {t("grid.title")}
+          {first
+            ? t("grid.title")
+            : t("grid.printContinued", { title: t("grid.title") })}
         </h1>
         <p className="m-0 text-[#3d4556]">
           {t("grid.printPeriod", {
             name: patientName,
-            from: day(first),
-            to: day(last),
+            from: day(period.from),
+            to: day(period.to),
           })}
         </p>
       </div>
@@ -235,7 +258,7 @@ function PrintedSeizureGrid({
           </tr>
         </thead>
         <tbody>
-          {grid.rows.map((row) => (
+          {rows.map((row) => (
             <tr key={row.date} className="break-inside-avoid">
               <th
                 scope="row"
@@ -257,23 +280,25 @@ function PrintedSeizureGrid({
             </tr>
           ))}
         </tbody>
-        <tfoot>
-          <tr>
-            <th
-              scope="row"
-              className="border border-[#8a93a3] px-[2mm] py-[1mm] text-left font-semibold"
-            >
-              {t("grid.periodTotal")}
-            </th>
-            <td
-              colSpan={DAY_PARTS.length}
-              className="border border-[#8a93a3]"
-            />
-            <td className="border border-[#8a93a3] px-[2mm] py-[1mm] text-right font-bold tabular-nums">
-              {grid.total}
-            </td>
-          </tr>
-        </tfoot>
+        {total !== null && (
+          <tfoot>
+            <tr>
+              <th
+                scope="row"
+                className="border border-[#8a93a3] px-[2mm] py-[1mm] text-left font-semibold"
+              >
+                {t("grid.periodTotal")}
+              </th>
+              <td
+                colSpan={DAY_PARTS.length}
+                className="border border-[#8a93a3]"
+              />
+              <td className="border border-[#8a93a3] px-[2mm] py-[1mm] text-right font-bold tabular-nums">
+                {total}
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
       {legend !== "" && (
         <p className="m-0 text-[10pt] text-[#4a5263]">
@@ -289,35 +314,42 @@ function GridPrintButton({
   grid,
   legend,
   patientName,
+  period,
   audience,
 }: {
   grid: ReturnType<typeof buildSeizureGrid>;
   legend: string;
   patientName: string;
+  period: { from: string; to: string };
   audience: "family" | "staff";
 }) {
   const { t } = useTranslation("diary");
   const frame = useDocumentFrame();
+  const pages: (typeof grid.rows)[] = [];
+  for (let at = 0; at < grid.rows.length; at += GRID_ROWS_PER_SHEET) {
+    pages.push(grid.rows.slice(at, at + GRID_ROWS_PER_SHEET));
+  }
   return (
     <PrintButton label={t("grid.print")}>
       <PrintedSheets
         frame={frame}
         audience={audience}
-        sheets={[
-          {
-            key: "seizures",
-            title: t("grid.title"),
-            aside: patientName,
-            code: "KC-SEIZURES-1",
-            content: (
-              <PrintedSeizureGrid
-                grid={grid}
-                legend={legend}
-                patientName={patientName}
-              />
-            ),
-          },
-        ]}
+        sheets={pages.map((rows, index) => ({
+          key: `seizures-${index}`,
+          title: t("grid.title"),
+          aside: patientName,
+          code: "KC-SEIZURES-1",
+          content: (
+            <PrintedSeizureGrid
+              rows={rows}
+              total={index === pages.length - 1 ? grid.total : null}
+              legend={legend}
+              patientName={patientName}
+              period={period}
+              first={index === 0}
+            />
+          ),
+        }))}
       />
     </PrintButton>
   );

@@ -40,6 +40,7 @@ import { useSectionItem } from "../../routes/useSectionTab";
 import { useIncomingComposition } from "./incomingDish";
 import { incomingDish as dishItem, parseIncoming } from "./incomingItem";
 import { usePatientOverview } from "../patients/overview";
+import { usePatient } from "../patients/usePatient";
 import { DishResultView, type DishView } from "./DishResultView";
 import { HandOffToPatient } from "./HandOffToPatient";
 import { PrintButton } from "../../components/PrintButton";
@@ -187,6 +188,10 @@ export function CalculatorView({
   const overview = usePatientOverview(patientId ?? null);
   // Шапка и подвал карточки на печать и в Word (ADR-0092).
   const frame = useDocumentFrame();
+  // Карточка, собранная в карте ребёнка, несёт его имя: лист без имени легко
+  // отдать не той семье. В разделе кабинета (без ребёнка) имени нет.
+  const patient = usePatient(patientId ?? "", patientId !== undefined);
+  const sheetAside = patient.data?.full_name;
   const prescription = overview.data?.prescription ?? null;
   const suggested = useMemo(
     () => mealTargetsFrom(prescription),
@@ -1026,6 +1031,7 @@ export function CalculatorView({
                         {
                           key: "dish",
                           title: t("print.sheet"),
+                          aside: sheetAside,
                           code: "KC-DISH-1",
                           content: (
                             <DishPrint
@@ -1052,6 +1058,7 @@ export function CalculatorView({
                       }),
                       frame: wordFrame(t, frame, {
                         title: t("print.sheet"),
+                        aside: sheetAside,
                         code: "KC-DISH-1",
                       }),
                     })}

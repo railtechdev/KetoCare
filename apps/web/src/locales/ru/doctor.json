@@ -481,11 +481,11 @@
       "button": "Распечатать схему для семьи",
       "sheetTitle": "Схема приёма препаратов",
       "title": "Схема приёма препаратов",
-      "asOf": "Действует на {{date}}. Если врач изменит схему, вы получите новый лист.",
+      "asOf": "Действует на {{date}}. Если врач изменит схему, попросите новый лист.",
       "drug": "Препарат",
-      "dose": "Разовая доза",
+      "dose": "Доза",
       "how": "Как принимать",
-      "from": "Когда",
+      "from": "Срок",
       "ongoing": "принимается",
       "startsOn": "с {{date}}",
       "gridTitle": "Отметки приёма",
@@ -495,8 +495,10 @@
       "asNeededCell": "по требованию — время",
       "cell": "Отметка за {{day}}",
       "warningTitle": "Не меняйте дозу сами.",
-      "warning": "Схему меняет только лечащий врач. Пропустили приём — сообщите врачу.",
-      "uz": "Dori miqdorini oʻzingiz oʻzgartirmang: sxemani faqat davolovchi shifokor oʻzgartiradi. Har bir qabuldan keyin katakka belgi qoʻying."
+      "warning": "Схему меняет только лечащий врач.",
+      "uz": "Dori miqdorini oʻzingiz oʻzgartirmang: sxemani faqat davolovchi shifokor oʻzgartiradi. Har bir qabuldan keyin katakka belgi qoʻying.",
+      "until": "до {{date}} включительно",
+      "startsUntil": "с {{from}} до {{to}} включительно"
     }
   },
   "diary": {
@@ -838,12 +840,11 @@
       "started": "Терапия начата {{date}}.",
       "date": "Дата",
       "visit": "Визит",
-      "labs": "Что сдать к визиту",
+      "labs": "Анализы и обследования к визиту",
       "noLabs": "—",
-      "labsTitle": "Анализы на время терапии",
       "noteTitle": "Напоминание.",
-      "note": "За три дня до визита бот клиники пришлёт напоминание. Если дата не подходит — позвоните в клинику заранее.",
-      "uz": "Tashrifdan uch kun oldin klinika boti eslatma yuboradi. Sana toʻgʻri kelmasa, klinikaga oldindan qoʻngʻiroq qiling."
+      "note": "Если у вас подключён Telegram-бот клиники, за три дня до визита он пришлёт напоминание. Если дата не подходит — сообщите в клинику заранее.",
+      "uz": "Agar klinikaning Telegram-boti ulangan boʻlsa, u tashrifdan uch kun oldin eslatma yuboradi. Sana toʻgʻri kelmasa, klinikaga oldindan xabar bering."
     }
   },
   "growth": {

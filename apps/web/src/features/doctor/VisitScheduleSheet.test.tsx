@@ -45,7 +45,7 @@ describe("visit schedule sheet (ADR-0092)", () => {
     expect(upcomingVisits(visits).map((v) => v.id)).toEqual(["next", "late"]);
   });
 
-  it("lists each visit with what to bring and the clinic's lab lists", () => {
+  it("lists each visit with what to bring and leaves the weekly list off", () => {
     render(
       <VisitScheduleSheet
         schedule={SCHEDULE}
@@ -61,7 +61,10 @@ describe("visit schedule sheet (ADR-0092)", () => {
     expect(
       screen.getByText("Общий анализ крови, Липидный профиль"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Кетоны в моче/)).toBeInTheDocument();
+    // «Еженедельно» семье не печатается: срок еженедельного контроля клиника
+    // не назвала (вопрос 34), а на бумаге он читался бы как «всё время диеты».
+    expect(screen.queryByText(/Кетоны в моче/)).toBeNull();
+    expect(screen.queryByText(/Кальций в моче/)).toBeNull();
     expect(screen.getByText("Терапия начата 02.09.2026.")).toBeInTheDocument();
   });
 });

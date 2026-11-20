@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { formatIsoDate } from "./dates";
@@ -31,6 +32,29 @@ export function scheduledMedications(
   return items
     .filter((item) => item.stopped_at === null || item.stopped_at >= today)
     .sort((a, b) => a.drug_name.localeCompare(b.drug_name, "ru"));
+}
+
+/**
+ * Срок приёма словами. Дата окончания печатается всегда, когда она задана:
+ * без неё лист с препаратом, который врач уже отменяет, читался бы как
+ * «принимать дальше».
+ */
+function termOf(item: Medication, today: string, t: TFunction): string {
+  const starts = item.started_at > today;
+  const until = item.stopped_at;
+  if (until !== null && until !== undefined) {
+    return starts
+      ? t("doctor:medications.sheet.startsUntil", {
+          from: formatIsoDate(item.started_at),
+          to: formatIsoDate(until),
+        })
+      : t("doctor:medications.sheet.until", { date: formatIsoDate(until) });
+  }
+  return starts
+    ? t("doctor:medications.sheet.startsOn", {
+        date: formatIsoDate(item.started_at),
+      })
+    : t("doctor:medications.sheet.ongoing");
 }
 
 /**
@@ -93,13 +117,7 @@ export function MedicationScheduleSheet({
               <td className="py-[1.5mm] pr-[3mm]">
                 {describeFrequency(item, label)}
               </td>
-              <td className="py-[1.5mm] whitespace-nowrap">
-                {item.started_at > today
-                  ? t("medications.sheet.startsOn", {
-                      date: formatIsoDate(item.started_at),
-                    })
-                  : t("medications.sheet.ongoing")}
-              </td>
+              <td className="py-[1.5mm]">{termOf(item, today, t)}</td>
             </tr>
           ))}
         </tbody>

@@ -84,4 +84,38 @@ describe("medication schedule sheet (ADR-0092)", () => {
 
     expect(screen.getByText("с 25.11.2026")).toBeInTheDocument();
   });
+
+  it("prints the last day of a drug the doctor is stopping", () => {
+    // Без даты окончания лист с отменяемым препаратом читался как
+    // «принимать дальше» (аудит документов 20.11.2026).
+    render(
+      <MedicationScheduleSheet
+        medications={[
+          med({ id: "a", stopped_at: "2026-11-25" }),
+          med({
+            id: "b",
+            drug_name: "Второй",
+            started_at: "2026-11-22",
+            stopped_at: "2026-12-01",
+          }),
+        ]}
+        today="2026-11-20"
+      />,
+    );
+
+    expect(screen.getByText("до 25.11.2026 включительно")).toBeInTheDocument();
+    expect(
+      screen.getByText("с 22.11.2026 до 01.12.2026 включительно"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not tell the family what to do about a missed dose", () => {
+    // Что делать при пропуске приёма — клиническое указание; его даёт врач,
+    // а не лист (правило 1 CLAUDE.md).
+    render(
+      <MedicationScheduleSheet medications={[med({})]} today="2026-11-20" />,
+    );
+
+    expect(screen.queryByText(/[Пп]ропустили/)).toBeNull();
+  });
 });

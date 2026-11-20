@@ -327,6 +327,7 @@ function DiaryKindView({
           types={seizureTypes.data ?? []}
           complete={total <= items.length}
           patientName={patient.data?.full_name}
+          period={range}
         />
       )}
 
