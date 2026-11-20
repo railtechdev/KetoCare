@@ -1,4 +1,3 @@
-import { formatGrams, formatKcal, formatRatio } from "@ketocare/ui";
 import type { TFunction } from "i18next";
 
 import type {
@@ -8,7 +7,14 @@ import type {
 } from "../../lib/wordExport";
 import { formatDayLabel, shiftIsoDate } from "../menu/dates";
 import type { MenuWeek } from "../menu/useWeek";
-import { printedDishBlocks } from "./printedDishWord";
+import {
+  composition,
+  dayMetrics,
+  itemsOf,
+  menuDishCard,
+} from "../menu/dayPrintModel";
+import { printableDays } from "../menu/WeekGrid";
+import { dishCardBlocks, metricsBlock } from "./printedDishWord";
 
 /** «16–22.11.2026», через границу месяца — «28.11–04.12.2026». */
 export function weekRangeLabel(start: string): string {
@@ -24,67 +30,55 @@ export function weekRangeLabel(start: string): string {
   return `${fromDay}–${toDay}.${toMonth}.${toYear}`;
 }
 
-/** Дни недели с блюдами — разделами со своей страницы, как в `WeekPrint`. */
+/**
+ * Неделя в Word — как на бумаге (`weekSheets`): обзор дня со своей страницы,
+ * затем карточка каждого блюда со своей.
+ */
 export function weekWordSections(
   t: TFunction,
   week: MenuWeek,
   patientName: string,
 ): WordSection[] {
-  return week.days
-    .filter((day) => (day.menu?.items ?? []).length > 0)
-    .map((day) => {
-      const totals = day.menu?.totals ?? null;
-      const excluded = day.menu?.excluded_products ?? [];
-      const blocks: WordBlock[] = [
-        {
-          kind: "paragraph",
-          small: true,
-          text: t("menu:week.printTitle", { name: patientName }),
-        },
-        { kind: "heading", level: 1, text: formatDayLabel(day.date) },
-      ];
-      if (totals !== null) {
-        const parts = [
-          t("menu:week.printTotals", { kcal: formatKcal(totals.kcal) }),
-          t("menu:week.printMacros", {
-            fat: formatGrams(totals.fat),
-            protein: formatGrams(totals.protein),
-            carbs: formatGrams(totals.carbs),
-          }),
-        ];
-        if (totals.ratio !== null) parts.unshift(formatRatio(totals.ratio));
-        blocks.push({ kind: "paragraph", text: parts.join(" · ") });
-      }
-      if (excluded.length > 0) {
-        blocks.push({
-          kind: "paragraph",
-          bold: true,
-          text: t("menu:week.printExcluded", {
-            names: excluded.map((product) => product.name_ru).join(", "),
-          }),
-        });
-      }
-      const items = [...(day.menu?.items ?? [])].sort(
-        (a, b) => a.meal_index - b.meal_index,
-      );
-      for (const item of items) {
-        blocks.push(
-          ...printedDishBlocks(t, {
-            level: 2,
-            heading: t("menu:week.printDish", {
-              number: item.meal_index,
-              title: item.title ?? t("menu:week.untitled"),
-            }),
-            lines: (item.ingredients ?? []).map((row) => ({
-              name: row.name_ru,
-              grams: row.grams,
-            })),
-            steps: item.instructions,
-          }),
-        );
-      }
-      return { blocks };
-    });
+  return printableDays(week).flatMap((day) => {
+    const metrics = dayMetrics(t, day);
+    const excluded = day.menu?.excluded_products ?? [];
+    const items = itemsOf(day);
+    const overview: WordBlock[] = [
+      {
+        kind: "paragraph",
+        small: true,
+        text: t("menu:week.printTitle", { name: patientName }),
+      },
+      { kind: "heading", level: 1, text: formatDayLabel(day.date) },
+    ];
+    if (metrics.length > 0) overview.push(metricsBlock(metrics));
+    if (excluded.length > 0) {
+      overview.push({
+        kind: "paragraph",
+        bold: true,
+        text: `${t("menu:week.print.excluded")} ${excluded
+          .map((product) => product.name_ru)
+          .join(", ")}`,
+      });
+    }
+    overview.push(
+      {
+        kind: "table",
+        header: [t("menu:week.meal"), t("menu:week.print.dish")],
+        rows: items.map((item) => [
+          t("menu:week.mealNumber", { number: item.meal_index }),
+          `${item.title ?? t("menu:week.untitled")}: ${composition(t, item)}`,
+        ]),
+      },
+      { kind: "paragraph", small: true, text: t("menu:week.print.cardsNote") },
+    );
+    return [
+      { blocks: overview },
+      ...items.map((item) => ({
+        blocks: dishCardBlocks(t, menuDishCard(t, day, item)),
+      })),
+    ];
+  });
 }
 
 export function weekWordModel(

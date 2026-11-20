@@ -15,6 +15,7 @@ import {
   PrintedSheets,
   type PrintedSheetSpec,
 } from "../../components/print/PrintedSheets";
+import { allergyNames } from "../patients/allergies";
 import { usePatient } from "../patients/usePatient";
 import { activePrescriptionOf, usePrescriptionHistory } from "./doctorQueries";
 import { usePrescriptionGoal } from "./PrescriptionGoalPreview";
@@ -44,6 +45,10 @@ export function FamilyPrintButton({
   const week = useWeekQuery(patientId, start);
   const active = activePrescriptionOf(history.data);
   const name = patient.data?.full_name ?? "";
+  const excluded =
+    patient.data === undefined
+      ? []
+      : allergyNames(patient.data, t("card.unknownProduct"));
   const hasWeek = (week.data?.days ?? []).some(
     (day) => (day.menu?.items ?? []).length > 0,
   );
@@ -74,7 +79,7 @@ export function FamilyPrintButton({
         title: t("familyPrint.sheet.prescription"),
         aside: name,
         code: "KC-RX-1",
-        content: <PrescriptionSheet active={active} patientName={name} />,
+        content: <PrescriptionSheet active={active} excluded={excluded} />,
       });
     }
     if (week.data !== undefined) {
@@ -86,7 +91,7 @@ export function FamilyPrintButton({
   function wordSections(): WordSection[] {
     const sections: WordSection[] = [];
     if (active !== null) {
-      sections.push(prescriptionWordSection(t, active, name, goal.data));
+      sections.push(prescriptionWordSection(t, active, goal.data, excluded));
     }
     if (week.data !== undefined && hasWeek) {
       sections.push(...weekWordSections(t, week.data, name));
