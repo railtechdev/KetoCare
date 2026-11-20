@@ -1,8 +1,14 @@
-import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQueries,
+  useQuery,
+} from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 import { exceedsCalcGrams } from "@ketocare/ui";
 
 import { api } from "../../lib/api";
+import { productDetailQuery } from "../recipes/useRecipes";
 
 export type Verify = components["schemas"]["VerifyResponse"];
 
@@ -294,6 +300,43 @@ export function useSaveDish(patientId: string) {
   });
 }
 
+/**
+ * «Сохранить изменения» — граммовка блюда ребёнка, открытого в расчёте (Б1).
+ *
+ * Без этого исправить блюдо было нельзя: сохранение из расчёта заводило
+ * второе блюдо с названием из продуктов и без шагов, а прежнее, с ошибочными
+ * граммами, оставалось в списке и в выборе блюда под знакомым именем.
+ * `instructions` не отправляется: `PUT` без него шаги блюда сохраняет
+ * (ADR-0088). Уже составленные дни держат свой снимок и не меняются.
+ */
+export function useUpdateDish(patientId: string) {
+  return useMutation({
+    networkMode: "always",
+    retry: false,
+    mutationFn: async (input: {
+      dishId: string;
+      title: string;
+      rows: DishRow[];
+    }): Promise<SavedDish> => {
+      const { data, error } = await api.PUT(
+        "/api/v1/patients/{patient_id}/custom-dishes/{dish_id}",
+        {
+          params: { path: { patient_id: patientId, dish_id: input.dishId } },
+          body: {
+            title: input.title,
+            ingredients: input.rows.map((row) => ({
+              product_id: row.product.id,
+              grams: parseAmount(row.grams),
+            })),
+          },
+        },
+      );
+      if (error || !data) throw error ?? new Error("Empty update response");
+      return data;
+    },
+  });
+}
+
 /** Продукт на 100 г — как его ждёт `/calc`. */
 function ingredientOf(row: DishRow) {
   return {
@@ -303,5 +346,96 @@ function ingredientOf(row: DishRow) {
     protein: row.product.protein,
     carbs: row.product.carbs,
     fiber: row.product.fiber,
+  };
+}
+
+/**
+ * Состав, который открывают в расчёте: блюдо ребёнка из «Блюд ребёнка» (Б1).
+ *
+ * `key` меняется с каждым нажатием «Открыть в расчёте» — и для того же блюда:
+ * повторное нажатие после правки граммовки обязано вернуть сохранённый состав.
+ */
+export interface CalculatorSeed {
+  key: number;
+  /** Блюдо, из которого взят состав: «Сохранить изменения» пишет в него. */
+  dishId: string;
+  title: string;
+  ingredients: readonly { product_id: string; grams: number }[];
+}
+
+export type SeedRows =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; retry: () => void }
+  | {
+      status: "ready";
+      rows: DishRow[];
+      /** Сколько продуктов блюда больше нет в справочнике (404). */
+      missing: number;
+      /** Имена продуктов блюда, выведенных в архив: в состав они не встали. */
+      withdrawn: string[];
+    };
+
+/**
+ * Строки расчёта из сохранённого блюда.
+ *
+ * Блюдо хранит только `product_id` и граммы, а расчёту нужна карточка
+ * продукта — та же, что даёт имена составу рецепта (ключ общий). Граммы —
+ * ровно сохранённые, запятой, как в поле. Продукт, которого в справочнике
+ * больше нет (404), в состав не встаёт: посчитать его нечем, и `missing`
+ * говорит экрану, что сказать об этом.
+ *
+ * Продукт, выведенный в архив (`is_active = false`), тоже не встаёт, но
+ * называется по имени (`withdrawn`). Поиск продуктов семьи его не предлагает,
+ * и это единственная дорога, которой он попал бы в расчёт: выводят продукт
+ * обычно потому, что его числа оказались неверными, и молча считать по ним и
+ * сохранять из них новое блюдо нельзя. Замену семья находит поиском.
+ */
+export function useSeedRows(seed: CalculatorSeed | null): SeedRows {
+  const ingredients = seed?.ingredients ?? [];
+  const results = useQueries({
+    queries: ingredients.map((item) => productDetailQuery(item.product_id)),
+  });
+  if (seed === null) return { status: "idle" };
+  if (results.some((result) => result.isError)) {
+    return {
+      status: "error",
+      retry: () => {
+        results.forEach((result) => {
+          if (result.isError) void result.refetch();
+        });
+      },
+    };
+  }
+  if (results.some((result) => result.data === undefined)) {
+    return { status: "loading" };
+  }
+  const rows: DishRow[] = [];
+  const withdrawn: string[] = [];
+  ingredients.forEach((item, index) => {
+    const product = results[index]?.data;
+    if (product == null) return;
+    if (!product.is_active) {
+      withdrawn.push(product.name_ru);
+      return;
+    }
+    rows.push({
+      product: {
+        id: product.id,
+        name: product.name_ru,
+        kcal: product.kcal_100g,
+        fat: product.fat_100g,
+        protein: product.protein_100g,
+        carbs: product.carbs_100g,
+        fiber: product.fiber_100g,
+      },
+      grams: String(item.grams).replace(".", ","),
+    });
+  });
+  return {
+    status: "ready",
+    rows,
+    missing: ingredients.length - rows.length - withdrawn.length,
+    withdrawn,
   };
 }

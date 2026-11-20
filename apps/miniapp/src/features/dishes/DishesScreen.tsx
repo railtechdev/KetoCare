@@ -3,6 +3,7 @@ import { Suspense, lazy, useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TabVisibleContext } from "../../lib/useTelegram";
+import type { CalculatorSeed } from "../calculator/useCalculator";
 import { RecipesScreen } from "../recipes/RecipesScreen";
 import type { Session } from "../session/useSession";
 import { ChildDishes } from "./ChildDishes";
@@ -41,6 +42,10 @@ export function DishesScreen({ session }: { session: Session }) {
     () => new Set<DishesSection>(["recipes"]),
   );
 
+  // Блюдо ребёнка, открытое в расчёте (Б1). Состояние здесь, а не в
+  // расчёте: «Открыть в расчёте» нажимают в соседнем разделе.
+  const [seed, setSeed] = useState<CalculatorSeed | null>(null);
+
   const open = (next: DishesSection) => {
     setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
     setSection(next);
@@ -70,13 +75,23 @@ export function DishesScreen({ session }: { session: Session }) {
               <ChildDishes
                 patientId={session.patientId}
                 onOpenCalculator={() => open("calculator")}
+                onOpenInCalculator={(dish) => {
+                  setSeed((prev) => ({
+                    key: (prev?.key ?? 0) + 1,
+                    dishId: dish.id,
+                    title: dish.title,
+                    ingredients: dish.ingredients,
+                  }));
+                  open("calculator");
+                  window.scrollTo(0, 0);
+                }}
               />
             )}
             {value === "calculator" && (
               <Suspense
                 fallback={<Skeleton className="h-32 w-full rounded-xl" />}
               >
-                <CalculatorScreen session={session} />
+                <CalculatorScreen session={session} seed={seed} />
               </Suspense>
             )}
           </TabVisibleContext>

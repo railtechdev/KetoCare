@@ -162,14 +162,13 @@ async def _save_day(
     rules, including the refusal to erase what was marked as eaten.
     """
 
-    # Порядок важен. Снимок собирается ДО записи — там же проверяется план
-    # (рецепт опубликован, своё блюдо принадлежит пациенту, продукты есть), и
-    # отказ означает, что день не сохранится вовсе. Итоги считаются ПОСЛЕ
-    # замены позиций: у переиспользованной позиции снимок остаётся прежним, и
-    # до `replace_items` неизвестно, какие позиции переиспользованы.
-    snapshots = await menus_service.build_snapshots(
-        session, patient_id=patient_id, items=list(write_items)
-    )
+    # Порядок важен. Снимок собирается до замены позиций — там же проверяется
+    # план (рецепт опубликован, своё блюдо принадлежит пациенту, продукты
+    # есть), и отказ откатывает всю транзакцию вместе с `upsert`: день не
+    # сохранится вовсе. Сохранённые позиции нужны снимку — позиция, оставшаяся
+    # в плане, держит прежний снимок, даже если её своё блюдо с тех пор удалили.
+    # Итоги считаются ПОСЛЕ замены позиций: у переиспользованной позиции снимок
+    # остаётся прежним, и до `replace_items` неизвестно, какие переиспользованы.
     menu = await menus_repo.upsert(
         session,
         patient_id=patient_id,
@@ -177,10 +176,6 @@ async def _save_day(
         created_by=user.id,
         updated_by=user.id,
     )
-    specs = [
-        menus_service.to_spec(item, snapshot)
-        for item, snapshot in zip(write_items, snapshots, strict=True)
-    ]
 
     # Отметка «съедено» — запись о том, что ребёнок ел, а не часть плана
     # (ADR-0041). Сохранение дня целиком, без позиции, которую уже отметили,
@@ -193,6 +188,13 @@ async def _save_day(
     # отметка, поставленная в ту же секунду, либо уже видна здесь (и даёт 409),
     # либо ждёт этого сохранения и затем видит, что позиции больше нет (Н10).
     stored = await menus_repo.list_items(session, menu_id=menu.id)
+    snapshots = await menus_service.build_snapshots(
+        session, patient_id=patient_id, items=list(write_items), stored=stored
+    )
+    specs = [
+        menus_service.to_spec(item, snapshot)
+        for item, snapshot in zip(write_items, snapshots, strict=True)
+    ]
     # Снимок до замены: `replace_items` правит сохранённые позиции на месте.
     plan_before = _plan_of(stored)
     lost = menus_repo.eaten_left_out(stored, specs)

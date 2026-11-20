@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import "../../lib/i18n";
+import { applyLanguage } from "../../lib/i18n";
 import { api } from "../../lib/api";
 import { DiaryEntries } from "./DiaryEntries";
 import { PATIENT_ID, SESSION, defaultLogs, fakeGet } from "./testFixtures";
@@ -426,6 +426,60 @@ describe("записи дневника в Mini App", () => {
     await user.click(today);
     expect(today).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Кетоны: 3,2 ммоль/л")).toBeNull();
+  });
+
+  it("узбекский заголовок дня — свои названия, без данных браузера (О1)", async () => {
+    // Chromium Telegram Desktop печатал «M11 13, Fri»: данных для узбекского
+    // у него нет. Здесь среда без узбекского вовсе — день всё равно узбекский.
+    vi.spyOn(Intl.DateTimeFormat, "supportedLocalesOf").mockReturnValue([]);
+    const logs = defaultLogs();
+    const old = new Date();
+    old.setDate(old.getDate() - 4);
+    old.setHours(10, 56, 0, 0);
+    logs.weight = [
+      ...(logs.weight ?? []),
+      {
+        ...(logs.weight?.[0] as object),
+        id: "w2",
+        occurred_at: old.toISOString(),
+      },
+    ];
+    (api.GET as Mock).mockImplementation(fakeGet(logs));
+    const months = [
+      "yanvar",
+      "fevral",
+      "mart",
+      "aprel",
+      "may",
+      "iyun",
+      "iyul",
+      "avgust",
+      "sentabr",
+      "oktabr",
+      "noyabr",
+      "dekabr",
+    ];
+    const weekdays = [
+      "yakshanba",
+      "dushanba",
+      "seshanba",
+      "chorshanba",
+      "payshanba",
+      "juma",
+      "shanba",
+    ];
+    applyLanguage("uz");
+    try {
+      renderEntries();
+
+      const day = `${old.getDate()}-${months[old.getMonth()]}, ${weekdays[old.getDay()]}`;
+      expect(
+        await screen.findByRole("button", { name: new RegExp(`^${day}`) }),
+      ).toBeInTheDocument();
+    } finally {
+      applyLanguage("ru");
+      vi.restoreAllMocks();
+    }
   });
 
   it("отбор по виду оставляет только записи этого вида", async () => {

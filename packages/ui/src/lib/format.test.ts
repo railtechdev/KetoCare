@@ -16,6 +16,7 @@ import {
   formatFactor,
   formatMeasured,
   formatLocale,
+  formatLongDate,
   setFormatLanguage,
 } from "./format";
 
@@ -199,5 +200,50 @@ describe("язык записи (ADR-0052)", () => {
     vi.spyOn(Intl.DateTimeFormat, "supportedLocalesOf").mockReturnValue([]);
     setFormatLanguage("uz");
     expect(formatLocale()).toBe("ru-RU");
+  });
+});
+
+describe("formatLongDate (О1 аудита Mini App)", () => {
+  afterEach(() => {
+    setFormatLanguage("ru");
+    vi.restoreAllMocks();
+  });
+
+  const FRIDAY = new Date(2026, 10, 13, 12);
+
+  it("русская дата — как прежде, через Intl", () => {
+    expect(formatLongDate(FRIDAY)).toBe("13 ноября");
+    expect(formatLongDate(FRIDAY, { weekday: true })).toBe(
+      "пятница, 13 ноября",
+    );
+    expect(formatLongDate(FRIDAY, { year: true })).toBe("13 ноября 2026 г.");
+  });
+
+  it("узбекская дата — из своих таблиц", () => {
+    setFormatLanguage("uz");
+    expect(formatLongDate(FRIDAY)).toBe("13-noyabr");
+    expect(formatLongDate(FRIDAY, { weekday: true })).toBe("13-noyabr, juma");
+    expect(formatLongDate(new Date(2026, 7, 28), { year: true })).toBe(
+      "2026-yil 28-avgust",
+    );
+    // Воскресенье — ноль у `getDay()`, январь — ноль у `getMonth()`.
+    expect(formatLongDate(new Date(2026, 0, 4), { weekday: true })).toBe(
+      "4-yanvar, yakshanba",
+    );
+  });
+
+  it("браузер без узбекских данных — названия всё равно узбекские", () => {
+    // Так ведёт себя Chromium Telegram Desktop: поддержку объявляет, а
+    // печатает «M11 13, Fri». Тогда же бывает и честное «не поддерживаю».
+    vi.spyOn(Intl.DateTimeFormat, "supportedLocalesOf").mockReturnValue([]);
+    const broken = vi
+      .spyOn(Intl, "DateTimeFormat")
+      .mockImplementation(
+        () =>
+          ({ format: () => "M11 13, Fri" }) as unknown as Intl.DateTimeFormat,
+      );
+    setFormatLanguage("uz");
+    expect(formatLongDate(FRIDAY, { weekday: true })).toBe("13-noyabr, juma");
+    expect(broken).not.toHaveBeenCalled();
   });
 });

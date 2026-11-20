@@ -371,6 +371,103 @@ describe("«Сегодня» в Mini App", () => {
     });
   });
 
+  it("граммы ближайшего приёма раскрыты сразу, приправа помечена (М1)", async () => {
+    // Родитель у плиты видит, что взвесить, не открывая меню.
+    serve({
+      overview: { ...BASE, prescription: PRESCRIPTION },
+      menu: menuOf([
+        {
+          ...item("b", 2, false, "Суп"),
+          ingredients: [
+            { product_id: "p1", name_ru: "Бульон куриный", grams: 150 },
+            {
+              product_id: "p2",
+              name_ru: "Соль",
+              grams: 0.5,
+              counts_in_calculation: false,
+            },
+          ],
+        } as ReturnType<typeof item>,
+        {
+          ...item("d", 3, false, "Котлета"),
+          ingredients: [{ product_id: "p3", name_ru: "Фарш", grams: 60 }],
+        } as ReturnType<typeof item>,
+      ]),
+    });
+    renderScreen();
+
+    const toggle = await screen.findByRole("button", { name: "Что взвесить" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Бульон куриный")).toBeInTheDocument();
+    // Граммы — как прислал сервер, без своего пересчёта.
+    const grams = screen.getByText("150 г");
+    expect(grams).toBeInTheDocument();
+    const salt = screen.getByText("Соль").closest("li") as HTMLElement;
+    expect(salt).toHaveTextContent("приправа, не учитывается");
+    // Строка не переносится целиком: граммы остаются в своём столбце справа,
+    // основным цветом, а пометка стоит под именем, а не рядом с ним. На 360 px
+    // длинное имя с пометкой выталкивало граммы к левому краю.
+    const row = grams.closest("li") as HTMLElement;
+    expect(row).not.toHaveClass("flex-wrap");
+    expect(row.lastElementChild).toBe(grams);
+    expect(grams).toHaveClass("shrink-0", "text-foreground");
+    expect(grams).not.toHaveClass("text-muted-foreground");
+    expect(screen.getByText("приправа, не учитывается").parentElement).not.toBe(
+      screen.getByText("Соль"),
+    );
+    // Следующий приём сюда не попадает.
+    expect(screen.queryByText("Фарш")).toBeNull();
+  });
+
+  it("«Как готовить» у рецепта ближайшего приёма открывает рецепт здесь же", async () => {
+    serve({
+      overview: { ...BASE, prescription: PRESCRIPTION },
+      menu: menuOf([
+        {
+          ...item("b", 1, false, "Омлет"),
+          recipe_id: "r1",
+          custom_dish_id: null,
+        } as unknown as ReturnType<typeof item>,
+      ]),
+    });
+    const served = (api.GET as Mock).getMockImplementation();
+    (api.GET as Mock).mockImplementation(
+      async (path: string, options: unknown) =>
+        path.endsWith("{recipe_id}")
+          ? {
+              data: {
+                id: "r1",
+                title: "Омлет",
+                photo_path: null,
+                servings: 1,
+                yield_g: 100,
+                instructions: "",
+                ingredients: [],
+                per_portion: null,
+              },
+              response: { status: 200 },
+            }
+          : served?.(path, options),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Как готовить" }),
+    );
+    // Списка рецептов здесь нет: «Назад» называет место, куда ведёт.
+    expect(
+      await screen.findByRole("button", { name: "К «Сегодня»" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "К списку" })).toBeNull();
+    expect(api.GET).toHaveBeenCalledWith(
+      "/api/v1/recipes/{recipe_id}",
+      expect.objectContaining({
+        params: expect.objectContaining({ path: { recipe_id: "r1" } }),
+      }),
+    );
+  });
+
   it("всё съедено — так и сказано", async () => {
     serve({
       overview: { ...BASE, prescription: PRESCRIPTION },

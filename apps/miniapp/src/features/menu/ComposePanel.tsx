@@ -255,8 +255,12 @@ export function ComposePanel({
                 <span className="block break-words">{option.title}</span>
                 {/* Показатели блюда, а не цель приёма: цель зависит от
                     назначения и считается в ките, а здесь выбирают из чего
-                    собрать. Соотношение — значком кита; совпадение с
-                    назначением решает сервер (`fits`). */}
+                    собрать. Значок соотношения один и тот же у рецепта и у
+                    блюда ребёнка — нейтральный (М4 аудита Mini App): у блюда
+                    сверки с назначением нет, и красный рецепт рядом с серым
+                    блюдом с тем же расхождением читался как «рецепт хуже».
+                    Расхождение называет строка — там, где его посчитал сервер
+                    (`fits` рецепта). */}
                 {(option.kcal !== null || option.ratio !== null) && (
                   <span className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                     {option.kcal !== null && (
@@ -270,10 +274,7 @@ export function ComposePanel({
                       </span>
                     )}
                     {option.ratio !== null && (
-                      <RatioBadge
-                        ratio={option.ratio}
-                        withinTolerance={option.fits}
-                      />
+                      <RatioBadge ratio={option.ratio} />
                     )}
                     {option.fits === false && (
                       <span className="text-warning-strong">

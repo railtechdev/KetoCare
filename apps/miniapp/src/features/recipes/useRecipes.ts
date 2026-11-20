@@ -11,6 +11,7 @@ import { productNameState, type ProductName } from "@ketocare/ui";
 import { api } from "../../lib/api";
 
 export type Recipe = components["schemas"]["RecipeRead"];
+export type ProductDetail = components["schemas"]["ProductRead"];
 
 /**
  * Сколько рецептов приходит за раз. Следующие — по «Показать ещё»: прежде
@@ -134,28 +135,7 @@ export function useProductNames(productIds: string[]): {
 } {
   const unique = Array.from(new Set(productIds));
 
-  const results = useQueries({
-    queries: unique.map((id) => ({
-      queryKey: ["products", "detail", id],
-      // Справочник меняется редко: перезапрашивать имя при каждом открытии
-      // карточки незачем.
-      staleTime: 5 * 60 * 1000,
-      queryFn: async () => {
-        const { data, error, response } = await api.GET(
-          "/api/v1/products/{product_id}",
-          { params: { path: { product_id: id } } },
-        );
-        // 404 — это ответ справочника «такого продукта нет», а не сбой связи.
-        // Бросить здесь значило бы смешать удаление с недоставленным ответом.
-        // Тот же запрос есть в кабинете (`apps/web/src/features/products/
-        // useProductDetail.ts`): кэш у приложений разный, но правило одно, и
-        // разбор состояний для обоих лежит в ките (`productNameState`).
-        if (response.status === 404) return null;
-        if (error || !data) throw error ?? new Error("Empty product response");
-        return data;
-      },
-    })),
-  });
+  const results = useQueries({ queries: unique.map(productDetailQuery) });
 
   // Разбор — общий с кабинетом (`productNameState` в ките): один и тот же
   // рецепт в двух каналах обязан различать эти случаи одинаково.
@@ -188,4 +168,90 @@ export function useProductNames(productIds: string[]): {
     stateOf: (productId) => states.get(productId) ?? { kind: "pending" },
     withdrawn,
   };
+}
+
+/**
+ * Карточка продукта справочника — один запрос на имена состава и на загрузку
+ * блюда в расчёт: ключ общий, и второй раз продукт из сети не берётся.
+ */
+export function productDetailQuery(id: string) {
+  return {
+    queryKey: ["products", "detail", id] as const,
+    // Справочник меняется редко: перезапрашивать при каждом открытии
+    // карточки незачем.
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<ProductDetail | null> => {
+      const { data, error, response } = await api.GET(
+        "/api/v1/products/{product_id}",
+        { params: { path: { product_id: id } } },
+      );
+      // 404 — это ответ справочника «такого продукта нет», а не сбой связи.
+      // Бросить здесь значило бы смешать удаление с недоставленным ответом.
+      // Тот же запрос есть в кабинете (`apps/web/src/features/products/
+      // useProductDetail.ts`): кэш у приложений разный, но правило одно, и
+      // разбор состояний для обоих лежит в ките (`productNameState`).
+      if (response.status === 404) return null;
+      if (error || !data) throw error ?? new Error("Empty product response");
+      return data;
+    },
+  };
+}
+
+/**
+ * Фото рецепта картинкой (Б2 аудита Mini App).
+ *
+ * `<img src>` здесь не годится: кабинет входит кукой, а Mini App держит токен
+ * в памяти и шлёт его заголовком (раздел 5.2 ТЗ), и голый адрес картинки
+ * получил бы 401. Поэтому фото приходит тем же клиентом API, что и всё
+ * остальное, а показывается через адрес объекта — его создаёт и отзывает
+ * `RecipePhoto`.
+ *
+ * Ключ несёт `photo_path`: заменённое фото — другое вложение и другой ключ, и
+ * прежняя картинка из кэша не покажется. Нет фото или файл не нашёлся (404) —
+ * `null`, и блока на экране нет; любой другой отказ — ошибка, блока тоже нет,
+ * но следующее открытие карточки спросит снова.
+ */
+export function useRecipePhoto(recipeId: string, photoPath: string | null) {
+  const has = photoPath !== null && photoPath !== "";
+  return useQuery({
+    queryKey: ["recipes", recipeId, "photo", photoPath],
+    enabled: has,
+    staleTime: Infinity,
+    // Картинка не клиническое число: без неё карточка полна, и повтор по
+    // фокусу только гонял бы файл по сети.
+    refetchOnWindowFocus: false,
+    retry: false,
+    queryFn: async (): Promise<Blob | null> => {
+      const { data, response } = await api.GET(
+        "/api/v1/recipes/{recipe_id}/photo",
+        { params: { path: { recipe_id: recipeId } }, parseAs: "blob" },
+      );
+      // «Фото нет» — только 404. Сбой стенда при выкате (502, 503), 500 или
+      // непродлённая сессия — ошибка запроса: закэшированный `null` при
+      // бесконечной свежести показывал бы рецепт без фото до перезапуска, а
+      // ошибка запрашивается снова при следующем открытии карточки.
+      if (response.status === 404) return null;
+      if (!response.ok || !(data instanceof Blob)) {
+        throw new Error(`Recipe photo: ${response.status}`);
+      }
+      return data;
+    },
+  });
+}
+
+/** Имя продукта словами: известное, удалённое, не дошедшее или ещё в пути. */
+export function productName(
+  state: ProductName,
+  t: (key: string) => string,
+): string {
+  switch (state.kind) {
+    case "name":
+      return state.name;
+    case "missing":
+      return t("recipes.unknownProduct");
+    case "unavailable":
+      return t("recipes.nameUnavailable");
+    case "pending":
+      return t("recipes.loadingName");
+  }
 }

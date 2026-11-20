@@ -36,10 +36,12 @@ export function setFormatLanguage(language: FormatLanguage): void {
 }
 
 /**
- * Тег локали для `Intl` — только для дат с названием месяца.
+ * Тег локали для `Intl` на языке экрана.
  *
- * Нет у среды данных для узбекского — русский: месяц по-русски понятнее, чем
- * месяц на языке устройства, который `Intl` подставил бы молча.
+ * Нет у среды данных для узбекского — русский: запись по-русски понятнее, чем
+ * запись на языке устройства, который `Intl` подставил бы молча. Даты с
+ * названием месяца его не берут — `formatLongDate`: проверка поддержки
+ * узбекского в Chromium отвечает «да» без данных (О1 аудита Mini App).
  */
 export function formatLocale(): string {
   const tag = LOCALE_TAGS[activeLanguage];
@@ -53,11 +55,80 @@ export function formatLocale(): string {
 }
 
 /**
+ * Узбекские названия месяцев и дней недели — латиницей, свои, а не из `Intl`.
+ *
+ * Встроенный браузер Telegram Desktop (Chromium на компьютере) объявляет
+ * поддержку `uz-Latn-UZ`, но данных для неё не несёт: день в дневнике
+ * печатался «M11 13, Fri» (аудит Mini App 21.11.2026, О1). Проверка
+ * `supportedLocalesOf` этого не ловит, поэтому узбекская дата с названием
+ * месяца собирается из этих таблиц всегда, на любом устройстве. Русская — как
+ * и прежде, через `Intl`: данные для `ru` есть везде.
+ */
+const UZ_MONTHS = [
+  "yanvar",
+  "fevral",
+  "mart",
+  "aprel",
+  "may",
+  "iyun",
+  "iyul",
+  "avgust",
+  "sentabr",
+  "oktabr",
+  "noyabr",
+  "dekabr",
+] as const;
+
+/** По `Date.getDay()`: ноль — воскресенье. */
+const UZ_WEEKDAYS = [
+  "yakshanba",
+  "dushanba",
+  "seshanba",
+  "chorshanba",
+  "payshanba",
+  "juma",
+  "shanba",
+] as const;
+
+export interface LongDateOptions {
+  /** Назвать день недели: «пятница, 13 ноября» / «13-noyabr, juma». */
+  weekday?: boolean;
+  /** Назвать год: «13 ноября 2026 г.» / «2026-yil 13-noyabr». */
+  year?: boolean;
+}
+
+/**
+ * Дата с названием месяца на языке экрана — единственный путь для таких дат.
+ *
+ * Русская: «13 ноября», «пятница, 13 ноября», «13 ноября 2026 г.».
+ * Узбекская: «13-noyabr», «13-noyabr, juma», «2026-yil 13-noyabr» — из своих
+ * таблиц (см. `UZ_MONTHS`), без опоры на данные браузера.
+ */
+export function formatLongDate(
+  value: Date,
+  options: LongDateOptions = {},
+): string {
+  if (activeLanguage === "uz") {
+    const dayMonth = `${value.getDate()}-${UZ_MONTHS[value.getMonth()]}`;
+    const dated = options.year
+      ? `${value.getFullYear()}-yil ${dayMonth}`
+      : dayMonth;
+    return options.weekday ? `${dated}, ${UZ_WEEKDAYS[value.getDay()]}` : dated;
+  }
+  return new Intl.DateTimeFormat(LOCALE_TAGS.ru, {
+    ...(options.weekday ? { weekday: "long" } : {}),
+    day: "numeric",
+    month: "long",
+    ...(options.year ? { year: "numeric" } : {}),
+  }).format(value);
+}
+
+/**
  * Цифровые даты («05.10.2026, 14:30») пишутся через точку на обоих языках.
  *
  * Узбекская локаль `Intl` даёт «05/10/2026», а в Узбекистане и в подсказках
  * бота («29.08 21:00») дату пишут через точку. Даты с названием месяца берут
- * язык (`formatLocale`): там разница настоящая — «5-oktabr» против «5 октября».
+ * язык (`formatLongDate`): там разница настоящая — «5-oktabr» против «5 октября».
  */
 const NUMERIC_DATE_LOCALE = "ru-RU";
 

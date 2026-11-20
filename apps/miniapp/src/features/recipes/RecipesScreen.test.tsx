@@ -3,7 +3,7 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -606,6 +606,215 @@ describe("рецепты в Mini App", () => {
     expect(screen.getByText("Сливки 33%")).toBeInTheDocument();
   });
 
+  it("порядок карточки — показатели, состав, приготовление, «Добавить в меню» (М5)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Омлет на сливках/ }),
+    );
+    await screen.findByText("Как готовить");
+
+    const titles = screen
+      .getAllByRole("heading")
+      .map((heading) => heading.textContent ?? "");
+    const at = (pattern: RegExp) =>
+      titles.findIndex((title) => pattern.test(title));
+    expect(at(/^На порцию$/)).toBeGreaterThanOrEqual(0);
+    expect(at(/^На порцию$/)).toBeLessThan(at(/^Состав/));
+    expect(at(/^Состав/)).toBeLessThan(at(/^Как готовить$/));
+    expect(at(/^Как готовить$/)).toBeLessThan(at(/^Добавить в меню$/));
+  });
+
+  it("пометка о расхождении — у показателей, значок нейтральный", async () => {
+    (api.GET as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path.endsWith("{recipe_id}")
+          ? {
+              data: { ...RECIPE, ratio_fits_prescription: false },
+              response: { status: 200 },
+            }
+          : {
+              data: { items: [RECIPE], total: 1 },
+              response: { status: 200 },
+            },
+      ),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Омлет на сливках/ }),
+    );
+    const section = (
+      await screen.findByRole("heading", { name: "На порцию" })
+    ).closest("section");
+    expect(section).toHaveTextContent("Кетосоотношение не как в назначении");
+    expect(section?.querySelector("[data-state]")).toHaveAttribute(
+      "data-state",
+      "neutral",
+    );
+  });
+
+  describe("фото рецепта (Б2)", () => {
+    const createObjectURL = vi.fn(() => "blob:photo-1");
+    const revokeObjectURL = vi.fn();
+
+    beforeEach(() => {
+      Object.assign(URL, { createObjectURL, revokeObjectURL });
+    });
+
+    it("приходит клиентом API картинкой и отзывается при закрытии", async () => {
+      // `<img src>` не несёт токен Mini App — фото берётся клиентом.
+      const photo = new Blob(["png"], { type: "image/png" });
+      (api.GET as Mock).mockImplementation((path: string) => {
+        if (path.endsWith("/photo"))
+          return Promise.resolve({
+            data: photo,
+            response: { ok: true, status: 200 },
+          });
+        const recipe = { ...RECIPE, photo_path: "att-1" };
+        return Promise.resolve(
+          path.endsWith("{recipe_id}")
+            ? { data: recipe, response: { status: 200 } }
+            : {
+                data: { items: [recipe], total: 1 },
+                response: { status: 200 },
+              },
+        );
+      });
+      const user = userEvent.setup();
+      const { container } = renderScreen();
+
+      await user.click(
+        await screen.findByRole("button", { name: /Омлет на сливках/ }),
+      );
+
+      await waitFor(() => {
+        expect(container.querySelector("img")).toHaveAttribute(
+          "src",
+          "blob:photo-1",
+        );
+      });
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/recipes/{recipe_id}/photo",
+        expect.objectContaining({
+          params: { path: { recipe_id: "r1" } },
+          parseAs: "blob",
+        }),
+      );
+      expect(createObjectURL).toHaveBeenCalledWith(photo);
+
+      await user.click(screen.getByRole("button", { name: "К списку" }));
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:photo-1");
+    });
+
+    it("без фото — ни картинки, ни пустого блока, и запроса нет", async () => {
+      const user = userEvent.setup();
+      const { container } = renderScreen();
+
+      await user.click(
+        await screen.findByRole("button", { name: /Омлет на сливках/ }),
+      );
+      await screen.findByText("Как готовить");
+
+      expect(container.querySelector("img")).toBeNull();
+      expect(api.GET).not.toHaveBeenCalledWith(
+        "/api/v1/recipes/{recipe_id}/photo",
+        expect.anything(),
+      );
+    });
+
+    it("файл не нашёлся — блока нет", async () => {
+      (api.GET as Mock).mockImplementation((path: string) => {
+        if (path.endsWith("/photo"))
+          return Promise.resolve({
+            error: { error: { code: "not_found", message: "нет" } },
+            response: { ok: false, status: 404 },
+          });
+        const recipe = { ...RECIPE, photo_path: "att-1" };
+        return Promise.resolve(
+          path.endsWith("{recipe_id}")
+            ? { data: recipe, response: { status: 200 } }
+            : {
+                data: { items: [recipe], total: 1 },
+                response: { status: 200 },
+              },
+        );
+      });
+      const user = userEvent.setup();
+      const { container } = renderScreen();
+
+      await user.click(
+        await screen.findByRole("button", { name: /Омлет на сливках/ }),
+      );
+      await waitFor(() => {
+        expect(api.GET).toHaveBeenCalledWith(
+          "/api/v1/recipes/{recipe_id}/photo",
+          expect.anything(),
+        );
+      });
+      await screen.findByText("Как готовить");
+      expect(container.querySelector("img")).toBeNull();
+      expect(createObjectURL).not.toHaveBeenCalled();
+    });
+    it("сбой стенда не запоминается как «фото нет»: следующее открытие спрашивает снова", async () => {
+      // 502/503 при выкате, 500 — ошибка запроса, а не ответ «фото нет». Иначе
+      // `null` с бесконечной свежестью прятал бы фото до перезапуска.
+      let photoStatus = 503;
+      const photo = new Blob(["png"], { type: "image/png" });
+      (api.GET as Mock).mockImplementation((path: string) => {
+        if (path.endsWith("/photo"))
+          return Promise.resolve(
+            photoStatus === 200
+              ? { data: photo, response: { ok: true, status: 200 } }
+              : {
+                  error: { error: { code: "internal", message: "сбой" } },
+                  response: { ok: false, status: photoStatus },
+                },
+          );
+        const recipe = { ...RECIPE, photo_path: "att-1" };
+        return Promise.resolve(
+          path.endsWith("{recipe_id}")
+            ? { data: recipe, response: { status: 200 } }
+            : {
+                data: { items: [recipe], total: 1 },
+                response: { status: 200 },
+              },
+        );
+      });
+      const photoCalls = () =>
+        (api.GET as Mock).mock.calls.filter(([path]) =>
+          String(path).endsWith("/photo"),
+        ).length;
+      const user = userEvent.setup();
+      const { container } = renderScreen();
+
+      await user.click(
+        await screen.findByRole("button", { name: /Омлет на сливках/ }),
+      );
+      await waitFor(() => {
+        expect(photoCalls()).toBe(1);
+      });
+      await screen.findByText("Как готовить");
+      expect(container.querySelector("img")).toBeNull();
+
+      photoStatus = 200;
+      await user.click(screen.getByRole("button", { name: "К списку" }));
+      await user.click(
+        await screen.findByRole("button", { name: /Омлет на сливках/ }),
+      );
+
+      await waitFor(() => {
+        expect(container.querySelector("img")).toHaveAttribute(
+          "src",
+          "blob:photo-1",
+        );
+      });
+      expect(photoCalls()).toBe(2);
+    });
+  });
+
   it("карточка включает системную «Назад» Telegram и она ведёт к списку", async () => {
     // Аппаратная «Назад» на Android иначе закрывает весь Mini App: родитель
     // из карточки попадал в чат, а не к списку (находка М8 аудита).
@@ -680,6 +889,12 @@ describe("рецепты ↔ меню и назначение (ADR-0075)", () =>
     expect(
       await screen.findByText("Кетосоотношение не как в назначении"),
     ).toBeInTheDocument();
+    // Значок нейтральный, как у блюда ребёнка (М4): о расхождении — строка.
+    expect(
+      screen
+        .getByRole("button", { name: /Омлет на сливках/ })
+        .querySelector("[data-state]"),
+    ).toHaveAttribute("data-state", "neutral");
     expect(api.GET).toHaveBeenCalledWith(
       "/api/v1/recipes",
       expect.objectContaining({

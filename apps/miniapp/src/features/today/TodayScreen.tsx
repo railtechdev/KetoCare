@@ -6,7 +6,7 @@ import {
   formatDayMonth,
   formatGrams,
   formatKcal,
-  formatLocale,
+  formatLongDate,
   formatMeasured,
   formatNumber,
   formatOccurredAt,
@@ -25,14 +25,19 @@ import type { CreatableKind } from "../diary/useDiary";
 import { type Overview, usePatientOverview } from "../home/useOverview";
 import { DayTotals } from "../menu/DayTotals";
 import { mealNumbers, nextMeal } from "../menu/dayPlan";
+import { ItemDetails } from "../menu/ItemDetails";
 import { MealItem } from "../menu/MealItem";
 import { MenuScreen } from "../menu/MenuScreen";
 import { dayAt, isPlanChanged, useMarkEaten, useMenu } from "../menu/useMenu";
+import { RecipeCard } from "../recipes/RecipesScreen";
 import type { Session } from "../session/useSession";
 import { MedicationsToday } from "./MedicationsToday";
 
-/** Что открыто во вкладке: сводка дня или меню. */
-type View = { at: "summary" } | { at: "menu"; dayOffset: number };
+/** Что открыто во вкладке: сводка дня, меню или рецепт ближайшего приёма. */
+type View =
+  | { at: "summary" }
+  | { at: "menu"; dayOffset: number }
+  | { at: "recipe"; recipeId: string };
 
 export interface TodayRequest {
   view?: "menu";
@@ -59,6 +64,7 @@ export function TodayScreen({
   session: Session;
   request?: ScreenRequest<TodayRequest> | null;
 }) {
+  const { t } = useTranslation();
   const [view, setView] = useState<View>(() =>
     request?.target.view === "menu"
       ? { at: "menu", dayOffset: request.target.dayOffset ?? 0 }
@@ -92,11 +98,29 @@ export function TodayScreen({
       />
     );
   }
+  if (view.at === "recipe") {
+    return (
+      <RecipeCard
+        recipeId={view.recipeId}
+        patientId={session.patientId}
+        // Списка здесь нет: «Назад» ведёт к сводке дня.
+        backLabel={t("recipes.backToToday")}
+        onBack={() => {
+          setView({ at: "summary" });
+          window.scrollTo(0, 0);
+        }}
+      />
+    );
+  }
   return (
     <TodaySummary
       session={session}
       onOpenMenu={() => {
         setView({ at: "menu", dayOffset: 0 });
+        window.scrollTo(0, 0);
+      }}
+      onOpenRecipe={(recipeId) => {
+        setView({ at: "recipe", recipeId });
         window.scrollTo(0, 0);
       }}
     />
@@ -113,9 +137,11 @@ const QUICK: readonly { kind: CreatableKind; icon: LucideIcon }[] = [
 function TodaySummary({
   session,
   onOpenMenu,
+  onOpenRecipe,
 }: {
   session: Session;
   onOpenMenu: () => void;
+  onOpenRecipe: (recipeId: string) => void;
 }) {
   const { t } = useTranslation();
   // Один запрос на сводку — тот же `/overview`, что питает главную кабинета:
@@ -160,6 +186,7 @@ function TodaySummary({
               session={session}
               overview={overview.data}
               onOpenMenu={onOpenMenu}
+              onOpenRecipe={onOpenRecipe}
             />
             {overview.data.day != null && (
               <DayTotals
@@ -378,6 +405,10 @@ function QuickRecords({
 /**
  * Ближайший приём с отметками «съедено» — отмечать отсюда, не открывая меню.
  *
+ * Граммы ближайшего приёма раскрыты сразу (М1 аудита Mini App): родитель у
+ * плиты видит, что взвесить, не открывая меню и не раскрывая каждое блюдо.
+ * Граммы — с сервера, уже на позицию.
+ *
  * Пустое меню — кнопка «Составить меню», если есть назначение; без назначения
  * — строка: приёмы задаёт врач, и предлагать собрать день не из чего.
  */
@@ -385,10 +416,12 @@ function NextMealBlock({
   session,
   overview,
   onOpenMenu,
+  onOpenRecipe,
 }: {
   session: Session;
   overview: Overview;
   onOpenMenu: () => void;
+  onOpenRecipe: (recipeId: string) => void;
 }) {
   const { t } = useTranslation();
   const day = dayAt(0);
@@ -473,7 +506,13 @@ function NextMealBlock({
                             eaten: !target.eaten,
                           })
                         }
-                      />
+                      >
+                        <ItemDetails
+                          item={item}
+                          weighOpen
+                          onOpenRecipe={onOpenRecipe}
+                        />
+                      </MealItem>
                     </li>
                   ))}
                 </ul>
@@ -495,15 +534,14 @@ function NextMealBlock({
 }
 
 /**
- * «28 августа 2026 г.» из `YYYY-MM-DD` — по частям, а не через `new Date(…)`:
+ * «28 августа 2026 г.» / «2026-yil 28-avgust» из `YYYY-MM-DD` — по частям, а не через `new Date(…)`:
  * такая строка читается как полночь UTC и западнее Гринвича съезжает на день.
  */
 function formatIsoDay(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (match === null) return value;
-  return new Intl.DateTimeFormat(formatLocale(), {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return formatLongDate(
+    new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+    { year: true },
+  );
 }

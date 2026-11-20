@@ -11,8 +11,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "./ui/alert-dialog";
-import { buttonVariants } from "./ui/button";
-import { cn } from "../lib/cn";
 
 export interface ConfirmDialogProps {
   /**
@@ -84,11 +82,13 @@ export function ConfirmDialog({
         {children}
         <AlertDialogFooter>
           <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          {/* Вариант — пропом, а не классами: `AlertDialogAction` кита — это
+              `Button asChild`, и Slot склеивает классы без tailwind-merge.
+              `bg-primary` варианта по умолчанию оставался рядом с
+              `bg-destructive` и побеждал — опасное подтверждение было синим. */}
           <AlertDialogAction
             onClick={onConfirm}
-            className={cn(
-              destructive && buttonVariants({ variant: "destructive" }),
-            )}
+            variant={destructive ? "destructive" : "default"}
           >
             {confirmLabel}
           </AlertDialogAction>

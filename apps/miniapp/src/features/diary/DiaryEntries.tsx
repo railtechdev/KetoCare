@@ -9,7 +9,7 @@ import {
   type DiaryEntryNames,
   Section,
   cn,
-  formatLocale,
+  formatLongDate,
   formatNumber,
   formatTime,
   toast,
@@ -50,15 +50,6 @@ function describeEntry(
   return describeDiaryEntry(entry, names, (key, values) =>
     t(`diary.${key}`, values),
   );
-}
-
-/** «понедельник, 5 октября» / «dushanba, 5-oktabr» — на языке экрана (ADR-0052). */
-function dayFormat(): Intl.DateTimeFormat {
-  return new Intl.DateTimeFormat(formatLocale(), {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
 }
 
 /**
@@ -459,7 +450,9 @@ function dayLabel(day: Date, t: (key: string) => string): string {
   const diff = daysAgo(day);
   if (diff === 0) return t("diary.today");
   if (diff === 1) return t("diary.yesterday");
-  return dayFormat().format(day);
+  // «понедельник, 5 октября» / «5-oktabr, dushanba» — на языке экрана
+  // (ADR-0052), узбекский — из таблиц кита, не из данных браузера (О1).
+  return formatLongDate(day, { weekday: true });
 }
 
 /** «12 записей: кетоны 4, вес 2» — виды в порядке бота. */

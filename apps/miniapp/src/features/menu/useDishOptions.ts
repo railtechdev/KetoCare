@@ -1,7 +1,9 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
+  useMutation,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 import type { components } from "@ketocare/api-client";
 
@@ -22,6 +24,7 @@ export interface DishOption {
   /**
    * Совпадает ли соотношение с назначением ребёнка — решает сервер (у рецепта
    * `ratio_fits_prescription`). У своего блюда ответа нет: `undefined`.
+   * Значок от этого не краснеет — только строка у рецепта (М4).
    */
   fits: boolean | undefined;
   /** Порций в раскладке рецепта; у своего блюда их нет. */
@@ -55,6 +58,35 @@ export function useCustomDishes(patientId: string) {
       );
       if (error || !data) throw error ?? new Error("Empty dishes response");
       return data.items;
+    },
+  });
+}
+
+/**
+ * Удалить блюдо ребёнка (Б1 аудита Mini App).
+ *
+ * Удаление мягкое (правило 4 CLAUDE.md): блюдо уходит из списка и из выбора
+ * блюд. Дни, где оно уже стоит, держат свой снимок — название и граммы, —
+ * но шаги приготовления там берутся из живого блюда и пропадают. Меню
+ * перечитываются, чтобы это было видно сразу, а не после перезапуска.
+ */
+export function useDeleteCustomDish(patientId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (dishId: string) => {
+      const { error } = await api.DELETE(
+        "/api/v1/patients/{patient_id}/custom-dishes/{dish_id}",
+        { params: { path: { patient_id: patientId, dish_id: dishId } } },
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: customDishesKey(patientId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["patient", patientId, "menu"],
+      });
     },
   });
 }

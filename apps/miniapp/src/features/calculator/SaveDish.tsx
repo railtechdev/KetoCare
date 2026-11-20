@@ -17,6 +17,7 @@ import {
   type SavedDish,
   dishSignature,
   useSaveDish,
+  useUpdateDish,
 } from "./useCalculator";
 
 /** Сколько названий продуктов подставлять в название блюда. */
@@ -49,15 +50,24 @@ export function suggestedTitle(rows: DishRow[]): string {
  * посчитаны по тому, что уходит на сервер (`blockedBy` от экрана). Сохранённое
  * действует, пока состав тот же: правка граммовки после сохранения — уже другое
  * блюдо, и форма возвращается.
+ *
+ * `editing` — в расчёте открыто блюдо ребёнка (Б1). Тогда первое действие —
+ * «Сохранить изменения» в это блюдо (название и шаги остаются его), а новое
+ * блюдо — вторым, явно названным. Прежде исправление граммовки заводило
+ * второе блюдо с названием из продуктов и без шагов, а ошибочное оставалось в
+ * выборе блюда под знакомым именем.
  */
 export function SaveDish({
   patientId,
   rows,
   blockedBy,
+  editing = null,
   onNew,
 }: {
   patientId: string;
   rows: DishRow[];
+  /** Блюдо ребёнка, чей состав сейчас в расчёте. */
+  editing?: { id: string; title: string } | null;
   /** Почему сохранить нельзя сейчас; `null` — состав проверен и готов. */
   blockedBy: string | null;
   /** Начать новое блюдо с пустого состава — следующий шаг после «Добавлено». */
@@ -66,9 +76,11 @@ export function SaveDish({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const save = useSaveDish(patientId);
-  // `null` — человек название не трогал, и оно следует за составом.
+  const update = useUpdateDish(patientId);
+  // `null` — человек название не трогал: у открытого блюда это его имя, у
+  // нового — имена продуктов состава.
   const [typed, setTyped] = useState<string | null>(null);
-  const title = typed ?? suggestedTitle(rows);
+  const title = typed ?? editing?.title ?? suggestedTitle(rows);
   const signature = dishSignature(patientId, title, rows);
   const attemptKey = useAttemptKey(signature);
   const composition = dishSignature(patientId, "", rows);
@@ -108,11 +120,42 @@ export function SaveDish({
   const reason =
     blockedBy ??
     (title.trim() === "" ? t("calculator.save.blocked.noTitle") : null);
+  const pending = save.isPending || update.isPending;
+  const failed = save.isError
+    ? save.error
+    : update.isError
+      ? update.error
+      : null;
+
+  const onSaved = (dish: SavedDish) => {
+    setSaved({ dish, composition });
+    setTyped(null);
+    void queryClient.invalidateQueries({
+      queryKey: ["patient", patientId, "custom-dishes"],
+    });
+  };
+
+  const saveAsNew = () => {
+    if (reason !== null || pending) return;
+    update.reset();
+    save.mutate(
+      { title: title.trim(), rows, idempotencyKey: attemptKey },
+      { onSuccess: onSaved },
+    );
+  };
 
   return (
     <Section
-      title={t("calculator.save.title")}
-      description={t("calculator.save.description")}
+      title={
+        editing === null
+          ? t("calculator.save.title")
+          : t("calculator.save.editTitle")
+      }
+      description={
+        editing === null
+          ? t("calculator.save.description")
+          : t("calculator.save.editDescription", { title: editing.title })
+      }
       density="compact"
     >
       <form
@@ -121,15 +164,20 @@ export function SaveDish({
           event.preventDefault();
           // Выключенная кнопка — не единственная защита: отправка формы с
           // клавиатуры обходит её.
-          if (reason !== null || save.isPending) return;
-          save.mutate(
-            { title: title.trim(), rows, idempotencyKey: attemptKey },
+          if (reason !== null || pending) return;
+          if (editing === null) {
+            saveAsNew();
+            return;
+          }
+          save.reset();
+          update.mutate(
+            { dishId: editing.id, title: title.trim(), rows },
             {
               onSuccess: (dish) => {
-                setSaved({ dish, composition });
-                setTyped(null);
+                onSaved(dish);
+                // Пометка «блюдо изменилось» у дней, где оно уже стоит.
                 void queryClient.invalidateQueries({
-                  queryKey: ["patient", patientId, "custom-dishes"],
+                  queryKey: ["patient", patientId, "menu"],
                 });
               },
             },
@@ -147,27 +195,45 @@ export function SaveDish({
             onChange={(event) => {
               setTyped(event.target.value);
               save.reset();
+              update.reset();
             }}
           />
         </div>
 
-        {save.isError && (
+        {failed !== null && (
           <WarningBanner level="danger" title={t("calculator.save.failed")}>
-            {errorMessageOf(save.error) ?? t("calculator.errorHint")}
+            {errorMessageOf(failed) ?? t("calculator.errorHint")}
           </WarningBanner>
         )}
 
         <Button
           type="submit"
           className="min-h-touch w-full"
-          disabled={reason !== null || save.isPending}
-          aria-busy={save.isPending || undefined}
+          disabled={reason !== null || pending}
+          aria-busy={(editing === null ? save : update).isPending || undefined}
           aria-describedby={reason !== null ? reasonId : undefined}
         >
-          {save.isPending
+          {(editing === null ? save : update).isPending
             ? t("calculator.save.saving")
-            : t("calculator.save.submit")}
+            : editing === null
+              ? t("calculator.save.submit")
+              : t("calculator.save.update")}
         </Button>
+        {editing !== null && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch w-full"
+            disabled={reason !== null || pending}
+            aria-busy={save.isPending || undefined}
+            aria-describedby={reason !== null ? reasonId : undefined}
+            onClick={saveAsNew}
+          >
+            {save.isPending
+              ? t("calculator.save.saving")
+              : t("calculator.save.asNew")}
+          </Button>
+        )}
         <ActionReason id={reasonId}>{reason}</ActionReason>
       </form>
     </Section>

@@ -447,6 +447,10 @@
       "description": "Taom bolaning taomlari orasida paydo bo‘ladi va uni menyuga qo‘shish mumkin bo‘ladi.",
       "name": "Taom nomi",
       "submit": "Taomni saqlash",
+      "editTitle": "Taomni saqlash",
+      "editDescription": "«O‘zgarishlarni saqlash» bu tarkibni «{{title}}» taomiga yozadi — uning nomi va qadamlari qoladi. Allaqachon tuzilgan kunlarda avvalgi tarkib qoladi.",
+      "update": "O‘zgarishlarni saqlash",
+      "asNew": "Yangi taom sifatida saqlash",
       "saving": "Saqlanmoqda…",
       "saved": "«{{title}}» taomi saqlandi.",
       "failed": "Taomni saqlab bo‘lmadi",
@@ -472,7 +476,18 @@
       "prescriptionUnknown": "Tayinlov yuklanmoqda — kunda nechta ovqatlanish bo‘lishi unga bog‘liq.",
       "openMenu": "Menyuni ochish"
     },
-    "searchFailed": "Mahsulotlarni topib bo‘lmadi. Aloqani tekshiring va qaytaring."
+    "searchFailed": "Mahsulotlarni topib bo‘lmadi. Aloqani tekshiring va qaytaring.",
+    "seed": {
+      "loading": "«{{title}}» taomi tarkibi yuklanmoqda…",
+      "failed": "Taom tarkibini yuklab bo‘lmadi",
+      "missing": "Tarkibning hammasi hisobga tushmadi",
+      "missingBody": "Taomdagi mahsulotlar ma’lumotnomada endi yo‘q: {{count}}. O‘rniga boshqasini mahsulot qidiruvida toping.",
+      "withdrawnBody": "Arxivda: {{list}} — hisobga tushmadi. O‘rnini dietolog bilan aniqlashtiring va mahsulot qidiruvida toping.",
+      "replaceTitle": "Hisobdagi tarkib «{{title}}» taomi bilan almashtirilsinmi?",
+      "replaceBody": "Hisobda hozir yig‘ilgan mahsulotlar saqlanmagan va yo‘qoladi.",
+      "replace": "Almashtirish",
+      "keep": "Yig‘ilganini qoldirish"
+    }
   },
   "recipes": {
     "category": "Bo‘lim",
@@ -494,6 +509,8 @@
     "nothingFound": "Hech narsa topilmadi",
     "loadError": "Retseptlarni yuklab bo‘lmadi",
     "back": "Ro‘yxatga",
+    "backToToday": "«Bugun» sahifasiga",
+    "backToMenu": "Menyuga",
     "perPortion": "Bir porsiyaga",
     "notComputed": "Retsept hali hisoblanmagan.",
     "kcal": "{{kcal}} kkal",
@@ -720,7 +737,18 @@
     "loadError": "Taomlarni yuklab bo‘lmadi",
     "empty": "Bolaning taomlari hozircha yo‘q",
     "openCalculator": "Taomni hisobda tuzish",
-    "toMenu": "Menyuga qo‘shish"
+    "toMenu": "Menyuga qo‘shish",
+    "card": {
+      "back": "Bola taomlariga",
+      "perDish": "Butun taomga",
+      "notComputed": "Taom hali hisoblanmagan.",
+      "openInCalculator": "Hisobda ochish",
+      "delete": "Taomni o‘chirish",
+      "deleteTitle": "«{{title}}» taomini o‘chirasizmi?",
+      "deleteBody": "Taom ro‘yxatdan va menyu tuzishdagi tanlovdan chiqadi, uni menyuga qayta qo‘yib bo‘lmaydi. U allaqachon turgan kunlarda nomi va grammlari qoladi va bu kunlarni avvalgidek o‘zgartirish mumkin, «Qanday tayyorlanadi» qadamlari esa u yerda endi bo‘lmaydi.",
+      "keep": "Qoldirish",
+      "deleteFailed": "Taomni o‘chirib bo‘lmadi"
+    }
   },
   "settings": {
     "title": "Sozlamalar",

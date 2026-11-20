@@ -1,4 +1,4 @@
-import { formatLocale } from "./format";
+import { formatLongDate } from "./format";
 
 /** Words for the two nearest days, from the app's dictionary. */
 export interface ChatDayWords {
@@ -22,18 +22,14 @@ function startOfDay(value: Date): number {
  * The family's conversation is one endless thread (Mini App audit 2026-11,
  * П8): without days a month-old answer stood as if given today. Days are local
  * — the family's midnight, not UTC. The month is written in the screen's
- * language (`formatLocale`), the year only when it is not this year.
+ * language (`formatLongDate`), the year only when it is not this year.
  */
 export function chatDayLabel(at: Date, now: Date, words: ChatDayWords): string {
   // Rounded: a day across a daylight-saving switch is 23 or 25 hours long.
   const days = Math.round((startOfDay(now) - startOfDay(at)) / DAY_MS);
   if (days === 0) return words.today;
   if (days === 1) return words.yesterday;
-  return new Intl.DateTimeFormat(formatLocale(), {
-    day: "numeric",
-    month: "long",
-    ...(at.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-  }).format(at);
+  return formatLongDate(at, { year: at.getFullYear() !== now.getFullYear() });
 }
 
 /**
