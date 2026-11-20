@@ -17,18 +17,38 @@ type Goal = components["schemas"]["PrescriptionGoalResponse"];
 export function prescriptionWordSection(
   t: TFunction,
   active: Prescription,
-  patientName: string,
   goal: Goal | undefined,
+  excluded: readonly string[] = [],
 ): WordSection {
   const grams = (value: number | null | undefined) =>
     t("doctor:prescription.confirm.grams", { value: formatGrams(value ?? 0) });
 
+  const values: [string, string][] = [
+    [t("doctor:fields.ratio"), formatRatio(active.ratio)],
+    [
+      t("doctor:prescription.print.kcal"),
+      t("doctor:prescription.confirm.kcal", {
+        value: formatKcal(active.kcal_per_day),
+      }),
+    ],
+    [
+      t("doctor:prescription.print.meals"),
+      t("doctor:prescription.print.mealsValue", {
+        count: active.meals_per_day,
+      }),
+    ],
+  ];
+  if (active.fluid_ml_per_day != null) {
+    values.push([
+      t("doctor:prescription.print.fluid"),
+      t("doctor:prescription.print.ml", {
+        value: formatNumber(active.fluid_ml_per_day, 0),
+      }),
+    ]);
+  }
+
   const blocks: WordBlock[] = [
-    {
-      kind: "heading",
-      level: 1,
-      text: t("doctor:prescription.print.title", { name: patientName }),
-    },
+    { kind: "heading", level: 1, text: t("doctor:prescription.print.title") },
     {
       kind: "paragraph",
       text: t("doctor:prescription.print.from", {
@@ -36,69 +56,89 @@ export function prescriptionWordSection(
       }),
     },
     {
-      kind: "paragraph",
-      text: `${t("doctor:fields.ratio")}: ${formatRatio(active.ratio)}`,
-    },
-    {
-      kind: "paragraph",
-      text: `${t("doctor:fields.kcal")}: ${t(
-        "doctor:prescription.confirm.kcal",
-        {
-          value: formatKcal(active.kcal_per_day),
-        },
-      )}`,
-    },
-    {
-      kind: "paragraph",
-      text: `${t("doctor:fields.carbsLimit")}: ${grams(active.carbs_limit_g)}`,
-    },
-    {
-      kind: "paragraph",
-      text: `${t("doctor:fields.meals")}: ${active.meals_per_day}`,
+      kind: "table",
+      header: values.map(([label]) => label),
+      rows: [values.map(([, value]) => value)],
     },
   ];
-  if (active.fluid_ml_per_day != null) {
-    blocks.push({
-      kind: "paragraph",
-      text: `${t("doctor:fields.fluid")}: ${t("doctor:units.mlPerDay", {
-        value: formatNumber(active.fluid_ml_per_day, 0),
-      })}`,
-    });
-  }
+
   if (goal !== undefined) {
-    const perMeal = goal.meal !== null;
-    const row = (label: string, day: number | null, meal?: number | null) =>
-      perMeal ? [label, grams(day), grams(meal)] : [label, grams(day)];
-    const rows = [
-      row(t("doctor:prescription.goal.fat"), goal.day.fat_g, goal.meal?.fat_g),
-    ];
-    if (goal.day.protein_g !== null) {
-      rows.push(
-        row(
-          t("doctor:prescription.goal.protein"),
-          goal.day.protein_g,
-          goal.meal?.protein_g,
-        ),
-        row(
-          t("doctor:prescription.goal.netCarbs"),
-          goal.day.net_carbs_g,
-          goal.meal?.net_carbs_g,
-        ),
-      );
+    const { day, meal } = goal;
+    const withProtein = day.protein_g !== null;
+    const rows: string[][] = [];
+    if (meal !== null) {
+      rows.push([
+        t("doctor:prescription.print.oneMeal"),
+        grams(meal.fat_g),
+        ...(withProtein
+          ? [grams(meal.protein_g), grams(meal.net_carbs_g)]
+          : []),
+      ]);
     }
-    blocks.push({
-      kind: "table",
-      header: [
-        t("doctor:prescription.goal.macro"),
-        t("doctor:prescription.goal.day"),
-        ...(perMeal ? [t("doctor:prescription.goal.meal")] : []),
-      ],
-      rows,
-      numeric: perMeal ? [1, 2] : [1],
-    });
+    rows.push([
+      t("doctor:prescription.print.perDay"),
+      grams(day.fat_g),
+      ...(withProtein
+        ? [
+            t("doctor:prescription.print.atLeast", {
+              value: formatGrams(day.protein_g ?? 0),
+            }),
+            grams(day.net_carbs_g),
+          ]
+        : []),
+    ]);
+    blocks.push(
+      {
+        kind: "heading",
+        level: 2,
+        text: t("doctor:prescription.print.amounts"),
+      },
+      {
+        kind: "table",
+        header: [
+          "",
+          t("doctor:prescription.goal.fat"),
+          ...(withProtein
+            ? [
+                t("doctor:prescription.goal.protein"),
+                t("doctor:prescription.goal.netCarbs"),
+              ]
+            : []),
+        ],
+        rows,
+        numeric: withProtein ? [1, 2, 3] : [1],
+      },
+      {
+        kind: "paragraph",
+        small: true,
+        text: t("doctor:prescription.print.carbsNote", {
+          value: formatGrams(active.carbs_limit_g),
+        }),
+      },
+    );
   }
   if (active.restrictions) {
-    blocks.push({ kind: "paragraph", text: active.restrictions });
+    blocks.push({
+      kind: "paragraph",
+      text: `${t("doctor:prescription.print.restrictions")} ${active.restrictions}`,
+    });
   }
+  if (excluded.length > 0) {
+    blocks.push({
+      kind: "paragraph",
+      bold: true,
+      text: `${t("doctor:prescription.print.excluded")} ${excluded.join(", ")}`,
+    });
+  }
+  blocks.push({
+    kind: "paragraph",
+    text: [
+      t("doctor:prescription.print.signedBy"),
+      t("doctor:prescription.print.signature"),
+      t("doctor:prescription.print.date"),
+    ]
+      .map((label) => `${label}: ____________`)
+      .join("    "),
+  });
   return { blocks };
 }

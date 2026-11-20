@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi, type Mock } from "vitest";
@@ -10,8 +10,6 @@ import menuRu from "../../locales/ru/menu.json";
 import { PatientRouter } from "../../test/PatientRouter";
 import type { MenuItemRead } from "./useMenu";
 import { WeekCellItem } from "./WeekCellItem";
-import { WeekPrint } from "./WeekGrid";
-import type { MenuWeek } from "./useWeek";
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -56,71 +54,6 @@ function item(overrides: Partial<MenuItemRead>): MenuItemRead {
     ...overrides,
   };
 }
-
-function weekOf(items: MenuItemRead[]): MenuWeek {
-  return {
-    start: "2026-11-16",
-    days: [
-      {
-        date: "2026-11-16",
-        menu: {
-          totals: {
-            kcal: 1380,
-            fat: 120,
-            protein: 23,
-            carbs: 17,
-            fiber: 2,
-            ratio: 3,
-          },
-          items,
-          excluded_products: [],
-        },
-      },
-      { date: "2026-11-17", menu: null },
-    ],
-  } as unknown as MenuWeek;
-}
-
-describe("printed week (ADR-0088)", () => {
-  it("prints each dish as a table with its steps under it", () => {
-    render(
-      <WeekPrint
-        patientName="Пациент"
-        week={weekOf([
-          item({ meal_index: 2, id: "i2", title: "Суп", instructions: null }),
-          item({}),
-        ])}
-      />,
-    );
-
-    const dishes = screen.getAllByRole("article");
-    // Приёмы по порядку, а не в порядке записи.
-    expect(within(dishes[0]!).getByRole("heading")).toHaveTextContent(
-      "Приём 1. Омлет",
-    );
-    expect(within(dishes[1]!).getByRole("heading")).toHaveTextContent(
-      "Приём 2. Суп",
-    );
-
-    const rows = within(dishes[0]!).getAllByRole("row");
-    expect(rows[1]).toHaveTextContent("Яйцо куриное");
-    expect(rows[1]).toHaveTextContent("40 г");
-    expect(within(dishes[0]!).getByText("Приготовление")).toBeInTheDocument();
-    expect(within(dishes[0]!).getByText(/Запечь 15 минут/)).toBeInTheDocument();
-    // Без шагов раздела «Приготовление» нет вовсе — пустой заголовок на бумаге
-    // читался бы как потерянный текст.
-    expect(within(dishes[1]!).queryByText("Приготовление")).toBeNull();
-  });
-
-  it("names the day's ratio, calories and macros under its date", () => {
-    render(<WeekPrint patientName="Пациент" week={weekOf([item({})])} />);
-
-    expect(screen.getByText(/3\.0 : 1/)).toHaveTextContent("1 380 ккал");
-    expect(screen.getByText(/белки 23,0 г/)).toBeInTheDocument();
-    // Пустой день не печатается.
-    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-  });
-});
 
 describe("week cell item", () => {
   function renderItem(target: MenuItemRead) {

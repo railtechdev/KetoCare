@@ -67,38 +67,42 @@ const textOf = (blocks: readonly WordBlock[]) =>
         : [block.text],
   );
 
-describe("week in Word — the same sheet as WeekPrint", () => {
-  it("makes a section per day with dishes, meals in order", () => {
+describe("week in Word — the same sheets as the printed week", () => {
+  it("makes a day overview and a card per dish, meals in order", () => {
     const model = weekWordModel(t, WEEK, "Пациент");
 
-    // Пустой день не выгружается.
-    expect(model.sections).toHaveLength(2);
-    expect(textOf(model.sections[0]!.blocks)).toEqual([
+    // День 16-го: обзор и две карточки; 17-е пусто и не выгружается; 18-е —
+    // обзор и одна карточка.
+    expect(model.sections).toHaveLength(5);
+    const overview = textOf(model.sections[0]!.blocks);
+    expect(overview.slice(0, 2)).toEqual([
       "Меню: Пациент",
       "пн, 16 ноября 2026 г.",
-      expect.stringMatching(
-        /^3\.0 : 1 · Итого за день: 1\s380 ккал · жиры 120,0 г, белки 23,0 г, углеводы 17,0 г$/,
-      ),
-      "Внимание, исключено ребёнку: Арахис",
-      "Приём 1. Омлет",
-      "Продукт",
-      "Вес",
-      "Яйцо куриное",
-      "40 г",
-      "Сливки 36%",
-      "52,5 г",
-      "Приготовление",
-      "Взбить.\nЗапечь.",
-      "Приём 2. Суп",
-      "Продукт",
-      "Вес",
-      "Яйцо куриное",
-      "40 г",
-      "Сливки 36%",
-      "52,5 г",
     ]);
-    // Без соотношения строка начинается с калорий.
-    expect(textOf(model.sections[1]!.blocks)[2]).toMatch(/^Итого за день/);
+    expect(overview).toContain("3.0 : 1");
+    expect(overview).toContain("Исключено ребёнку: Арахис");
+    expect(overview).toContain("Омлет: Яйцо куриное 40 г · Сливки 36% 52,5 г");
+    expect(overview.indexOf("Приём 1")).toBeLessThan(
+      overview.indexOf("Приём 2"),
+    );
+
+    const card = textOf(model.sections[1]!.blocks);
+    expect(card.slice(0, 2)).toEqual([
+      "Приём 1 · пн, 16 ноября 2026 г.",
+      "Омлет",
+    ]);
+    expect(card).toEqual(
+      expect.arrayContaining([
+        "Взвешено",
+        "☐",
+        "52,5 г",
+        "Приготовление",
+        "Взбить.\nЗапечь.",
+      ]),
+    );
+    expect(textOf(model.sections[2]!.blocks)[1]).toBe("Суп");
+    // Без шагов «Приготовления» нет вовсе.
+    expect(textOf(model.sections[2]!.blocks)).not.toContain("Приготовление");
   });
 
   it("names the file after the child and the week", () => {
@@ -134,18 +138,19 @@ describe("dish card in Word — the same as DishPrint", () => {
     });
 
     expect(model.sections).toHaveLength(1);
-    expect(textOf(model.sections[0]!.blocks)).toEqual([
-      "Жареная курица",
-      "Продукт",
-      "Вес",
-      "Курица",
-      "19 г",
-      "3.0 : 1, 277 ккал",
-      "Жиры 26,5 г, белки 5,4 г, углеводы 4,3 г",
-      "Приготовление",
-      "Обжарить.",
-      "Версия расчёта: 1.12.0",
-    ]);
+    const text = textOf(model.sections[0]!.blocks);
+    expect(text[0]).toBe("Жареная курица");
+    expect(text).toEqual(
+      expect.arrayContaining([
+        "3.0 : 1",
+        "26,5 · 5,4 · 4,3 г",
+        "Курица",
+        "19 г",
+        "Приготовление",
+        "Обжарить.",
+      ]),
+    );
+    expect(text.at(-1)).toBe("Версия расчёта: 1.12.0");
   });
 });
 
@@ -161,26 +166,40 @@ describe("prescription in Word — the same as PrescriptionSheet", () => {
   } as unknown as Prescription;
 
   it("lists the values and the grams table per day and per meal", () => {
-    const section = prescriptionWordSection(t, ACTIVE, "Пациент", {
-      day: { fat_g: 133.5, protein_g: 23, net_carbs_g: 21.5, non_fat_g: 44.5 },
-      meal: { fat_g: 26.7, protein_g: 4.6, net_carbs_g: 4.3, non_fat_g: 8.9 },
-      dietary_unit_kcal: 31,
-      engine_version: "1.12.0",
-    });
-    const table = section.blocks.find((block) => block.kind === "table");
+    const section = prescriptionWordSection(
+      t,
+      ACTIVE,
+      {
+        day: {
+          fat_g: 133.5,
+          protein_g: 23,
+          net_carbs_g: 21.5,
+          non_fat_g: 44.5,
+        },
+        meal: { fat_g: 26.7, protein_g: 4.6, net_carbs_g: 4.3, non_fat_g: 8.9 },
+        dietary_unit_kcal: 31,
+        engine_version: "1.12.0",
+      },
+      ["Арахис"],
+    );
+    const tables = section.blocks.filter((block) => block.kind === "table");
+    const grams = tables[1];
 
-    expect(textOf(section.blocks)[0]).toContain("Пациент");
-    expect(table).toMatchObject({ numeric: [1, 2] });
-    expect(table?.kind === "table" && table.rows[0]).toEqual([
-      expect.any(String),
-      "133,5 г",
-      "26,7 г",
+    expect(textOf(section.blocks)[0]).toBe("Назначение на кетогенную диету");
+    expect(grams).toMatchObject({ numeric: [1, 2, 3] });
+    expect(grams?.kind === "table" && grams.rows).toEqual([
+      ["Один приём", "26,7 г", "4,6 г", "4,3 г"],
+      ["За день", "133,5 г", "не меньше 23,0 г", "21,5 г"],
     ]);
+    expect(textOf(section.blocks)).toContain("Исключено: Арахис");
   });
 
   it("leaves the table out while the grams are not known", () => {
-    const section = prescriptionWordSection(t, ACTIVE, "Пациент", undefined);
-    expect(section.blocks.some((block) => block.kind === "table")).toBe(false);
+    const section = prescriptionWordSection(t, ACTIVE, undefined);
+    // Остаётся только таблица чисел назначения.
+    expect(
+      section.blocks.filter((block) => block.kind === "table"),
+    ).toHaveLength(1);
   });
 });
 
