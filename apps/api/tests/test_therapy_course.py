@@ -43,12 +43,15 @@ async def _team(session, make_user, make_patient):
     return doctor, dietitian, parent, patient
 
 
-async def _audit(session, *, entity: str, action: str) -> list[AuditLog]:
-    return list(
-        await session.scalars(
-            select(AuditLog).where(AuditLog.entity == entity, AuditLog.action == action)
-        )
-    )
+async def _audit(session, *, entity: str, action: str, user=None) -> list[AuditLog]:
+    """Audit rows of this test. `user` narrows them to the test's own actor:
+    the local database keeps committed rows of earlier runs and e2e, and a
+    count over the whole table counted those too."""
+
+    stmt = select(AuditLog).where(AuditLog.entity == entity, AuditLog.action == action)
+    if user is not None:
+        stmt = stmt.where(AuditLog.user_id == user.id)
+    return list(await session.scalars(stmt))
 
 
 def _end_url(patient_id) -> str:
@@ -317,7 +320,9 @@ class TestControlVisits:
         assert visits[1]["labs"] == list(PERIODIC_LABS)
         assert visits[2]["purpose"] == "efficacy_review"
         assert visits[5]["purpose"] == "continuation_review"
-        assert len(await _audit(session, entity="control_visits", action="create")) == 6
+        assert (
+            len(await _audit(session, entity="control_visits", action="create", user=doctor)) == 6
+        )
 
         # Повтор не задваивает.
         again = await client.post(
@@ -443,7 +448,9 @@ class TestControlVisits:
         assert deleted.status_code == 204
         overview = await client.get(f"{base}/overview", headers=auth_headers(doctor))
         assert overview.json()["next_control"] is None
-        assert len(await _audit(session, entity="control_visits", action="delete")) == 1
+        assert (
+            len(await _audit(session, entity="control_visits", action="delete", user=doctor)) == 1
+        )
 
     @pytest.mark.parametrize(
         "body",

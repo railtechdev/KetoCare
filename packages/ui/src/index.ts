@@ -28,13 +28,19 @@ export type {
 } from "./lib/macroSplit";
 export type { MealTargets, PrescriptionTargets } from "./lib/mealTargets";
 export {
+  dayIsOpen,
   dayVerdict,
   kcalToTarget,
   TOLERANCE_GAP_KEY,
   TOLERANCE_GAP_UNKNOWN_KEY,
   toleranceGapKey,
 } from "./lib/dayVerdict";
-export type { DayTolerance, DayVerdict, ToleranceGap } from "./lib/dayVerdict";
+export type {
+  DayProgress,
+  DayTolerance,
+  DayVerdict,
+  ToleranceGap,
+} from "./lib/dayVerdict";
 export { isRefusal, refusalNextStep } from "./lib/assistantAnswer";
 export {
   chatAudienceRoles,
@@ -128,10 +134,20 @@ export {
   formatWeight,
   formatLocale,
   formatLongDate,
+  formatWeekdayDay,
   setFormatLanguage,
 } from "./lib/format";
 export type { FormatLanguage, LongDateOptions } from "./lib/format";
 export { formatPerGram, toPer100, toPerGram } from "./lib/perGram";
+export { daysWithMenu, shoppingList } from "./lib/shoppingList";
+export type {
+  ShoppingDay,
+  ShoppingIngredient,
+  ShoppingLine,
+  ShoppingList,
+} from "./lib/shoppingList";
+export { medicationTerm, scheduledMedications } from "./lib/medicationTerm";
+export type { MedicationDates, MedicationTerm } from "./lib/medicationTerm";
 
 export {
   DEFAULT_KIT_LABELS,

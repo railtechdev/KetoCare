@@ -53,6 +53,32 @@ export function useActiveMedications(patientId: string, day: string) {
   });
 }
 
+/**
+ * Вся схема препаратов ребёнка — для экрана «Схема препаратов» (Р4 аудита Mini
+ * App 21.11.2026). Без `active_on`: в схеме и препараты, которые начнутся
+ * позже. Отменённые отбирает правило кита (`scheduledMedications`), общее с
+ * листом кабинета.
+ */
+export function useMedicationScheme(patientId: string) {
+  return useQuery({
+    queryKey: ["patient", patientId, "medications", "scheme"],
+    queryFn: async (): Promise<ActiveMedication[]> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/medications",
+        {
+          params: {
+            path: { patient_id: patientId },
+            query: { limit: 200, offset: 0 },
+          },
+        },
+      );
+      if (error || !data)
+        throw error ?? new Error("Empty medications response");
+      return data.items;
+    },
+  });
+}
+
 /** Границы местных суток — моменты с поясом, как у ленты дневника. */
 export function dayRange(now: Date = new Date()): { from: string; to: string } {
   const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());

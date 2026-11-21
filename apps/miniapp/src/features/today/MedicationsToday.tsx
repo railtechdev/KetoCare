@@ -63,7 +63,17 @@ import {
  */
 const VISIBLE_MEDICATIONS = 3;
 
-export function MedicationsToday({ session }: { session: Session }) {
+export function MedicationsToday({
+  session,
+  onOpenScheme,
+}: {
+  session: Session;
+  /**
+   * Открыть «Схему препаратов» на чтение (Р4 аудита Mini App): здесь —
+   * сегодняшние приёмы, там — вся схема со сроками.
+   */
+  onOpenScheme?: () => void;
+}) {
   const { t } = useTranslation();
   const day = toDateInput(new Date());
   const medications = useActiveMedications(session.patientId, day);
@@ -250,6 +260,16 @@ export function MedicationsToday({ session }: { session: Session }) {
                   count: all.length - VISIBLE_MEDICATIONS,
                 })
               : t("today.medications.collapse")}
+          </Button>
+        )}
+        {onOpenScheme !== undefined && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="mt-field min-h-touch w-full"
+            onClick={onOpenScheme}
+          >
+            {t("today.medications.scheme")}
           </Button>
         )}
       </AsyncSection>

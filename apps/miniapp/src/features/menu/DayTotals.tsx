@@ -2,6 +2,7 @@ import {
   RatioBadge,
   Section,
   TargetBar,
+  dayVerdict,
   formatGrams,
   formatKcal,
   type DayTolerance,
@@ -25,6 +26,11 @@ export interface DayVerdictInput {
   gap: ToleranceGap | null;
   /** Вердикт сервер считает только за сегодня: для других дней его нет вовсе. */
   otherDay: boolean;
+  /**
+   * День сегодняшний или будущий — его ещё собирают (`dayIsOpen` кита, Р2
+   * аудита Mini App). Вчерашний оценивается как есть.
+   */
+  open: boolean;
 }
 
 export type DayTotalsValues = components["schemas"]["DishComputed"];
@@ -57,6 +63,12 @@ export function DayTotals({
 }) {
   const { t } = useTranslation();
   if (totals === null || totals === undefined) return null;
+  // Пока день собирается, цвет соотношения не тревожит раньше слов (Р2).
+  const pending = dayVerdict(verdict.tolerance, verdict.gap, {
+    open: verdict.open,
+    kcal: totals.kcal,
+    targetKcal: targets?.kcalPerDay ?? null,
+  }).ratioPending;
 
   return (
     <Section title={t("menu.totals")} density="compact">
@@ -64,7 +76,7 @@ export function DayTotals({
         <RatioBadge
           ratio={totals.ratio ?? null}
           withinTolerance={
-            verdict.otherDay
+            verdict.otherDay || pending
               ? undefined
               : (verdict.tolerance?.ratio_within_tolerance ?? undefined)
           }
@@ -154,6 +166,7 @@ export function DayTotals({
         tolerance={verdict.tolerance}
         gap={verdict.gap}
         otherDay={verdict.otherDay}
+        open={verdict.open}
         kcal={totals.kcal}
         targetKcal={targets?.kcalPerDay ?? null}
         kcalHint={targets === null}

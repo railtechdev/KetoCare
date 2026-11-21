@@ -17,6 +17,7 @@ import {
   formatMeasured,
   formatLocale,
   formatLongDate,
+  formatWeekdayDay,
   setFormatLanguage,
 } from "./format";
 
@@ -245,5 +246,20 @@ describe("formatLongDate (О1 аудита Mini App)", () => {
     setFormatLanguage("uz");
     expect(formatLongDate(FRIDAY, { weekday: true })).toBe("13-noyabr, juma");
     expect(broken).not.toHaveBeenCalled();
+  });
+});
+
+describe("formatWeekdayDay (Р3 аудита Mini App)", () => {
+  afterEach(() => {
+    setFormatLanguage("ru");
+  });
+
+  it("день недели и число — «пт 13» / «ju 13»", () => {
+    const friday = new Date(2026, 10, 13, 12);
+    expect(formatWeekdayDay(friday)).toBe("пт 13");
+    setFormatLanguage("uz");
+    expect(formatWeekdayDay(friday)).toBe("ju 13");
+    // Воскресенье — ноль у `getDay()`.
+    expect(formatWeekdayDay(new Date(2026, 10, 15, 12))).toBe("ya 15");
   });
 });

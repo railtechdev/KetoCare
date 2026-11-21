@@ -949,7 +949,7 @@ describe("рецепты ↔ меню и назначение (ADR-0075)", () =>
       await screen.findByRole("heading", { name: "Добавить в меню" }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByRole("radio", { name: "Завтра" }),
+      await screen.findByRole("button", { name: /^Завтра/ }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Приём пищи")).toBeInTheDocument();
     expect(

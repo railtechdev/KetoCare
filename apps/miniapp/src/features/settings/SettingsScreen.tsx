@@ -1,12 +1,15 @@
 import { Button, Section } from "@ketocare/ui";
-import { ArrowLeft, Smartphone } from "lucide-react";
+import { ArrowLeft, Pill, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { SettingsSection } from "../../lib/launchTarget";
 import { homeScreenShortcut } from "../../lib/telegram";
 import { useTelegramBack } from "../../lib/useTelegram";
+import { ClinicPhone } from "../clinic/ClinicPhone";
+import { useClinicPhone } from "../clinic/useClinicPhone";
 import { FamilyBlock } from "../family/FamilyBlock";
+import { MedicationScheme } from "../medications/MedicationScheme";
 import { RemindersBlock } from "../reminders/RemindersBlock";
 import { LanguageSwitch } from "../session/LanguageSwitch";
 import { WebAccessPanel } from "../session/WebAccessPanel";
@@ -32,7 +35,11 @@ export function SettingsScreen({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  useTelegramBack(onClose);
+  // «Схема препаратов» — экраном поверх настроек: её «Назад» срабатывает
+  // первым (верхняя кнопка Telegram), и возвращает сюда, а не на «Сегодня».
+  const [scheme, setScheme] = useState(false);
+  useTelegramBack(scheme ? null : onClose);
+  const phone = useClinicPhone();
 
   useEffect(() => {
     if (section === undefined) return;
@@ -40,6 +47,19 @@ export function SettingsScreen({
       .getElementById(`settings-${section}`)
       ?.scrollIntoView?.({ block: "start" });
   }, [section]);
+
+  if (scheme) {
+    return (
+      <MedicationScheme
+        session={session}
+        backLabel={t("settings.title")}
+        onBack={() => {
+          setScheme(false);
+          window.scrollTo(0, 0);
+        }}
+      />
+    );
+  }
 
   return (
     <main className="flex flex-col gap-section p-section">
@@ -64,6 +84,30 @@ export function SettingsScreen({
       <div id="settings-family" className="scroll-mt-4">
         <FamilyBlock session={session} />
       </div>
+      {/* Схема и телефон клиники — у семьи из Telegram кабинета нет, и
+          больше их взять негде (Р4 аудита Mini App 21.11.2026). */}
+      <Section title={t("medicationScheme.title")} density="compact">
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("medicationScheme.hint")}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-touch w-full"
+          onClick={() => {
+            setScheme(true);
+            window.scrollTo(0, 0);
+          }}
+        >
+          <Pill aria-hidden="true" className="size-4" />
+          {t("medicationScheme.open")}
+        </Button>
+      </Section>
+      {phone !== null && (
+        <Section title={t("clinic.title")} density="compact">
+          <ClinicPhone phone={phone} />
+        </Section>
+      )}
       <WebAccessPanel session={session} />
       <HomeScreenOffer />
     </main>

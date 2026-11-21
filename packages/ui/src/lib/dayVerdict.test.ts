@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dayIsOpen,
   dayVerdict,
   type DayTolerance,
   kcalToTarget,
@@ -13,6 +14,7 @@ describe("dayVerdict", () => {
   it("без вердикта сервера сравнивать не с чем", () => {
     expect(dayVerdict(null)).toEqual({
       ratioOffTolerance: false,
+      ratioPending: false,
       ratioUnknown: false,
       carbsOverLimit: false,
       carbsUnknown: false,
@@ -110,6 +112,7 @@ describe("dayVerdict", () => {
       }),
     ).toEqual({
       ratioOffTolerance: false,
+      ratioPending: false,
       ratioUnknown: false,
       carbsOverLimit: false,
       carbsUnknown: false,
@@ -181,5 +184,98 @@ describe("kcalToTarget", () => {
     // Перебор — не «добавьте −50»: о нём говорит своя строка.
     expect(kcalToTarget(401, 1200)).toBe(799);
     expect(kcalToTarget(1250, 1200)).toBe(0);
+  });
+});
+
+describe("день ещё собирается (Р2 аудита Mini App)", () => {
+  const off: DayTolerance = {
+    ratio_within_tolerance: false,
+    kcal_within_tolerance: false,
+    carbs_within_limit: true,
+  };
+
+  it("сегодня, 290 из 1 200 ккал: о соотношении — спокойно, не тревогой", () => {
+    const verdict = dayVerdict(off, null, {
+      open: true,
+      kcal: 290,
+      targetKcal: 1200,
+    });
+
+    expect(verdict.ratioOffTolerance).toBe(false);
+    expect(verdict.ratioPending).toBe(true);
+    // Правило сервера не меняется: калорийность по-прежнему ниже нормы.
+    expect(verdict.kcalBelowTarget).toBe(true);
+  });
+
+  it("лимит углеводов показывается сразу, и пока день собирается", () => {
+    const verdict = dayVerdict({ ...off, carbs_within_limit: false }, null, {
+      open: true,
+      kcal: 290,
+      targetKcal: 1200,
+    });
+
+    expect(verdict.carbsOverLimit).toBe(true);
+    expect(verdict.ratioPending).toBe(true);
+  });
+
+  it("прошедший день оценивается как есть", () => {
+    const verdict = dayVerdict(off, null, {
+      open: false,
+      kcal: 290,
+      targetKcal: 1200,
+    });
+
+    expect(verdict.ratioOffTolerance).toBe(true);
+    expect(verdict.ratioPending).toBe(false);
+  });
+
+  it("норма набрана — день собран, расхождение снова предупреждение", () => {
+    // В допуске по калорийности: сервер считает день набранным.
+    expect(
+      dayVerdict({ ...off, kcal_within_tolerance: true }, null, {
+        open: true,
+        kcal: 1190,
+        targetKcal: 1200,
+      }).ratioOffTolerance,
+    ).toBe(true);
+    // Перебор нормы — уже не сборка.
+    expect(
+      dayVerdict(off, null, { open: true, kcal: 1500, targetKcal: 1200 })
+        .ratioOffTolerance,
+    ).toBe(true);
+  });
+
+  it("нормы не знаем — молчать о расхождении нечем оправдать", () => {
+    const verdict = dayVerdict(off, null, {
+      open: true,
+      kcal: 290,
+      targetKcal: null,
+    });
+
+    expect(verdict.ratioOffTolerance).toBe(true);
+    expect(verdict.ratioPending).toBe(false);
+  });
+
+  it("без описания дня — прежний вердикт", () => {
+    expect(dayVerdict(off).ratioOffTolerance).toBe(true);
+    expect(dayVerdict(off).ratioPending).toBe(false);
+  });
+
+  it("соотношение в допуске — сказать «собирается» не о чем", () => {
+    const verdict = dayVerdict({ ...off, ratio_within_tolerance: true }, null, {
+      open: true,
+      kcal: 290,
+      targetKcal: 1200,
+    });
+    expect(verdict.ratioPending).toBe(false);
+    expect(verdict.ratioOffTolerance).toBe(false);
+  });
+});
+
+describe("dayIsOpen", () => {
+  it("сегодня и будущие дни открыты, вчера закрыт", () => {
+    expect(dayIsOpen("2026-11-21", "2026-11-21")).toBe(true);
+    expect(dayIsOpen("2026-11-26", "2026-11-21")).toBe(true);
+    expect(dayIsOpen("2026-11-20", "2026-11-21")).toBe(false);
   });
 });

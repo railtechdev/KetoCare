@@ -1,64 +1,8 @@
-import { formatMass } from "@ketocare/ui";
+import { formatMass, type ShoppingLine } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
-import type { MenuWeek } from "./useWeek";
-
-export interface ShoppingLine {
-  productId: string;
-  name: string;
-  /** Сумма граммов по всем позициям недели — сколько взвесить, не купить. */
-  grams: number;
-  days: number;
-}
-
-/**
- * Что взвесить за неделю: граммы позиций, сложенные по продукту.
- *
- * Сервер уже отдаёт граммы на позицию (с учётом порций), поэтому здесь только
- * сумма — ни пересчёта, ни запаса: запас на отходы при чистке — решение семьи,
- * и лист так и говорит. Приправы (ADR-0054) идут отдельным списком без граммов.
- */
-export function shoppingList(week: MenuWeek): {
-  lines: ShoppingLine[];
-  seasonings: string[];
-} {
-  const byProduct = new Map<
-    string,
-    { line: ShoppingLine; dates: Set<string> }
-  >();
-  const seasonings = new Map<string, string>();
-  for (const day of week.days ?? []) {
-    for (const item of day.menu?.items ?? []) {
-      for (const row of item.ingredients ?? []) {
-        if (row.counts_in_calculation === false) {
-          seasonings.set(row.product_id, row.name_ru);
-          continue;
-        }
-        const entry = byProduct.get(row.product_id) ?? {
-          line: {
-            productId: row.product_id,
-            name: row.name_ru,
-            grams: 0,
-            days: 0,
-          },
-          dates: new Set<string>(),
-        };
-        entry.line.grams += row.grams;
-        entry.dates.add(day.date);
-        byProduct.set(row.product_id, entry);
-      }
-    }
-  }
-  const lines = [...byProduct.values()]
-    .map(({ line, dates }) => ({ ...line, days: dates.size }))
-    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  return {
-    lines,
-    seasonings: [...seasonings.values()].sort((a, b) =>
-      a.localeCompare(b, "ru"),
-    ),
-  };
-}
+// Сложение по продукту — `shoppingList` кита (Р3 аудита Mini App): его же
+// берёт «Что купить» в Mini App, и лист с телефоном не расходятся.
 
 /**
  * Сколько строк списка помещается на лист с запасом на перенос длинного

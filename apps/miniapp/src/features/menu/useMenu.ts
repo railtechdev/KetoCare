@@ -16,10 +16,9 @@ export function today(now: Date = new Date()): string {
 /**
  * Дата со сдвигом от сегодня — в том же местном поясе.
  *
- * Дней у приложения три, а не календарь: вчера (отметить съеденное задним
- * числом и посмотреть, что ребёнок ел), сегодня и завтра (план собирают вечером
- * на завтра). Выбор любой даты — это навигация по календарю на 360 px, то есть
- * отдельная работа; в кабинете она уже есть (`features/menu/DayNavigator.tsx`).
+ * Дней у приложения семь, а не календарь (`planDays.ts`): вчера, сегодня и пять
+ * дней вперёд. Выбор любой даты — это навигация по календарю на 360 px; в
+ * кабинете она уже есть (`features/menu/DayNavigator.tsx`).
  *
  * Сдвиг идёт по календарю (`setDate`), а не на 24 часа: в день перевода часов
  * сутки короче или длиннее, и «плюс 24 часа» попадало бы в тот же день.
@@ -37,6 +36,33 @@ export function tomorrow(now: Date = new Date()): string {
 
 export function menuKey(patientId: string, day: string) {
   return ["patient", patientId, "menu", day] as const;
+}
+
+export type MenuWeek = components["schemas"]["MenuWeekRead"];
+
+/** Все недели ребёнка — правка любого дня сбрасывает их вместе. */
+export function menuWeeksKey(patientId: string) {
+  return ["patient", patientId, "menu-week"] as const;
+}
+
+/**
+ * Семь дней меню одним запросом — тем же `GET …/menus/week`, что сетка недели
+ * кабинета. Читают его точки «меню составлено» на полосе дней и «Что купить»
+ * (Р3 аудита Mini App 21.11.2026). День сервер отдаёт той же формой, что и
+ * `GET …/menus`, — с граммами уже на позицию.
+ */
+export function useMenuWeek(patientId: string, start: string) {
+  return useQuery({
+    queryKey: [...menuWeeksKey(patientId), start],
+    queryFn: async (): Promise<MenuWeek> => {
+      const { data, error } = await api.GET(
+        "/api/v1/patients/{patient_id}/menus/week",
+        { params: { path: { patient_id: patientId }, query: { start } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty week response");
+      return data;
+    },
+  });
 }
 
 /**

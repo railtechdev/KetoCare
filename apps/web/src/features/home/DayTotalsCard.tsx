@@ -57,7 +57,13 @@ export function DayTotalsCard({
   const { totals } = day;
   const tolerance = day.tolerance ?? null;
 
-  const verdict = dayVerdict(tolerance, day.tolerance_gap ?? null);
+  // Главная — всегда сегодняшний день, и его ещё собирают: пока норма не
+  // набрана, о соотношении — спокойно (Р2 аудита Mini App, правило кита).
+  const verdict = dayVerdict(tolerance, day.tolerance_gap ?? null, {
+    open: true,
+    kcal: totals.kcal,
+    targetKcal,
+  });
   const issues = [
     ...(verdict.ratioOffTolerance ? [t("day.offTolerance.ratio")] : []),
     ...(verdict.carbsOverLimit ? [t("day.offTolerance.carbs")] : []),
@@ -69,7 +75,11 @@ export function DayTotalsCard({
         <div className="flex flex-wrap items-center gap-section">
           <RatioBadge
             ratio={totals.ratio}
-            withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}
+            withinTolerance={
+              verdict.ratioPending
+                ? undefined
+                : (tolerance?.ratio_within_tolerance ?? undefined)
+            }
             targetRatio={targetRatio ?? undefined}
           />
           <span className="tabular-nums">
@@ -122,6 +132,10 @@ export function DayTotalsCard({
               ))}
             </ul>
           </WarningBanner>
+        ) : verdict.ratioPending ? (
+          <p role="status" className="m-0 text-sm text-muted-foreground">
+            {t("day.ratioPending")}
+          </p>
         ) : verdict.ratioUnknown ? (
           // Соотношения у дня нет — ни тревоги, ни похвалы: сказать нечего.
           <p role="status" className="m-0 text-sm text-muted-foreground">

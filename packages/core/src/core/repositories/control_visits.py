@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from ..control_schedule import PlannedPoint
 from ..models import ControlVisit, Patient, ReminderSettings, TelegramAccount
@@ -129,23 +130,34 @@ async def soft_delete(session: AsyncSession, *, visit: ControlVisit) -> None:
 
 
 async def next_open_map(
-    session: AsyncSession, *, patient_ids: Sequence[uuid.UUID]
+    session: AsyncSession,
+    *,
+    patient_ids: Sequence[uuid.UUID],
+    not_before: date | None = None,
 ) -> dict[uuid.UUID, ControlVisit]:
     """Ближайший несостоявшийся визит каждого пациента — одним запросом.
 
     «Ближайший» — самый ранний из неотмеченных, в том числе уже прошедший:
     пропущенный визит важнее следующего, и прятать его за будущим нельзя.
+
+    `not_before` — раньше этой даты визиты не берутся. Нужно семье: точки
+    графика, построенного задним числом (ребёнок пришёл из другой системы),
+    создаются неотмеченными, и «визит был назначен на 1 июля» про визит до
+    приложения — ложная тревога, за которой не видно настоящего следующего.
     """
 
     if not patient_ids:
         return {}
+    conditions: list[ColumnElement[bool]] = [
+        ControlVisit.patient_id.in_(list(patient_ids)),
+        ControlVisit.deleted_at.is_(None),
+        ControlVisit.completed_on.is_(None),
+    ]
+    if not_before is not None:
+        conditions.append(ControlVisit.planned_on >= not_before)
     rows = await session.scalars(
         select(ControlVisit)
-        .where(
-            ControlVisit.patient_id.in_(list(patient_ids)),
-            ControlVisit.deleted_at.is_(None),
-            ControlVisit.completed_on.is_(None),
-        )
+        .where(*conditions)
         .order_by(ControlVisit.patient_id, ControlVisit.planned_on, ControlVisit.created_at)
         .distinct(ControlVisit.patient_id)
     )

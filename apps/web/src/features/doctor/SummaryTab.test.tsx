@@ -212,6 +212,63 @@ describe("сводка пациента", () => {
       });
   });
 
+  it("о недобранном дне говорит то же, что список пациентов", async () => {
+    // Р2 аудита Mini App успокаивает семью на несобранном дне. Врачу сводка
+    // показывает вердикт сервера как есть: список пациентов поднимает того же
+    // ребёнка пометкой «Кетосоотношение вне допуска» (`flags.ts`), и карта,
+    // открытая из пометки, не может ответить «день ещё собирается».
+    vi.mocked(api.GET).mockResolvedValueOnce({
+      data: {
+        patient_id: PATIENT.id,
+        date: "2026-09-01",
+        prescription: {
+          id: "rx1",
+          patient_id: PATIENT.id,
+          ratio: 4,
+          kcal_per_day: 1200,
+          protein_g: 12,
+          carbs_limit_g: 35,
+          meals_per_day: 5,
+          restrictions: null,
+          author_id: "u1",
+          effective_from: "2026-08-01",
+          created_at: "2026-08-01T10:00:00Z",
+        },
+        day: {
+          totals: {
+            kcal: 600,
+            fat: 50,
+            protein: 14,
+            carbs: 10,
+            fiber: 0,
+            ratio: 2.1,
+          },
+          tolerance: {
+            ratio_within_tolerance: false,
+            kcal_within_tolerance: false,
+            carbs_within_limit: true,
+          },
+          tolerance_gap: null,
+          engine_version: "1.2.0",
+        },
+        last_ketone: null,
+        last_weight: null,
+        seizures_today: { entries: 0, count: 0 },
+        seizure_trend: { recent: 0, previous: 0, grew: null, appeared: false },
+        last_reading_on: null,
+        monitoring_phase: "routine",
+        family_activated: true,
+      } satisfies PatientOverview,
+    } as never);
+
+    renderSummary();
+
+    expect(
+      await screen.findByText(doctorRu.summary.day.offRatio),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/День ещё собирается/)).not.toBeInTheDocument();
+  });
+
   it("показывает жидкость, если врач её задал (ADR-0069)", async () => {
     vi.mocked(api.GET).mockResolvedValueOnce({
       data: {

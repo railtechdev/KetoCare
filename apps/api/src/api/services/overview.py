@@ -248,6 +248,12 @@ async def _yesterday_shortfall(
     )
 
 
+#: Сколько дней после даты семья ещё видит неотмеченный визит как пропущенный
+#: («договоритесь о новой дате»). Продуктовое окно, а не клиническое: дальше
+#: визит, скорее всего, прошёл и не отмечен, и строка тревожила бы зря.
+FAMILY_MISSED_VISIT_DAYS = 14
+
+
 async def build_overview(
     session: AsyncSession, *, patient_id: uuid.UUID, clinical: bool = False
 ) -> PatientOverview:
@@ -287,7 +293,15 @@ async def build_overview(
 
     # Завершение терапии и ближайший контроль (вопросы 17 и 18, ADR-0050).
     ended_on = await therapy_repo.ended_on(session, patient_id=patient_id)
-    next_visits = await control_visits_repo.next_open_map(session, patient_ids=[patient_id])
+    # Семье — визит, по которому ей есть что сделать: будущий или пропущенный
+    # недавно. Старые неотмеченные точки графика (его строят и задним числом,
+    # от даты начала терапии до приложения) ей не показываются — специалист
+    # видит их все (Р4 аудита Mini App).
+    next_visits = await control_visits_repo.next_open_map(
+        session,
+        patient_ids=[patient_id],
+        not_before=None if clinical else today - timedelta(days=FAMILY_MISSED_VISIT_DAYS),
+    )
 
     shortfall = await _yesterday_shortfall(
         session, patient_id=patient_id, today=today, ended_on=ended_on

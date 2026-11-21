@@ -19,6 +19,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
+import { ClinicPhone } from "../clinic/ClinicPhone";
+import { useClinicPhone } from "../clinic/useClinicPhone";
 import type { ScreenRequest } from "../../lib/tabs";
 import { AddEntry } from "../diary/AddEntry";
 import type { CreatableKind } from "../diary/useDiary";
@@ -29,15 +31,20 @@ import { ItemDetails } from "../menu/ItemDetails";
 import { MealItem } from "../menu/MealItem";
 import { MenuScreen } from "../menu/MenuScreen";
 import { dayAt, isPlanChanged, useMarkEaten, useMenu } from "../menu/useMenu";
+import { MedicationScheme } from "../medications/MedicationScheme";
 import { RecipeCard } from "../recipes/RecipesScreen";
 import type { Session } from "../session/useSession";
 import { MedicationsToday } from "./MedicationsToday";
 
-/** Что открыто во вкладке: сводка дня, меню или рецепт ближайшего приёма. */
+/**
+ * Что открыто во вкладке: сводка дня, меню, рецепт ближайшего приёма или схема
+ * препаратов.
+ */
 type View =
   | { at: "summary" }
   | { at: "menu"; dayOffset: number }
-  | { at: "recipe"; recipeId: string };
+  | { at: "recipe"; recipeId: string }
+  | { at: "medications" };
 
 export interface TodayRequest {
   view?: "menu";
@@ -98,6 +105,18 @@ export function TodayScreen({
       />
     );
   }
+  if (view.at === "medications") {
+    return (
+      <MedicationScheme
+        session={session}
+        backLabel={t("menu.backToToday")}
+        onBack={() => {
+          setView({ at: "summary" });
+          window.scrollTo(0, 0);
+        }}
+      />
+    );
+  }
   if (view.at === "recipe") {
     return (
       <RecipeCard
@@ -123,6 +142,10 @@ export function TodayScreen({
         setView({ at: "recipe", recipeId });
         window.scrollTo(0, 0);
       }}
+      onOpenScheme={() => {
+        setView({ at: "medications" });
+        window.scrollTo(0, 0);
+      }}
     />
   );
 }
@@ -138,10 +161,12 @@ function TodaySummary({
   session,
   onOpenMenu,
   onOpenRecipe,
+  onOpenScheme,
 }: {
   session: Session;
   onOpenMenu: () => void;
   onOpenRecipe: (recipeId: string) => void;
+  onOpenScheme: () => void;
 }) {
   const { t } = useTranslation();
   // Один запрос на сводку — тот же `/overview`, что питает главную кабинета:
@@ -180,8 +205,9 @@ function TodaySummary({
           <div className="flex flex-col gap-section">
             <Notices overview={overview.data} />
             <PrescriptionLine overview={overview.data} />
+            <NextVisitLine overview={overview.data} />
             <QuickRecords overview={overview.data} onPick={setQuick} />
-            <MedicationsToday session={session} />
+            <MedicationsToday session={session} onOpenScheme={onOpenScheme} />
             <NextMealBlock
               session={session}
               overview={overview.data}
@@ -202,11 +228,14 @@ function TodaySummary({
                 }
                 verdict={{
                   otherDay: false,
+                  // «Сегодня» — день, который ещё собирают (Р2).
+                  open: true,
                   tolerance: overview.data.day.tolerance ?? null,
                   gap: overview.data.day.tolerance_gap ?? null,
                 }}
               />
             )}
+            <ClinicContact />
           </div>
         )}
       </AsyncSection>
@@ -325,6 +354,58 @@ function PrescriptionLine({ overview }: { overview: Overview }) {
       </p>
       {upcomingLine}
     </>
+  );
+}
+
+/**
+ * Ближайший контрольный визит — одной строкой (Р4 аудита Mini App 21.11.2026).
+ *
+ * У семьи из Telegram кабинета нет, а дату визита она узнавала только
+ * напоминанием бота за три дня. Сервер отдаёт ближайший несостоявшийся визит в
+ * сводке (`next_control`) и семье — без назначения точки (ADR-0050): зачем
+ * визит, семье говорит врач. Анализов здесь нет: перечень к визиту приходит
+ * напоминанием, а недельного перечня клиника не дала срока.
+ *
+ * Прошедший и не отмеченный врачом визит говорится как есть, с тем, что
+ * делать: спрятать его значило бы спрятать пропущенный визит. Какой визит
+ * семье назвать, решает сервер: пропущенный — только в первые две недели
+ * (`FAMILY_MISSED_VISIT_DAYS`), дальше следующий. График строят и задним
+ * числом, и точки до приложения встают неотмеченными.
+ */
+function NextVisitLine({ overview }: { overview: Overview }) {
+  const { t } = useTranslation();
+  const visit = overview.next_control ?? null;
+  // Терапия завершена — визит из графика больше не план (вопрос 18): о нём
+  // молчат и напоминания бота.
+  if (visit === null || (overview.therapy_ended_on ?? null) !== null) {
+    return null;
+  }
+  const date = parseDateInput(visit.planned_on);
+  if (date === null) return null;
+  const words = formatLongDate(date, {
+    year: date.getFullYear() !== new Date().getFullYear(),
+  });
+  return (
+    <p className="m-0 text-sm">
+      {visit.overdue
+        ? t("today.visit.overdue", { date: words })
+        : t("today.visit.next", { date: words })}
+    </p>
+  );
+}
+
+/**
+ * «Связь с клиникой» — телефон из бланка клиники (Р4): у семьи без кабинета
+ * номера больше нигде нет. Не задан — блока нет.
+ */
+function ClinicContact() {
+  const { t } = useTranslation();
+  const phone = useClinicPhone();
+  if (phone === null) return null;
+  return (
+    <Section title={t("clinic.title")} density="compact">
+      <ClinicPhone phone={phone} />
+    </Section>
   );
 }
 
