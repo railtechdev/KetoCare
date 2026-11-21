@@ -34,6 +34,17 @@ class TestNoticeText:
         assert "кабинет" not in NOTICE.lower()
         assert "меню" in NOTICE.lower()
 
+    def test_covers_every_day_composed_ahead(self) -> None:
+        """Не только «сегодня и завтра»: меню составляют на пять дней вперёд.
+
+        Неделю собирает диетолог, и семья в приложении видит её всю (Р3 аудита
+        Mini App). Дни после завтра, собранные под старые цели, сообщение
+        оставляло бы без внимания.
+        """
+
+        assert "завтра" not in NOTICE.lower()
+        assert "дни вперёд" in NOTICE.lower()
+
     def test_carries_no_names(self) -> None:
         """Чат привязан к одному ребёнку — называть его по имени незачем."""
 

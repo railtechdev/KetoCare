@@ -1,4 +1,4 @@
-import { formatMass } from "@ketocare/ui";
+import { formatMass, shoppingList } from "@ketocare/ui";
 import type { TFunction } from "i18next";
 
 import type {
@@ -14,7 +14,6 @@ import {
   itemsOf,
   menuDishCard,
 } from "../menu/dayPrintModel";
-import { shoppingList } from "../menu/ShoppingListSheet";
 import { printableDays } from "../menu/WeekGrid";
 import { dishCardBlocks, metricsBlock } from "./printedDishWord";
 

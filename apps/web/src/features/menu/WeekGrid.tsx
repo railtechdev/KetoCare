@@ -5,6 +5,7 @@ import {
   RatioBadge,
   Section,
   cn,
+  daysWithMenu,
   formatGrams,
   formatKcal,
   toast,
@@ -333,5 +334,6 @@ function DayMacroTotals({
 
 /** Дни недели, которые есть что печатать: пустой день листа не получает. */
 export function printableDays(week: MenuWeek): MenuWeek["days"] {
-  return (week.days ?? []).filter((day) => (day.menu?.items ?? []).length > 0);
+  // То же правило «дня с меню», что у «Что купить» в Mini App (кит).
+  return daysWithMenu(week.days);
 }

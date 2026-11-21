@@ -315,7 +315,7 @@ export const uz: Dict = {
     },
     menu: {
       title: "Menyu va grammlar",
-      text: "Kecha, bugun va ertaga uchun menyu. Uni siz yoki shifokor tuzadi.",
+      text: "Bir hafta oldinga menyu va xaridlar ro‘yxati. Uni siz yoki shifokor tuzadi.",
       points: [
         "Har bir taomda «Nimani tortish kerak»: har bir mahsulot grammi.",
         "«Yeyildi» belgisi — bitta bosish bilan.",

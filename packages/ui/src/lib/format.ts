@@ -123,6 +123,26 @@ export function formatLongDate(
   }).format(value);
 }
 
+/** Короткие узбекские дни недели — по `Date.getDay()`, как `UZ_WEEKDAYS`. */
+const UZ_WEEKDAYS_SHORT = ["ya", "du", "se", "ch", "pa", "ju", "sh"] as const;
+
+/**
+ * День недели и число — «пн 24» / «du 24»: подпись дня в полосе недели Mini App
+ * (Р3 аудита Mini App 21.11.2026), где на кнопку в 4 rem помещается одно слово
+ * и число. Узбекская — из своей таблицы по той же причине, что `formatLongDate`.
+ */
+export function formatWeekdayDay(value: Date): string {
+  if (activeLanguage === "uz") {
+    return `${UZ_WEEKDAYS_SHORT[value.getDay()]} ${value.getDate()}`;
+  }
+  const weekday = new Intl.DateTimeFormat(LOCALE_TAGS.ru, {
+    weekday: "short",
+  })
+    .format(value)
+    .replace(/\.$/, "");
+  return `${weekday} ${value.getDate()}`;
+}
+
 /**
  * Цифровые даты («05.10.2026, 14:30») пишутся через точку на обоих языках.
  *

@@ -14,7 +14,6 @@ import {
   cn,
   isRefusal,
   refusalNextStep,
-  telHref,
   useAttemptKey,
   useFrozenAttempt,
   withChatDays,
@@ -43,13 +42,14 @@ import {
   useUnsavedGuard,
 } from "../../lib/useTelegram";
 import { today } from "../menu/useMenu";
+import { ClinicPhone } from "../clinic/ClinicPhone";
+import { useClinicPhone } from "../clinic/useClinicPhone";
 import type { Session } from "../session/useSession";
 import {
   type AssistantMessage,
   useArticle,
   useAskAssistant,
   useCareTeam,
-  useClinicPhone,
   useConversation,
   useLatestConversationId,
 } from "./useAssistant";
@@ -524,30 +524,6 @@ function AudienceNote({
       <p className="m-0">{t("assistant.audience.noAlerts")}</p>
       {phoneLink}
     </>
-  );
-}
-
-/**
- * «Телефон клиники: +998 …» — ссылкой для звонка; без номера — ничего.
- *
- * Ссылка — блок высотой в касание: строчная ссылка была высотой в строку
- * (около 20 px), и `min-height` базовой темы на строчный элемент не действует.
- * А это главный следующий шаг под отказом (П4).
- */
-function ClinicPhone({ phone }: { phone: string | null }) {
-  const { t } = useTranslation();
-  const href = telHref(phone);
-  if (phone === null || href === null) return null;
-  return (
-    <p className="m-0 flex flex-wrap items-center gap-x-1">
-      {t("assistant.clinicPhone")}
-      <a
-        href={href}
-        className="inline-flex min-h-touch items-center font-medium whitespace-nowrap text-primary underline underline-offset-2"
-      >
-        {phone}
-      </a>
-    </p>
   );
 }
 

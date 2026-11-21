@@ -18,6 +18,7 @@ describe("словарь Mini App объясняет каждую причину
       expect(typeof dictionary[key]).toBe("string");
     }
     expect(typeof dictionary[TOLERANCE_GAP_UNKNOWN_KEY]).toBe("string");
+    expect(typeof dictionary.ratioPending).toBe("string");
   });
 
   it("без соотношения ни тревоги, ни похвалы", () => {
@@ -40,5 +41,83 @@ describe("словарь Mini App объясняет каждую причину
     expect(
       screen.queryByText("Кетосоотношение дня соответствует назначению."),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Р2 аудита Mini App: после первого блюда в пустом дне появлялась жёлтая
+ * плашка «Итоги дня расходятся с назначением. Измените состав» — на 290 из
+ * 1 200 ккал. Пока день открыт и норма не набрана, о соотношении — спокойно.
+ */
+describe("день ещё собирается", () => {
+  const off = {
+    ratio_within_tolerance: false,
+    kcal_within_tolerance: false,
+    carbs_within_limit: true,
+  };
+
+  it("сегодня, 290 из 1 200 ккал: строка вместо плашки", () => {
+    render(
+      <DayVerdictNote
+        tolerance={off}
+        gap={null}
+        open
+        kcal={290}
+        targetKcal={1200}
+      />,
+    );
+
+    expect(screen.getByText(ru.verdict.ratioPending)).toBeInTheDocument();
+    expect(
+      screen.queryByText(ru.verdict.offTolerance.title),
+    ).not.toBeInTheDocument();
+  });
+
+  it("лимит углеводов — предупреждение сразу", () => {
+    render(
+      <DayVerdictNote
+        tolerance={{ ...off, carbs_within_limit: false }}
+        gap={null}
+        open
+        kcal={290}
+        targetKcal={1200}
+      />,
+    );
+
+    expect(screen.getByText(ru.verdict.carbsOver.title)).toBeInTheDocument();
+    expect(screen.getByText(ru.verdict.ratioPending)).toBeInTheDocument();
+  });
+
+  it("день специалиста под тем же условием — тоже спокойно", () => {
+    render(
+      <DayVerdictNote
+        tolerance={off}
+        gap={null}
+        open
+        kcal={290}
+        targetKcal={1200}
+        composedBy="Анна Петровна"
+      />,
+    );
+
+    expect(screen.getByText(ru.verdict.ratioPending)).toBeInTheDocument();
+    expect(
+      screen.queryByText(ru.verdict.bySpecialist.ratio),
+    ).not.toBeInTheDocument();
+  });
+
+  it("вчерашний день — вердикт как есть", () => {
+    render(
+      <DayVerdictNote
+        tolerance={off}
+        gap={null}
+        open={false}
+        kcal={290}
+        targetKcal={1200}
+      />,
+    );
+
+    expect(screen.getByText(ru.verdict.offTolerance.title)).toBeInTheDocument();
+    expect(screen.queryByText(ru.verdict.ratioPending)).not.toBeInTheDocument();
   });
 });

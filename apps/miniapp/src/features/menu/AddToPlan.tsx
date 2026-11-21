@@ -2,7 +2,6 @@ import {
   Button,
   FieldShell,
   NativeSelect,
-  SegmentedControl,
   StatusNote,
   WarningBanner,
 } from "@ketocare/ui";
@@ -11,15 +10,11 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { NavigateContext } from "../../lib/tabs";
+import { DayStrip } from "./DayStrip";
 import { itemsOf, mealNumbers, withDish } from "./dayPlan";
-import { dayAt, useDayPrescription, useMenu } from "./useMenu";
+import { PLAN_DAYS, WEEK_START_OFFSET, dayName, menuDatesOf } from "./planDays";
+import { dayAt, useDayPrescription, useMenu, useMenuWeek } from "./useMenu";
 import { useSaveMenu } from "./useSaveMenu";
-
-/** Дни, в которые ставят блюдо отсюда: вчерашнее меню не собирают. */
-const DAYS = [
-  { offset: 0, label: "menu.today" },
-  { offset: 1, label: "menu.tomorrow" },
-] as const;
 
 /**
  * «Добавить в меню» — блюдо ребёнка или рецепт в приём выбранного дня.
@@ -51,8 +46,11 @@ export function AddToPlan({
 }) {
   const { t } = useTranslation();
   const navigate = useContext(NavigateContext);
+  // Дни — сегодня и пять вперёд (`PLAN_DAYS`), как у «Что купить»: вчерашнее
+  // меню отсюда не собирают (Р3 аудита Mini App).
   const [dayOffset, setDayOffset] = useState<number>(0);
   const day = dayAt(dayOffset);
+  const week = useMenuWeek(patientId, dayAt(WEEK_START_OFFSET));
   // Приёмы — по назначению выбранного дня: завтра может начаться новая версия
   // с другим числом приёмов (ADR-0078).
   const dayPrescription = useDayPrescription(patientId, day);
@@ -67,108 +65,143 @@ export function AddToPlan({
   const [added, setAdded] = useState<string | null>(null);
   const choice = `${day}:${chosenMeal ?? ""}`;
 
-  if (!dayPrescription.isSuccess) {
-    return <StatusNote>{t("calculator.plan.prescriptionUnknown")}</StatusNote>;
-  }
-  if (meals.length === 0 || chosenMeal === null) {
-    return (
+  const planKnown = menu.isSuccess;
+  const dayLabel = dayName(dayOffset, t);
+
+  // Что зависит от назначения выбранного дня: приёмы и кнопка записи.
+  let body: ReactNode;
+  if (dayPrescription.isError) {
+    body = (
+      <WarningBanner
+        level="danger"
+        title={t("calculator.plan.prescriptionFailed")}
+      >
+        <div className="flex flex-col gap-field">
+          <span>
+            {errorMessageOf(dayPrescription.error) ?? t("home.loadErrorHint")}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch self-start"
+            onClick={() => void dayPrescription.refetch()}
+          >
+            {t("actions.retry")}
+          </Button>
+        </div>
+      </WarningBanner>
+    );
+  } else if (!dayPrescription.isSuccess) {
+    body = (
+      <StatusNote>
+        {dayPrescription.fetchStatus === "paused"
+          ? t("errors.waitingForNetwork")
+          : t("calculator.plan.prescriptionUnknown")}
+      </StatusNote>
+    );
+  } else if (meals.length === 0 || chosenMeal === null) {
+    body = (
       <p className="m-0 text-sm text-muted-foreground">
         {t("calculator.plan.noPrescription")}
       </p>
     );
-  }
+  } else {
+    body = (
+      <>
+        <FieldShell label={t("calculator.plan.meal")}>
+          {() => (
+            <NativeSelect
+              value={chosenMeal}
+              onChange={(event) => {
+                setMealIndex(Number(event.target.value));
+                save.reset();
+              }}
+            >
+              {meals.map((index) => (
+                <option key={index} value={index}>
+                  {t("menu.meal", { index })}
+                </option>
+              ))}
+            </NativeSelect>
+          )}
+        </FieldShell>
 
-  const planKnown = menu.isSuccess;
-  const dayLabel = t(
-    DAYS.find((option) => option.offset === dayOffset)?.label ?? "menu.today",
-  );
-
-  return (
-    <div className="flex flex-col gap-field">
-      <SegmentedControl
-        label={t("calculator.plan.day")}
-        value={String(dayOffset)}
-        onChange={(value) => {
-          setDayOffset(Number(value));
-          save.reset();
-        }}
-        items={DAYS.map((option) => ({
-          value: String(option.offset),
-          label: t(option.label),
-        }))}
-        className="w-full [&>label]:flex-1"
-      />
-
-      <FieldShell label={t("calculator.plan.meal")}>
-        {() => (
-          <NativeSelect
-            value={chosenMeal}
-            onChange={(event) => {
-              setMealIndex(Number(event.target.value));
-              save.reset();
-            }}
-          >
-            {meals.map((index) => (
-              <option key={index} value={index}>
-                {t("menu.meal", { index })}
-              </option>
-            ))}
-          </NativeSelect>
-        )}
-      </FieldShell>
-
-      {menu.isError ? (
-        <WarningBanner level="danger" title={t("calculator.plan.loadError")}>
-          {errorMessageOf(menu.error) ?? t("home.loadErrorHint")}
-        </WarningBanner>
-      ) : !planKnown ? (
-        <StatusNote>
-          {menu.fetchStatus === "paused"
-            ? t("errors.waitingForNetwork")
-            : t("calculator.plan.loading")}
-        </StatusNote>
-      ) : added === choice ? (
-        // Следующий шаг назван кнопками: «Добавлено» без продолжения было
-        // тупиком — куда идти дальше, человек угадывал сам.
-        <div className="flex flex-col gap-field">
-          <p role="status" className="m-0 text-sm text-success">
-            {t("calculator.plan.added", { day: dayLabel, index: chosenMeal })}
-          </p>
+        {menu.isError ? (
+          <WarningBanner level="danger" title={t("calculator.plan.loadError")}>
+            {errorMessageOf(menu.error) ?? t("home.loadErrorHint")}
+          </WarningBanner>
+        ) : !planKnown ? (
+          <StatusNote>
+            {menu.fetchStatus === "paused"
+              ? t("errors.waitingForNetwork")
+              : t("calculator.plan.loading")}
+          </StatusNote>
+        ) : added === choice ? (
+          // Следующий шаг назван кнопками: «Добавлено» без продолжения было
+          // тупиком — куда идти дальше, человек угадывал сам.
+          <div className="flex flex-col gap-field">
+            <p role="status" className="m-0 text-sm text-success">
+              {t("calculator.plan.added", { day: dayLabel, index: chosenMeal })}
+            </p>
+            <Button
+              type="button"
+              className="min-h-touch w-full"
+              onClick={() =>
+                navigate({ tab: "today", view: "menu", dayOffset })
+              }
+            >
+              {t("calculator.plan.openMenu")}
+            </Button>
+            {afterAdded}
+          </div>
+        ) : (
           <Button
             type="button"
             className="min-h-touch w-full"
-            onClick={() => navigate({ tab: "today", view: "menu", dayOffset })}
+            disabled={save.isPending}
+            aria-busy={save.isPending || undefined}
+            onClick={() => {
+              // Последняя проверка перед записью — не только выключенная
+              // кнопка: день, не загруженный достоверно, переписывать нельзя.
+              if (!menu.isSuccess) return;
+              save.mutate(withDish(itemsOf(menu.data), dish, chosenMeal, 1), {
+                onSuccess: () => setAdded(choice),
+              });
+            }}
           >
-            {t("calculator.plan.openMenu")}
+            {save.isPending
+              ? t("calculator.plan.adding")
+              : t("calculator.plan.submit")}
           </Button>
-          {afterAdded}
-        </div>
-      ) : (
-        <Button
-          type="button"
-          className="min-h-touch w-full"
-          disabled={save.isPending}
-          aria-busy={save.isPending || undefined}
-          onClick={() => {
-            // Последняя проверка перед записью — не только выключенная
-            // кнопка: день, не загруженный достоверно, переписывать нельзя.
-            if (!menu.isSuccess) return;
-            save.mutate(withDish(itemsOf(menu.data), dish, chosenMeal, 1), {
-              onSuccess: () => setAdded(choice),
-            });
-          }}
-        >
-          {save.isPending
-            ? t("calculator.plan.adding")
-            : t("calculator.plan.submit")}
-        </Button>
-      )}
+        )}
 
-      {save.isError && (
-        <WarningBanner level="danger" title={t("calculator.plan.failed")}>
-          {errorMessageOf(save.error) ?? t("menu.compose.failed")}
-        </WarningBanner>
-      )}
+        {save.isError && (
+          <WarningBanner level="danger" title={t("calculator.plan.failed")}>
+            {errorMessageOf(save.error) ?? t("menu.compose.failed")}
+          </WarningBanner>
+        )}
+      </>
+    );
+  }
+
+  // Полоса дней стоит над всем, что зависит от назначения выбранного дня, и
+  // не исчезает, пока оно грузится или не пришло: иначе каждый выбор дня
+  // снимал полосу, а отказ запроса оставлял семью без способа вернуться к
+  // «Сегодня». Без назначения сегодня полоса тоже нужна — оно может начаться
+  // через три дня.
+  return (
+    <div className="flex flex-col gap-field">
+      <DayStrip
+        label={t("calculator.plan.day")}
+        offsets={PLAN_DAYS}
+        value={dayOffset}
+        menuDates={menuDatesOf(week.data?.days)}
+        onChange={(offset) => {
+          setDayOffset(offset);
+          save.reset();
+        }}
+      />
+      {body}
     </div>
   );
 }

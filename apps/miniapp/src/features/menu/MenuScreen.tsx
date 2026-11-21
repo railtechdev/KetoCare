@@ -1,12 +1,12 @@
 import {
   AsyncSection,
   Button,
-  SegmentedControl,
   Section,
   WarningBanner,
+  dayIsOpen,
   formatDayTime,
 } from "@ketocare/ui";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Plus, ShoppingCart } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -18,6 +18,7 @@ import { useTelegramBack } from "../../lib/useTelegram";
 import { RecipeCard } from "../recipes/RecipesScreen";
 import type { Session } from "../session/useSession";
 import { ComposePanel, type ComposeChoice } from "./ComposePanel";
+import { DayStrip } from "./DayStrip";
 import { DayTotals, type DayTargets, type DayVerdictInput } from "./DayTotals";
 import {
   copiedDay,
@@ -29,6 +30,15 @@ import {
 } from "./dayPlan";
 import { ItemDetails } from "./ItemDetails";
 import { MealItem } from "./MealItem";
+import {
+  MENU_DAYS,
+  WEEK_START_OFFSET,
+  clampMenuDay,
+  copyLabelKey,
+  dayName,
+  menuDatesOf,
+} from "./planDays";
+import { ShoppingScreen } from "./ShoppingScreen";
 import type { Menu, MenuItem } from "./useMenu";
 import {
   dayAt,
@@ -36,28 +46,9 @@ import {
   useDayPrescription,
   useMarkEaten,
   useMenu,
+  useMenuWeek,
 } from "./useMenu";
 import { useSaveMenu } from "./useSaveMenu";
-
-/**
- * Дни, между которыми переключается экран: вчера, сегодня, завтра.
- *
- * Вчера — чтобы отметить съеденное задним числом (вечером отмечать некогда, а
- * по отметкам врач судит, выполнялось ли меню) и посмотреть, что ребёнок ел.
- * Завтра — меню собирают вечером на завтра. Календаря нет: см. `dayAt`.
- */
-const DAYS = [
-  { offset: -1, label: "menu.yesterday" },
-  { offset: 0, label: "menu.today" },
-  { offset: 1, label: "menu.tomorrow" },
-] as const;
-
-/** Подпись «Как вчера» с точки зрения выбранного дня. */
-const COPY_LABEL: Record<number, string> = {
-  [-1]: "menu.copy.asDayBeforeYesterday",
-  0: "menu.copy.asYesterday",
-  1: "menu.copy.asToday",
-};
 
 /**
  * Меню дня с отметками «съедено» и сборкой (раздел 9 ТЗ, ADR-0041, ADR-0075).
@@ -81,13 +72,19 @@ export function MenuScreen({
   initialDayOffset?: number;
 }) {
   const { t } = useTranslation();
-  // Хранится СДВИГ, а не дата: приложение, открытое в 23:58, после полуночи
-  // иначе показывало бы вчерашнее меню, не подсветив ни одной кнопки — а
-  // «собрать вечером на завтра» это ровно про то время суток.
-  const [dayOffset, setDayOffset] = useState(initialDayOffset);
+  // Хранится СДВИГ, а не дата (`planDays.ts`): приложение, открытое в 23:58,
+  // после полуночи иначе показывало бы вчерашнее меню, не подсветив ни одного
+  // дня — а «собрать вечером на завтра» это ровно про то время суток.
+  const [dayOffset, setDayOffset] = useState(() =>
+    clampMenuDay(initialDayOffset),
+  );
   const [composing, setComposing] = useState<number | null>(null);
   const [recipeId, setRecipeId] = useState<string | null>(null);
+  const [shopping, setShopping] = useState(false);
   const day = dayAt(dayOffset);
+  // Неделя полосы — точки «меню составлено» (Р3 аудита Mini App).
+  const week = useMenuWeek(session.patientId, dayAt(WEEK_START_OFFSET));
+  const menuDates = menuDatesOf(week.data?.days);
   const menu = useMenu(session.patientId, day);
   const mark = useMarkEaten(session.patientId, day);
   const save = useSaveMenu(session.patientId, day);
@@ -100,13 +97,21 @@ export function MenuScreen({
   const dayPrescription = useDayPrescription(session.patientId, day);
   const prescription = dayPrescription.data ?? null;
   const meals = mealNumbers(prescription?.meals_per_day ?? null);
+  // Цели дня — из назначения этого дня. Пока его запрос в пути или отказал,
+  // берётся то же назначение, пришедшее с меню (`GET /menus` отдаёт его за
+  // этот день, ADR-0078): без цели калорийности правило «день ещё собирается»
+  // не срабатывает, и на несобранном дне мелькала бы — а при отказе так и
+  // оставалась — жёлтая плашка, которую Р2 убрал.
+  const targetsSource = dayPrescription.isSuccess
+    ? prescription
+    : (menu.data?.prescription ?? null);
   const targets: DayTargets | null =
-    prescription === null
+    targetsSource === null
       ? null
       : {
-          kcalPerDay: prescription.kcal_per_day,
-          carbsLimitG: prescription.carbs_limit_g,
-          proteinG: prescription.protein_g,
+          kcalPerDay: targetsSource.kcal_per_day,
+          carbsLimitG: targetsSource.carbs_limit_g,
+          proteinG: targetsSource.protein_g,
         };
 
   // «Назад» Telegram ведёт на «Сегодня». Панель сборки и карточка рецепта
@@ -140,7 +145,12 @@ export function MenuScreen({
     menu.isSuccess && !menu.isFetching && !save.isPending && !copy.isPending;
   const verdict: DayVerdictInput = {
     otherDay: false,
-    tolerance: verdictFresh ? (menu.data?.tolerance ?? null) : null,
+    // Сегодня и впереди день ещё собирают (Р2 аудита Mini App).
+    open: dayIsOpen(day, dayAt(0)),
+    // Вердикт без цели калорийности не показывается вовсе: «собирается ли
+    // ещё день», решается по ней, и без неё вышла бы тревога вместо строки.
+    tolerance:
+      verdictFresh && targets !== null ? (menu.data?.tolerance ?? null) : null,
     gap: verdictFresh ? (menu.data?.tolerance_gap ?? null) : null,
   };
 
@@ -154,6 +164,18 @@ export function MenuScreen({
       { onSuccess: onAdded },
     );
   };
+
+  if (shopping) {
+    return (
+      <ShoppingScreen
+        patientId={session.patientId}
+        onBack={() => {
+          setShopping(false);
+          window.scrollTo(0, 0);
+        }}
+      />
+    );
+  }
 
   if (recipeId !== null) {
     return (
@@ -181,7 +203,7 @@ export function MenuScreen({
       <h1 className="text-page-title">
         {composing === null
           ? t("menu.title")
-          : t("menu.compose.title", { day: t(dayLabelKey(dayOffset)) })}
+          : t("menu.compose.title", { day: dayName(dayOffset, t) })}
       </h1>
 
       {composing !== null ? (
@@ -199,22 +221,36 @@ export function MenuScreen({
         />
       ) : (
         <>
-          {/* Три дня, а не календарь (см. `DAYS`). */}
-          <SegmentedControl
+          {/* Семь дней, а не календарь (`planDays.ts`). */}
+          <DayStrip
             label={t("menu.day")}
-            value={String(dayOffset)}
-            onChange={(value) => {
-              setDayOffset(Number(value));
+            offsets={MENU_DAYS}
+            value={dayOffset}
+            menuDates={menuDates}
+            onChange={(offset) => {
+              setDayOffset(offset);
               // Отказ записи относится к дню, где её делали.
               save.reset();
               copy.reset();
             }}
-            items={DAYS.map((option) => ({
-              value: String(option.offset),
-              label: t(option.label),
-            }))}
-            className="w-full [&>label]:flex-1"
           />
+
+          {/* «Что купить» — сразу под полосой: в магазине открывают меню и
+              ищут список вверху, а не за всеми приёмами и итогами дня, тремя
+              экранами ниже. Список на дни вперёд, а не на выбранный день —
+              поэтому он у полосы, а не в дне (Р3 аудита Mini App). */}
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch self-start"
+            onClick={() => {
+              setShopping(true);
+              window.scrollTo(0, 0);
+            }}
+          >
+            <ShoppingCart aria-hidden="true" className="size-4" />
+            {t("shopping.open")}
+          </Button>
 
           <AsyncSection
             loading={menu.isPending}
@@ -277,7 +313,7 @@ export function MenuScreen({
                     >
                       {copy.isPending
                         ? t("menu.copy.copying")
-                        : t(COPY_LABEL[dayOffset] ?? "menu.copy.asYesterday")}
+                        : t(copyLabelKey(dayOffset))}
                     </Button>
                     <p className="m-0 text-sm text-muted-foreground">
                       {t("menu.copy.hint")}
@@ -358,10 +394,6 @@ export function MenuScreen({
       )}
     </main>
   );
-}
-
-function dayLabelKey(offset: number): string {
-  return DAYS.find((option) => option.offset === offset)?.label ?? "menu.today";
 }
 
 function DayPlan({

@@ -314,7 +314,7 @@ export const en: Dict = {
     },
     menu: {
       title: "Menu and grams",
-      text: "The menu for yesterday, today and tomorrow. You or the doctor plan it.",
+      text: "The menu a week ahead and a shopping list. You or the doctor plan it.",
       points: [
         "Every dish has «What to weigh»: the grams of each product.",
         "Mark a dish as eaten with one tap.",

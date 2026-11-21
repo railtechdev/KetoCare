@@ -1,13 +1,10 @@
+import { shoppingList } from "@ketocare/ui";
 import type { TFunction } from "i18next";
 
 import type { PrintedSheetSpec } from "../../components/print/PrintedSheets";
 import { weekRangeLabel } from "../print/weekWord";
 import { daySheets } from "./daySheets";
-import {
-  ShoppingListSheet,
-  shoppingList,
-  shoppingPages,
-} from "./ShoppingListSheet";
+import { ShoppingListSheet, shoppingPages } from "./ShoppingListSheet";
 import type { MenuWeek } from "./useWeek";
 import { printableDays } from "./WeekGrid";
 

@@ -250,6 +250,66 @@ describe("MenuPage", () => {
     expect(screen.getByText(/Измените состав/)).toBeVisible();
   });
 
+  it("сегодняшний день ещё собирается — о соотношении спокойно (Р2 аудита Mini App)", async () => {
+    // 290 из 1 600 ккал: день только начали собирать, и тревога «измените
+    // состав» здесь говорила бы семье, что она ошиблась.
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? {
+              data: {
+                ...MENU,
+                totals: { ...TOTALS, kcal: 290 },
+                tolerance: {
+                  ratio_within_tolerance: false,
+                  kcal_within_tolerance: false,
+                  carbs_within_limit: true,
+                },
+                updated_by_name: "Мама",
+                updated_by_role: "parent",
+              },
+            }
+          : respond(path),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText(menuRu.totals.ratioPending)).toBeVisible();
+    expect(screen.queryByText(/Измените состав/)).toBeNull();
+  });
+
+  it("вчерашний день не собирается — расхождение называется как есть", async () => {
+    const yesterday = shiftIsoDate(todayIso(), -1);
+    (api.GET as unknown as Mock).mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/patients/{patient_id}/menus"
+          ? {
+              data: {
+                ...MENU,
+                date: yesterday,
+                totals: { ...TOTALS, kcal: 290 },
+                tolerance: {
+                  ratio_within_tolerance: false,
+                  kcal_within_tolerance: false,
+                  carbs_within_limit: true,
+                },
+                updated_by_name: "Мама",
+                updated_by_role: "parent",
+              },
+            }
+          : respond(path),
+      ),
+    );
+    renderPage({ date: yesterday });
+
+    expect(
+      await screen.findByText(
+        "Кетосоотношение дня выходит за допуски назначения",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(menuRu.totals.ratioPending)).toBeNull();
+  });
+
   it("отметка «съедено» уходит на сервер", async () => {
     const user = userEvent.setup();
     renderPage();

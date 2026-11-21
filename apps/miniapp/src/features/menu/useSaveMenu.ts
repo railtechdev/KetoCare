@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, errorCodeOf } from "../../lib/api";
 import { haptic } from "../../lib/telegram";
 import type { DayItem } from "./dayPlan";
-import { menuKey } from "./useMenu";
+import { menuKey, menuWeeksKey } from "./useMenu";
 
 /**
  * Сохранение состава дня (`PUT`, раздел 5.3 ТЗ).
@@ -54,6 +54,10 @@ export function useSaveMenu(patientId: string, day: string) {
       // прежнего плана.
       void queryClient.invalidateQueries({
         queryKey: ["patient", patientId, "overview"],
+      });
+      // Полоса дней и «Что купить» читают неделю — и они от состава.
+      void queryClient.invalidateQueries({
+        queryKey: menuWeeksKey(patientId),
       });
     },
     // 409 — день на сервере уже не тот, что на экране: кто-то в ту же минуту

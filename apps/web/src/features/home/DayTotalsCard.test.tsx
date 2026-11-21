@@ -139,3 +139,68 @@ describe("цели дня на главной", () => {
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * Р2 аудита Mini App: после первого блюда соотношение почти всегда мимо
+ * допуска, и тревога «расходятся с назначением» на 290 из 1 200 ккал говорила
+ * семье, что она ошиблась, когда она только начала собирать день.
+ */
+describe("день ещё собирается", () => {
+  const offRatio = {
+    ratio_within_tolerance: false,
+    kcal_within_tolerance: false,
+    carbs_within_limit: true,
+  };
+
+  it("норма не набрана — спокойная строка вместо тревоги", () => {
+    render(
+      <DayTotalsCard
+        day={day({
+          totals: { ...day().totals, kcal: 290 },
+          tolerance: offRatio,
+        })}
+        targetKcal={1200}
+        carbsLimit={20}
+      />,
+    );
+
+    expect(screen.getByText(homeRu.day.ratioPending)).toBeInTheDocument();
+    expect(
+      screen.queryByText(homeRu.day.offTolerance.title),
+    ).not.toBeInTheDocument();
+  });
+
+  it("углеводы сверх лимита — предупреждение сразу", () => {
+    render(
+      <DayTotalsCard
+        day={day({
+          totals: { ...day().totals, kcal: 290 },
+          tolerance: { ...offRatio, carbs_within_limit: false },
+        })}
+        targetKcal={1200}
+        carbsLimit={20}
+      />,
+    );
+
+    expect(screen.getByText(homeRu.day.offTolerance.carbs)).toBeInTheDocument();
+    expect(
+      screen.queryByText(homeRu.day.offTolerance.ratio),
+    ).not.toBeInTheDocument();
+  });
+
+  it("норма перебрана — расхождение соотношения снова предупреждение", () => {
+    render(
+      <DayTotalsCard
+        day={day({
+          totals: { ...day().totals, kcal: 1500 },
+          tolerance: offRatio,
+        })}
+        targetKcal={1200}
+        carbsLimit={20}
+      />,
+    );
+
+    expect(screen.getByText(homeRu.day.offTolerance.ratio)).toBeInTheDocument();
+    expect(screen.queryByText(homeRu.day.ratioPending)).not.toBeInTheDocument();
+  });
+});

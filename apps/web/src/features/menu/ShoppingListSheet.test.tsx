@@ -1,3 +1,4 @@
+import { shoppingList } from "@ketocare/ui";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +7,6 @@ import menuRu from "../../locales/ru/menu.json";
 import {
   SHOPPING_ROWS_PER_SHEET,
   ShoppingListSheet,
-  shoppingList,
   shoppingPages,
 } from "./ShoppingListSheet";
 import type { MenuWeek } from "./useWeek";
@@ -55,7 +55,10 @@ const WEEK = {
 } as unknown as MenuWeek;
 
 describe("shopping list (ADR-0092)", () => {
-  it("sums grams by product and counts the days", () => {
+  // Сложение по продукту — `shoppingList` кита, его тесты там же
+  // (`packages/ui/src/lib/shoppingList.test.ts`). Здесь — что лист его
+  // принимает в форме недели сервера.
+  it("takes the server week as is", () => {
     const { lines, seasonings } = shoppingList(WEEK);
 
     expect(lines).toEqual([

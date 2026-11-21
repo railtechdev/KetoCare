@@ -27,6 +27,7 @@ export function DayVerdictNote({
   tolerance,
   gap,
   otherDay = false,
+  open = false,
   kcal,
   targetKcal,
   kcalHint = true,
@@ -35,6 +36,11 @@ export function DayVerdictNote({
   tolerance: DayTolerance | null | undefined;
   gap: ToleranceGap | null | undefined;
   otherDay?: boolean;
+  /**
+   * День сегодняшний или будущий — его ещё собирают (`dayIsOpen` кита). Пока
+   * норма не набрана, о соотношении — спокойная строка (Р2 аудита Mini App).
+   */
+  open?: boolean;
   kcal: number;
   targetKcal: number | null;
   /**
@@ -61,13 +67,24 @@ export function DayVerdictNote({
     );
   }
 
-  const verdict = dayVerdict(tolerance, gap ?? null);
+  const verdict = dayVerdict(tolerance, gap ?? null, {
+    open,
+    kcal,
+    targetKcal,
+  });
 
   return (
     <div className="flex flex-col gap-field">
       {verdict.unavailable ? (
         <p className="m-0 text-sm text-muted-foreground">
           {t(`verdict.${toleranceGapKey(verdict.unavailableReason)}`)}
+        </p>
+      ) : verdict.ratioPending ? (
+        // День ещё собирается (Р2): тревога «измените состав» на первом блюде
+        // говорила семье, что она ошиблась, когда она только начала. Так же и
+        // у дня специалиста — его семья тем более не перестраивает.
+        <p role="status" className="m-0 text-sm text-muted-foreground">
+          {t("verdict.ratioPending")}
         </p>
       ) : verdict.ratioOffTolerance ? (
         composedBy !== null ? (

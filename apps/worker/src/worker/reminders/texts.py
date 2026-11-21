@@ -46,7 +46,8 @@ RU: Final[dict[str, str]] = {
     # --- новое назначение (раздел 5.4 ТЗ) — без чисел (раздел 7.5)
     "prescription_changed": (
         "Врач обновил назначение. Откройте приложение — кнопка «Приложение» слева "
-        "от поля ввода — и заново составьте меню на сегодня и завтра под новые цели."
+        "от поля ввода — и заново составьте под новые цели меню на сегодня и на "
+        "дни вперёд, где оно уже составлено."
     ),
     "prescription_starts": (
         "Врач записал новое назначение — оно начнёт действовать {when}. До этого "
@@ -119,8 +120,8 @@ UZ: Final[dict[str, str]] = {
     "btn_open_family": "📱 «Yaqinlar»ni ochish",
     "prescription_changed": (
         "Shifokor tayinlovni yangiladi. Ilovani oching — yozish maydonining chap "
-        "tomonidagi «Ilova» tugmasi — va bugungi hamda ertangi menyuni "
-        "yangi maqsadlarga moslab qaytadan tuzing."
+        "tomonidagi «Ilova» tugmasi — va bugungi hamda oldindan tuzib qo‘yilgan "
+        "keyingi kunlar menyusini yangi maqsadlarga moslab qaytadan tuzing."
     ),
     "prescription_starts": (
         "Shifokor yangi tayinlov yozdi — u {when}dan amal qila boshlaydi. Shu kungacha "

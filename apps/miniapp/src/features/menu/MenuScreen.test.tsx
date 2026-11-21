@@ -697,7 +697,7 @@ describe("сборка дня в Mini App", () => {
       await screen.findByRole("checkbox", { name: /Омлет/ }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("radio", { name: "Завтра" }));
+    await user.click(screen.getByRole("button", { name: /^Завтра/ }));
 
     expect(await screen.findByText("Омлет на сливках")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).toBeNull();
@@ -719,7 +719,7 @@ describe("сборка дня в Mini App", () => {
     renderScreen();
     await screen.findByText("Омлет на сливках");
 
-    await user.click(screen.getByRole("radio", { name: "Завтра" }));
+    await user.click(screen.getByRole("button", { name: /^Завтра/ }));
 
     await waitFor(() => {
       const dates = (api.GET as Mock).mock.calls
@@ -974,7 +974,7 @@ describe("итоги дня рядом с целями назначения", ()
     renderScreen();
     await screen.findByText("1 200 из 1 200 ккал");
 
-    await user.click(screen.getByRole("radio", { name: "Завтра" }));
+    await user.click(screen.getByRole("button", { name: /^Завтра/ }));
 
     // С завтрашнего дня действует новая версия — сверять завтра с сегодняшней
     // значило бы собирать день не по той норме.
@@ -1014,7 +1014,7 @@ describe("вчерашний день", () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(await screen.findByRole("radio", { name: "Вчера" }));
+    await user.click(await screen.findByRole("button", { name: /^Вчера/ }));
     await user.click(
       await screen.findByRole("checkbox", { name: /Вчерашний омлет/ }),
     );
@@ -1029,7 +1029,10 @@ describe("вчерашний день", () => {
       );
     });
     expect(menuDates()).toContain(dayAt(-1));
-    expect(screen.getByRole("radio", { name: "Вчера" })).toBeChecked();
+    expect(screen.getByRole("button", { name: /^Вчера/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 });
 
@@ -1094,7 +1097,7 @@ describe("«Как вчера»", () => {
     renderScreen();
 
     await screen.findByText("Суфле");
-    await user.click(screen.getByRole("radio", { name: "Завтра" }));
+    await user.click(screen.getByRole("button", { name: /^Завтра/ }));
     await user.click(
       await screen.findByRole("button", { name: "Как сегодня" }),
     );
@@ -1305,11 +1308,79 @@ describe("соответствие дня назначению", () => {
     renderScreen();
     await screen.findByText("Кетосоотношение дня соответствует назначению.");
 
-    await user.click(screen.getByRole("radio", { name: "Завтра" }));
+    await user.click(screen.getByRole("button", { name: /^Завтра/ }));
 
     expect(
       await screen.findByText("Итоги дня расходятся с назначением"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("несобранный день без назначения дня (Р2)", () => {
+  // Меню уже пришло, а назначение дня (`…/prescriptions/on`) — ещё нет или
+  // отказало. «День ещё собирается» решается по цели калорийности; без неё
+  // правило кита не срабатывало, и семья видела жёлтую плашку — мельком, а при
+  // отказе навсегда.
+  const offDay = () =>
+    menu({
+      totals: {
+        kcal: 290,
+        fat: 25,
+        protein: 6,
+        carbs: 4,
+        fiber: 0,
+        ratio: 2.5,
+      },
+      tolerance: {
+        ratio_within_tolerance: false,
+        kcal_within_tolerance: false,
+        carbs_within_limit: true,
+      },
+    });
+
+  function respondWithDayPrescription(
+    answer: () => Promise<unknown>,
+    menuData: unknown,
+  ) {
+    (api.GET as Mock).mockImplementation(async (path: string) => {
+      if (path.endsWith("/prescriptions/on")) return answer();
+      if (path.includes("/overview")) return prescriptionOr(path);
+      return respondOther(path, { menu: menuData });
+    });
+  }
+
+  it("назначение в пути — цель берётся из меню, тревоги нет", async () => {
+    respondWithDayPrescription(() => new Promise(() => {}), {
+      ...offDay(),
+      prescription: overview().prescription,
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(
+        "День ещё собирается: кетосоотношение сверим, когда наберётся суточная норма калорий.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Итоги дня расходятся с назначением"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("назначение не пришло и цели нет — вердикт молчит, а не тревожит", async () => {
+    respondWithDayPrescription(
+      () => Promise.resolve({ error: { message: "boom" }, data: undefined }),
+      offDay(),
+    );
+    renderScreen();
+
+    expect(
+      await screen.findByText(
+        "Соответствие назначению сейчас не показано — показаны сами показатели дня.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Итоги дня расходятся с назначением"),
+    ).not.toBeInTheDocument();
   });
 });
 

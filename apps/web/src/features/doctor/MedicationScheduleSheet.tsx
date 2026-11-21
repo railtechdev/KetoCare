@@ -1,3 +1,7 @@
+import {
+  medicationTerm,
+  scheduledMedications as scheduledFromKit,
+} from "@ketocare/ui";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
@@ -24,37 +28,41 @@ const INTAKES_PER_DAY: Record<MedicationFrequency, number> = {
   other: 1,
 };
 
-/** Препараты, которые ребёнок принимает на дату листа или начнёт позже. */
+/**
+ * Препараты, которые ребёнок принимает на дату листа или начнёт позже, — правило
+ * кита: тот же список показывает семье «Схема препаратов» в Mini App.
+ */
 export function scheduledMedications(
   items: readonly Medication[],
   today: string,
 ): Medication[] {
-  return items
-    .filter((item) => item.stopped_at === null || item.stopped_at >= today)
-    .sort((a, b) => a.drug_name.localeCompare(b.drug_name, "ru"));
+  return scheduledFromKit(items, today);
 }
 
 /**
- * Срок приёма словами. Дата окончания печатается всегда, когда она задана:
- * без неё лист с препаратом, который врач уже отменяет, читался бы как
- * «принимать дальше».
+ * Срок приёма словами. Какие слова и с какими датами — решает кит
+ * (`medicationTerm`), одинаково для листа и экрана Mini App; дата окончания
+ * печатается всегда, когда она задана.
  */
 function termOf(item: Medication, today: string, t: TFunction): string {
-  const starts = item.started_at > today;
-  const until = item.stopped_at;
-  if (until !== null && until !== undefined) {
-    return starts
-      ? t("doctor:medications.sheet.startsUntil", {
-          from: formatIsoDate(item.started_at),
-          to: formatIsoDate(until),
-        })
-      : t("doctor:medications.sheet.until", { date: formatIsoDate(until) });
+  const term = medicationTerm(item, today);
+  switch (term.key) {
+    case "startsUntil":
+      return t("doctor:medications.sheet.startsUntil", {
+        from: formatIsoDate(term.from),
+        to: formatIsoDate(term.to),
+      });
+    case "until":
+      return t("doctor:medications.sheet.until", {
+        date: formatIsoDate(term.date),
+      });
+    case "startsOn":
+      return t("doctor:medications.sheet.startsOn", {
+        date: formatIsoDate(term.date),
+      });
+    case "ongoing":
+      return t("doctor:medications.sheet.ongoing");
   }
-  return starts
-    ? t("doctor:medications.sheet.startsOn", {
-        date: formatIsoDate(item.started_at),
-      })
-    : t("doctor:medications.sheet.ongoing");
 }
 
 /**

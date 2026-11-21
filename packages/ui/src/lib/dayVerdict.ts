@@ -38,6 +38,13 @@ export interface DayVerdict {
    * «соответствует назначению» тогда нельзя.
    */
   carbsUnknown: boolean;
+  /**
+   * Кетосоотношение вышло за допуск, но день ещё собирается: он сегодняшний
+   * или будущий, и калорийность ниже суточной нормы (Р2 аудита Mini App
+   * 21.11.2026). Вместо предупреждения — спокойная строка «день ещё
+   * собирается». Взаимоисключающе с `ratioOffTolerance`.
+   */
+  ratioPending: boolean;
   /** Набранная калорийность не дотягивает до суточной нормы назначения. */
   kcalBelowTarget: boolean;
   /** Вердикта нет — сравнивать не с чем либо не с сегодняшним правилом. */
@@ -124,13 +131,41 @@ export function toleranceGapKey(reason: ToleranceGap | null): string {
     : TOLERANCE_GAP_KEY[reason];
 }
 
+/**
+ * Где день сейчас: открыт ли он для сборки и сколько в нём набрано.
+ *
+ * Нужно ровно одному решению — молчать ли о кетосоотношении, пока день ещё
+ * собирается. Без этого описания (экран его не передал) вердикт прежний.
+ */
+export interface DayProgress {
+  /** День сегодняшний или будущий (`dayIsOpen`): его ещё добирают. */
+  open: boolean;
+  /** Набранная калорийность дня — число сервера (итоги дня). */
+  kcal: number;
+  /** Суточная норма назначения ЭТОГО дня; `null` — неизвестна. */
+  targetKcal: number | null;
+}
+
+/**
+ * День ещё можно добрать: сегодняшний или будущий. Даты — `YYYY-MM-DD` в поясе
+ * семьи, сравниваются строкой.
+ *
+ * Вчерашний день закрыт: его не собирают, а оценивают — и вердикт о нём
+ * говорится как есть (вопрос 9: «предупреждать, когда день завершён»).
+ */
+export function dayIsOpen(day: string, today: string): boolean {
+  return day >= today;
+}
+
 export function dayVerdict(
   tolerance: DayTolerance | null | undefined,
   gap?: ToleranceGap | null,
+  progress?: DayProgress,
 ): DayVerdict {
   if (tolerance === null || tolerance === undefined) {
     return {
       ratioOffTolerance: false,
+      ratioPending: false,
       ratioUnknown: false,
       carbsOverLimit: false,
       carbsUnknown: false,
@@ -140,10 +175,27 @@ export function dayVerdict(
     };
   }
 
+  const ratioOff = tolerance.ratio_within_tolerance === false;
+  // **День ещё собирается** (Р2 аудита Mini App 21.11.2026). После первого
+  // блюда в пустом дне соотношение почти всегда мимо допуска, и жёлтая плашка
+  // «измените состав» на 290 из 1 200 ккал говорила семье, что она ошиблась,
+  // когда она только начала. Пока день открыт и калорийность НИЖЕ нормы (не
+  // «вне допуска»: перебор нормы — уже не сборка), о соотношении говорится
+  // спокойно. Сервер и его числа не меняются — меняется только то, что
+  // показывать предупреждением. Лимит углеводов сюда не входит: превышение
+  // предела верно в любой момент дня.
+  const collecting =
+    progress !== undefined &&
+    progress.open &&
+    progress.targetKcal !== null &&
+    !tolerance.kcal_within_tolerance &&
+    progress.kcal < progress.targetKcal;
+
   return {
     // Только явное «не соответствует»: `null` означает, что соотношения у дня
     // нет вовсе (ADR-0037), и предупреждать не о чем.
-    ratioOffTolerance: tolerance.ratio_within_tolerance === false,
+    ratioOffTolerance: ratioOff && !collecting,
+    ratioPending: ratioOff && collecting,
     // …но и хвалить не за что. Без этого признака экран падал в утвердительную
     // ветку и говорил «соответствует назначению» про день, о котором ядро
     // молчит: убрать ложную тревогу и поставить на её место ложное спокойствие

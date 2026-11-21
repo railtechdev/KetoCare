@@ -369,7 +369,7 @@ describe("сохранённое блюдо — в план дня", () => {
     await saveDish(user);
 
     const days = await screen.findByRole("group", { name: "День" });
-    await user.click(within(days).getByRole("radio", { name: "Завтра" }));
+    await user.click(within(days).getByRole("button", { name: /^Завтра/ }));
     await user.click(
       await screen.findByRole("button", { name: "Добавить в меню" }),
     );
@@ -387,6 +387,27 @@ describe("сохранённое блюдо — в план дня", () => {
         },
       ],
     });
+  });
+
+  it("дни — сегодня и пять вперёд, как у «Что купить» (Р3 аудита Mini App)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await saveDish(user);
+
+    const days = await screen.findByRole("group", { name: "День" });
+    const buttons = within(days).getAllByRole("button");
+    expect(buttons).toHaveLength(6);
+    // Вчерашний день отсюда не собирают.
+    expect(within(days).queryByRole("button", { name: /^Вчера/ })).toBeNull();
+
+    await user.click(buttons[4]!);
+    await user.click(
+      await screen.findByRole("button", { name: "Добавить в меню" }),
+    );
+
+    await waitFor(() => expect(api.PUT).toHaveBeenCalledTimes(1));
+    const [, init] = (api.PUT as Mock).mock.calls[0] ?? [];
+    expect(init.body.date).toBe(dayAt(4));
   });
 
   it("пока план дня не загружен, добавить нельзя", async () => {

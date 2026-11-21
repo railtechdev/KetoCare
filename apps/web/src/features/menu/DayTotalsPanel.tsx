@@ -4,6 +4,7 @@ import {
   RatioBadge,
   Section,
   WarningBanner,
+  dayIsOpen,
   dayVerdict,
   formatKcal,
   toleranceGapKey,
@@ -12,6 +13,7 @@ import {
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
+import { todayIso } from "./dates";
 import { RemainingPicks } from "./RemainingPicks";
 
 import { DayTargetBars } from "./DayTargetBars";
@@ -66,14 +68,25 @@ export function DayTotalsPanel({
     );
   }
 
-  const verdict = dayVerdict(tolerance, toleranceGap);
+  // Сегодня и впереди день ещё собирают: пока норма не набрана, о
+  // соотношении — спокойная строка, а не тревога (Р2 аудита Mini App, правило
+  // кита одно на кабинет и Mini App).
+  const verdict = dayVerdict(tolerance, toleranceGap, {
+    open: dayIsOpen(date, todayIso()),
+    kcal: totals.kcal,
+    targetKcal: targets?.kcalPerDay ?? null,
+  });
 
   return (
     <Section title={t("totals.title")}>
       <div className="flex flex-wrap items-center gap-section">
         <RatioBadge
           ratio={totals.ratio}
-          withinTolerance={tolerance?.ratio_within_tolerance ?? undefined}
+          withinTolerance={
+            verdict.ratioPending
+              ? undefined
+              : (tolerance?.ratio_within_tolerance ?? undefined)
+          }
         />
         <span className="tabular-nums">
           {targets === null
@@ -113,6 +126,12 @@ export function DayTotalsPanel({
             remainingKcal={targets.kcalPerDay - totals.kcal}
           />
         )}
+
+      {verdict.ratioPending && (
+        <p role="status" className="m-0 text-sm text-muted-foreground">
+          {t("totals.ratioPending")}
+        </p>
+      )}
 
       {verdict.ratioOffTolerance &&
         (composedBy !== null ? (

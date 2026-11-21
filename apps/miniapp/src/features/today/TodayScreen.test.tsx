@@ -92,12 +92,21 @@ function serve({
   overview,
   menu = null,
   medications = [],
+  familyPhone = null,
 }: {
   overview: unknown;
   menu?: unknown;
   medications?: unknown[];
+  /** Телефон для семьи в бланке клиники; `null` — не задан. */
+  familyPhone?: string | null;
 }) {
   (api.GET as Mock).mockImplementation(async (path: string) => {
+    if (path === "/api/v1/letterhead") {
+      return {
+        data: { text: { family_phone: familyPhone } },
+        response: { status: 200 },
+      };
+    }
     if (path.endsWith("/overview")) {
       return { data: overview, response: { status: 200 } };
     }
@@ -571,5 +580,122 @@ describe("«Сегодня» в Mini App", () => {
     );
     expect(screen.queryByText("Лекарства сегодня")).toBeNull();
     expect(screen.queryByText("Лекарства не загрузились")).toBeNull();
+  });
+});
+
+/**
+ * Р4 аудита Mini App: у семьи из Telegram кабинета нет — дату визита, телефон
+ * клиники и схему препаратов ей больше негде взять.
+ */
+describe("семья без кабинета (Р4)", () => {
+  const MEDICATION = {
+    id: "m1",
+    drug_name: "Вальпроат",
+    dose: "250 мг",
+    frequency_code: "twice_daily",
+    frequency: "утром и на ночь",
+    started_at: "2026-01-01",
+    stopped_at: null,
+  };
+
+  it("ближайший визит к врачу — строкой, без назначения точки", async () => {
+    const planned = new Date();
+    planned.setDate(planned.getDate() + 10);
+    const iso = `${planned.getFullYear()}-${String(planned.getMonth() + 1).padStart(2, "0")}-${String(planned.getDate()).padStart(2, "0")}`;
+    serve({
+      overview: {
+        ...BASE,
+        next_control: { planned_on: iso, overdue: false, purpose: null },
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(/^Ближайший визит к врачу: \d{1,2} \S+/),
+    ).toBeInTheDocument();
+  });
+
+  it("пропущенный визит говорится как есть и с тем, что делать", async () => {
+    serve({
+      overview: {
+        ...BASE,
+        next_control: {
+          planned_on: "2026-01-05",
+          overdue: true,
+          purpose: null,
+        },
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(/Визит к врачу был назначен на 5 января/),
+    ).toBeInTheDocument();
+  });
+
+  it("после завершения терапии визит не показывается", async () => {
+    serve({
+      overview: {
+        ...BASE,
+        therapy_ended_on: "2026-01-01",
+        next_control: {
+          planned_on: "2027-01-05",
+          overdue: false,
+          purpose: null,
+        },
+      },
+    });
+    renderScreen();
+
+    await screen.findByText("Терапия завершена");
+    expect(screen.queryByText(/визит к врачу/i)).not.toBeInTheDocument();
+  });
+
+  it("телефон клиники — внизу, ссылкой для звонка", async () => {
+    serve({ overview: BASE, familyPhone: "+998 (71) 123-45-67" });
+    renderScreen();
+
+    expect(
+      await screen.findByRole("heading", { name: "Связь с клиникой" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "+998 (71) 123-45-67" }),
+    ).toHaveAttribute("href", "tel:+998711234567");
+  });
+
+  it("телефон не задан — блока нет", async () => {
+    serve({ overview: BASE });
+    renderScreen();
+
+    await screen.findByRole("heading", { name: "Сегодня", level: 1 });
+    await waitFor(() =>
+      expect(
+        (api.GET as Mock).mock.calls.some(
+          ([path]) => path === "/api/v1/letterhead",
+        ),
+      ).toBe(true),
+    );
+    expect(screen.queryByText("Связь с клиникой")).not.toBeInTheDocument();
+  });
+
+  it("«Вся схема» открывает схему препаратов на чтение", async () => {
+    serve({ overview: BASE, medications: [MEDICATION] });
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Вся схема" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Схема препаратов" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Вальпроат")).toBeInTheDocument();
+    expect(screen.getByText("принимается")).toBeInTheDocument();
+    // Править нечего: ни «Дали», ни «Пропустили» на схеме нет.
+    expect(screen.queryByRole("button", { name: /Дали/ })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Сегодня" }));
+    expect(
+      await screen.findByRole("heading", { name: "Сегодня", level: 1 }),
+    ).toBeInTheDocument();
   });
 });
