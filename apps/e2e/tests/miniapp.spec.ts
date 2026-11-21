@@ -148,16 +148,17 @@ test("семья из Telegram собирает вчерашний день и �
  * нет. Для этого сценария разницы нет — обе ведут в одно меню.
  */
 /**
- * Day switch is the kit `SegmentedControl`: the radio is visually hidden and its
- * label takes the click, so the test presses the label, as a person does, and
- * then checks the radio state.
+ * Day switch is the seven-day strip (audit stage 4, Р3): toggle buttons with
+ * `aria-pressed`. A day that already has a menu also carries a hidden «меню
+ * составлено» in its name, so the name is matched by its start.
  */
 async function pickDay(page: Page, name: string): Promise<void> {
-  await page
-    .locator("label")
-    .filter({ hasText: new RegExp(`^${name}$`) })
-    .click();
-  await expect(page.getByRole("radio", { name })).toBeChecked();
+  const day = page
+    .locator('[data-tab="today"]')
+    .getByRole("button", { name: new RegExp(`^${name}`) })
+    .first();
+  await day.click();
+  await expect(day).toHaveAttribute("aria-pressed", "true");
 }
 
 async function openYesterdayMenu(page: Page): Promise<void> {
