@@ -133,6 +133,7 @@ export function HomePage({ patientId }: { patientId: string }) {
                     carbsLimit={data.prescription?.carbs_limit_g ?? null}
                     targetRatio={data.prescription?.ratio ?? null}
                     proteinTarget={data.prescription?.protein_g ?? null}
+                    mealsPerDay={data.prescription?.meals_per_day ?? null}
                   />
                   <LatestReadings
                     ketone={data.last_ketone ?? null}

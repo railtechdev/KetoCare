@@ -112,6 +112,7 @@ export function MenuScreen({
           kcalPerDay: targetsSource.kcal_per_day,
           carbsLimitG: targetsSource.carbs_limit_g,
           proteinG: targetsSource.protein_g,
+          mealsPerDay: targetsSource.meals_per_day,
         };
 
   // «Назад» Telegram ведёт на «Сегодня». Панель сборки и карточка рецепта

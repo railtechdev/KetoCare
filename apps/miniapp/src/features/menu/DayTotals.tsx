@@ -2,13 +2,16 @@ import {
   RatioBadge,
   Section,
   TargetBar,
+  dayKcalHint,
   dayVerdict,
   formatGrams,
   formatKcal,
+  type DayKcalHint,
   type DayTolerance,
   type ToleranceGap,
 } from "@ketocare/ui";
 import type { components } from "@ketocare/api-client";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { DayVerdictNote } from "./DayVerdictNote";
@@ -18,6 +21,11 @@ export interface DayTargets {
   carbsLimitG: number;
   /** Белок назначения на сутки — нижняя граница («не меньше») */
   proteinG: number;
+  /**
+   * Приёмов в дне по назначению: какую разницу с суточной нормой считать
+   * округлением (`dayKcalHint` кита). Неизвестно — одна килокалория.
+   */
+  mealsPerDay?: number | null;
 }
 
 /** Вердикт сервера за показанный день — или «день не сегодняшний». */
@@ -105,15 +113,10 @@ export function DayTotals({
               value: formatKcal(totals.kcal),
               target: formatKcal(targets.kcalPerDay),
             })}
-            hint={
-              totals.kcal <= targets.kcalPerDay
-                ? t("menu.targets.kcalLeft", {
-                    value: formatKcal(targets.kcalPerDay - totals.kcal),
-                  })
-                : t("menu.targets.kcalOver", {
-                    value: formatKcal(totals.kcal - targets.kcalPerDay),
-                  })
-            }
+            hint={kcalHintText(
+              dayKcalHint(totals.kcal, targets.kcalPerDay, targets.mealsPerDay),
+              t,
+            )}
           />
           <TargetBar
             kind="limit"
@@ -174,4 +177,15 @@ export function DayTotals({
       />
     </Section>
   );
+}
+
+/**
+ * Слова под полосой калорийности — по правилу кита, тому же, что в кабинете:
+ * разница в пределах округления читается «суточная норма набрана».
+ */
+function kcalHintText(hint: DayKcalHint, t: TFunction): string {
+  if (hint.kind === "reached") return t("menu.targets.kcalReached");
+  return hint.kind === "left"
+    ? t("menu.targets.kcalLeft", { value: formatKcal(hint.kcal) })
+    : t("menu.targets.kcalOver", { value: formatKcal(hint.kcal) });
 }

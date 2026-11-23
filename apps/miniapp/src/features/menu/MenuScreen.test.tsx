@@ -1183,7 +1183,9 @@ describe("соответствие дня назначению", () => {
   }
 
   it("в допуске — так и сказано, а недобор калорий не тревога", async () => {
+    // 850 из 1 200: недобор настоящий, а не округление.
     withVerdict({
+      totals: { ...totals, kcal: 850 },
       tolerance: { ratio_within_tolerance: true, kcal_within_tolerance: false },
     });
     renderScreen();
@@ -1200,6 +1202,23 @@ describe("соответствие дня назначению", () => {
     expect(
       screen.queryByText("Итоги дня расходятся с назначением"),
     ).not.toBeInTheDocument();
+  });
+
+  it("разница в одну килокалорию — округление: «суточная норма набрана»", async () => {
+    // Вопрос клиники 23.11.2026: каждый приём в цели, а день «±1 ккал».
+    withVerdict({
+      totals: { ...totals, kcal: 1201 },
+      tolerance: { ratio_within_tolerance: true, kcal_within_tolerance: true },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText("Суточная норма набрана"),
+    ).toBeInTheDocument();
+    // Число на полосе — как пришло с сервера, слова его не подменяют.
+    expect(screen.getByText("1 201 из 1 200 ккал")).toBeInTheDocument();
+    expect(screen.queryByText(/сверх нормы/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/добавьте ещё/)).not.toBeInTheDocument();
   });
 
   it("соотношение вне допуска — предупреждение", async () => {

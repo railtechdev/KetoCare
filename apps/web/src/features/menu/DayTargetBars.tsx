@@ -1,4 +1,4 @@
-import { TargetBar, formatGrams, formatKcal } from "@ketocare/ui";
+import { TargetBar, dayKcalHint, formatGrams, formatKcal } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
 
 interface Props {
@@ -12,6 +12,12 @@ interface Props {
   /** Набрано белка за день и белок назначения — нижняя граница, «не меньше» */
   protein?: number;
   proteinMin?: number;
+  /**
+   * Приёмов в дне по назначению — от него зависит, какую разницу с суточной
+   * нормой считать округлением (`dayKcalHint` кита). Неизвестно — прощается
+   * одна килокалория.
+   */
+  mealsPerDay?: number | null;
 }
 
 /**
@@ -34,10 +40,13 @@ export function DayTargetBars({
   carbsLimit,
   protein,
   proteinMin,
+  mealsPerDay = null,
 }: Props) {
   const { t } = useTranslation("menu");
 
-  const kcalLeft = kcalTarget - kcal;
+  // Слова под полосой — из кита, одни на кабинет и Mini App: день, отстоящий
+  // от нормы на округление, читается «набрана», а не «добавьте ещё 1 ккал».
+  const kcalHint = dayKcalHint(kcal, kcalTarget, mealsPerDay);
   const carbsLeft = carbsLimit - carbs;
 
   return (
@@ -52,9 +61,11 @@ export function DayTargetBars({
           target: formatKcal(kcalTarget),
         })}
         hint={
-          kcalLeft >= 0
-            ? t("totals.kcalLeft", { value: formatKcal(kcalLeft) })
-            : t("totals.kcalOver", { value: formatKcal(-kcalLeft) })
+          kcalHint.kind === "reached"
+            ? t("totals.kcalReached")
+            : kcalHint.kind === "left"
+              ? t("totals.kcalLeft", { value: formatKcal(kcalHint.kcal) })
+              : t("totals.kcalOver", { value: formatKcal(kcalHint.kcal) })
         }
       />
       <TargetBar
