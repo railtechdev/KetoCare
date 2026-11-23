@@ -154,7 +154,8 @@
       "proteinLabel": "Белок, не меньше",
       "proteinOfMin": "{{value}} из {{min}} г",
       "proteinLeft": "до нормы назначения ещё {{value}} г",
-      "proteinReached": "норма назначения набрана"
+      "proteinReached": "норма назначения набрана",
+      "kcalReached": "Суточная норма набрана"
     },
     "tomorrowNoEaten": "Отметить «съедено» можно в тот день, когда ребёнок ел.",
     "backToToday": "Сегодня",

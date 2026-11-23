@@ -15,6 +15,8 @@ export { useFrozenAttempt } from "./lib/useFrozenAttempt";
 export type { FrozenAttempt } from "./lib/useFrozenAttempt";
 export { RETRYABLE_ERROR_CODES, canRetry } from "./lib/retryable";
 export { mealTargetsFrom } from "./lib/mealTargets";
+export { dayKcalHint, kcalRoundingSlack } from "./lib/dayKcalHint";
+export type { DayKcalHint } from "./lib/dayKcalHint";
 export {
   macroSplitAdvice,
   macroSplitLimit,

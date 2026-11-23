@@ -153,7 +153,8 @@
       "proteinLabel": "Oqsil, kamida",
       "proteinOfMin": "{{value}} / {{min}} g",
       "proteinLeft": "tayinlangan me’yorgacha yana {{value}} g",
-      "proteinReached": "tayinlangan me’yor to‘ldi"
+      "proteinReached": "tayinlangan me’yor to‘ldi",
+      "kcalReached": "Sutkalik me’yor to‘ldi"
     },
     "tomorrowNoEaten": "«Yedi» belgisini bola ovqatlangan kuni qo‘yish mumkin.",
     "backToToday": "Bugun",

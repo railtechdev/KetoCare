@@ -23,6 +23,8 @@ interface Props {
   targetRatio?: number | null;
   /** Целевой белок назначения — передаётся в MacroBar */
   proteinTarget?: number | null;
+  /** Приёмов в дне по назначению — для слов под полосой калорийности */
+  mealsPerDay?: number | null;
 }
 
 /**
@@ -38,6 +40,7 @@ export function DayTotalsCard({
   carbsLimit,
   targetRatio,
   proteinTarget,
+  mealsPerDay = null,
 }: Props) {
   const { t } = useTranslation("home");
 
@@ -114,6 +117,7 @@ export function DayTotalsCard({
             carbsLimit={carbsLimit}
             protein={totals.protein}
             proteinMin={proteinTarget ?? undefined}
+            mealsPerDay={mealsPerDay}
           />
         )}
 
