@@ -176,7 +176,9 @@
     "addToMeal": "Taom qo‘shish",
     "addToMealAria": "{{index}}-ovqatlanishga taom qo‘shish",
     "howToCook": "Qanday tayyorlanadi",
-    "macroLine": "yog‘lar {{fat}} g · oqsillar {{protein}} g · uglevodlar {{carbs}} g"
+    "macroLine": "yog‘lar {{fat}} g · oqsillar {{protein}} g · uglevodlar {{carbs}} g",
+    "itemKcal": "{{kcal}} kkal",
+    "itemKcalRatio": "{{kcal}} kkal · {{ratio}}"
   },
   "shopping": {
     "open": "Nima sotib olish kerak",

@@ -141,8 +141,10 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
                         "has_snapshot",
                         "changed_since_saved",
                         "instructions",
+                        "computed",
                     }
                 ),
+                computed=_item_computed(item),
                 title=None if item.snapshot is None else item.snapshot.get("title"),
                 ingredients=_snapshot_ingredients(item),
                 has_snapshot=item.snapshot is not None,
@@ -162,6 +164,18 @@ async def to_read(session: AsyncSession, menu: Menu, items: Sequence[MenuItem]) 
         updated_by_name=None if composer is None else composer.full_name,
         updated_by_role=None if composer is None else composer.role,
     )
+
+
+def _item_computed(item: MenuItem) -> DishComputed | None:
+    """Показатели одной позиции — порция по снимку, расчётом ядра, как итоги дня."""
+
+    if item.snapshot is None:
+        return None
+    if not any(
+        composition_service.snapshot_row_counts(row) for row in item.snapshot["ingredients"]
+    ):
+        return None
+    return DishComputed.model_validate(composition_service.totals_of(day_dish([item])))
 
 
 def _snapshot_ingredients(item: MenuItem) -> list[MenuItemIngredient]:

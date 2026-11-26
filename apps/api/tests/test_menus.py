@@ -185,6 +185,45 @@ class TestUpsert:
         # Половина порции: 25 г масла вместо 50 г
         assert response.json()["totals"]["fat"] == pytest.approx(20.275, abs=0.01)
 
+    async def test_each_item_carries_its_own_numbers(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Калорийность позиции — её порции, тем же расчётом, что итоги дня.
+
+        Потребитель — Mini App (строка блюда в меню) и печатная карточка блюда
+        в кабинете: семья сверяет блюдо с листом диетолога, и сверить было
+        нечем (аудит 26.11.2026, 1.13).
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        one = await _recipe(session, dietitian, ingredients=[(butter, 50)])
+        two = await _recipe(session, dietitian, ingredients=[(butter, 200)], servings=4)
+
+        response = await client.put(
+            _url(patient),
+            json={
+                "date": MENU_DATE,
+                "items": [
+                    {"meal_index": 1, "recipe_id": str(one.id), "portion_factor": 0.5},
+                    {"meal_index": 2, "recipe_id": str(two.id)},
+                ],
+            },
+            headers=auth_headers(parent),
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        first, second = body["items"]
+        # 25 г масла и 50 г масла — порция, а не весь рецепт.
+        assert first["computed"]["fat"] == pytest.approx(20.275, abs=0.01)
+        assert second["computed"]["fat"] == pytest.approx(40.55, abs=0.01)
+        assert set(first["computed"]) >= {"kcal", "fat", "protein", "carbs", "ratio"}
+        assert first["computed"]["kcal"] + second["computed"]["kcal"] == pytest.approx(
+            body["totals"]["kcal"], abs=1
+        )
+
     async def test_one_portion_of_a_four_serving_recipe_is_a_quarter(
         self, client, session, make_user, make_patient, auth_headers
     ):

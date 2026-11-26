@@ -1,4 +1,4 @@
-import { Checkbox, WarningBanner } from "@ketocare/ui";
+import { Checkbox, WarningBanner, formatKcal, formatRatio } from "@ketocare/ui";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -92,9 +92,22 @@ export function MealItem({
  */
 function DishTitle({ item }: { item: MenuItem }) {
   const { t } = useTranslation();
+  const computed = item.computed ?? null;
   return (
     <span className="min-w-0 break-words">
       {item.title ?? t("menu.unknownDish")}
+      {/* Калорийность порции — сверить с листом диетолога (аудит 26.11.2026,
+          1.13). Считает сервер тем же расчётом, что итоги дня. */}
+      {computed !== null && (
+        <span className="block text-sm text-muted-foreground tabular-nums">
+          {computed.ratio === null
+            ? t("menu.itemKcal", { kcal: formatKcal(computed.kcal) })
+            : t("menu.itemKcalRatio", {
+                kcal: formatKcal(computed.kcal),
+                ratio: formatRatio(computed.ratio),
+              })}
+        </span>
+      )}
     </span>
   );
 }
