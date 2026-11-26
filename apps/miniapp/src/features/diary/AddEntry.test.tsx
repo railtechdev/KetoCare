@@ -144,6 +144,28 @@ describe("«Добавить запись» в Mini App", () => {
     }
   });
 
+  it("кетоны: способ — последнего замера; замеров не было — «Выберите» (2.9)", async () => {
+    const base = fakeGet();
+    (api.GET as Mock).mockImplementation((path: string) =>
+      path.endsWith("/overview")
+        ? Promise.resolve({ data: { last_ketone: null } })
+        : base(path),
+    );
+    const user = userEvent.setup();
+    renderAdd();
+
+    await choose(user, "Кетоны");
+    const method = await screen.findByLabelText("Как мерили");
+    await waitFor(() => expect(method).toHaveValue(""));
+    await user.type(screen.getByLabelText("Кетоны, ммоль/л"), "1.8");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(
+      await screen.findByText("Выберите, как мерили."),
+    ).toBeInTheDocument();
+    expect(api.POST).not.toHaveBeenCalled();
+  });
+
   it("кетоны: POST с ключом попытки, тост и закрытие", async () => {
     const user = userEvent.setup();
     const { onClose } = renderAdd();

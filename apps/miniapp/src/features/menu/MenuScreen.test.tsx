@@ -1284,10 +1284,10 @@ describe("соответствие дня назначению", () => {
     // вопрос 9), и одна: полоса калорийности её уже печатает, строка вердикта
     // не повторяет.
     expect(
-      screen.getAllByText(/Чтобы набрать суточную норму, добавьте ещё/),
+      screen.getAllByText(/В меню не хватает .* ккал до суточной нормы/),
     ).toHaveLength(1);
     expect(
-      screen.queryByText("Итоги дня расходятся с назначением"),
+      screen.queryByText("Меню дня расходится с назначением"),
     ).not.toBeInTheDocument();
   });
 
@@ -1300,7 +1300,7 @@ describe("соответствие дня назначению", () => {
     renderScreen();
 
     expect(
-      await screen.findByText("Суточная норма набрана"),
+      await screen.findByText("По меню суточная норма набирается"),
     ).toBeInTheDocument();
     // Число на полосе — как пришло с сервера, слова его не подменяют.
     expect(screen.getByText("1 201 из 1 200 ккал")).toBeInTheDocument();
@@ -1315,7 +1315,7 @@ describe("соответствие дня назначению", () => {
     renderScreen();
 
     expect(
-      await screen.findByText("Итоги дня расходятся с назначением"),
+      await screen.findByText("Меню дня расходится с назначением"),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Кетосоотношение дня соответствует назначению."),
@@ -1341,7 +1341,7 @@ describe("соответствие дня назначению", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/Измените состав/)).not.toBeInTheDocument();
     expect(
-      screen.queryByText("Итоги дня расходятся с назначением"),
+      screen.queryByText("Меню дня расходится с назначением"),
     ).not.toBeInTheDocument();
 
     const remove = screen.getAllByRole("button", { name: /Убрать/ })[0]!;
@@ -1417,7 +1417,7 @@ describe("соответствие дня назначению", () => {
     await user.click(screen.getByRole("button", { name: /^Завтра/ }));
 
     expect(
-      await screen.findByText("Итоги дня расходятся с назначением"),
+      await screen.findByText("Меню дня расходится с назначением"),
     ).toBeInTheDocument();
   });
 });
@@ -1468,7 +1468,7 @@ describe("несобранный день без назначения дня (Р
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Итоги дня расходятся с назначением"),
+      screen.queryByText("Меню дня расходится с назначением"),
     ).not.toBeInTheDocument();
   });
 
@@ -1485,7 +1485,7 @@ describe("несобранный день без назначения дня (Р
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Итоги дня расходятся с назначением"),
+      screen.queryByText("Меню дня расходится с назначением"),
     ).not.toBeInTheDocument();
   });
 });

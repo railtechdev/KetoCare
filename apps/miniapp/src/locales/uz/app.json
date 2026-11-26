@@ -30,7 +30,7 @@
     },
     "relaunch": {
       "title": "Ilovani yoping va chatdan qayta oching",
-      "description": "Telegram ilova ishga tushirilishini cheklangan vaqtga tasdiqlaydi va bu vaqt tugadi. Ilovani yoping va bot bilan chatdagi «Ilova» tugmasi orqali qayta oching — yozilganlarning hammasi saqlangan."
+      "description": "Telegram ilova ishga tushirilishini cheklangan vaqtga tasdiqlaydi va u tugadi. Ilovani yoping va bot bilan chatdagi «Ilova» tugmasi orqali qayta oching. Saqlangan yozuvlar joyida; agar hozir nimadir kiritayotgan bo‘lsangiz — ochgandan keyin kundalikni tekshiring va qayta kiriting."
     },
     "close": "Yopish va chatga qaytish"
   },
@@ -94,7 +94,7 @@
       "refreshing": "Yangilanmoqda…",
       "failed": "Yangi grammlarni olib bo‘lmadi"
     },
-    "totals": "Kun yakunlari",
+    "totals": "Menyu bo‘yicha kunlik",
     "excluded": "Menyuda bolaga taqiqlangan mahsulotlar bor",
     "withdrawn": "Menyuda mahsulotlar ro‘yxatidan olib tashlangan mahsulotlar bor",
     "excludedHint": "Bu taomlarni berishdan oldin shifokor yoki dietologdan aniqlashtiring.",
@@ -153,13 +153,14 @@
       "addedTo": "«{{title}}» — {{index}}-ovqatlanishda. Yana qo‘shish mumkin.",
       "portionInvalid": "Porsiyani 0 dan katta son bilan kiriting, masalan 1 yoki 0,5.",
       "kcalPortion": "porsiyasiga {{value}} kkal",
-      "removeBodySpecialist": "Bu menyuni {{name}} tuzgan. Agar taom bolaga to‘g‘ri kelmasa, avval mutaxassisga yozgan ma’qul."
+      "removeBodySpecialist": "Bu menyuni {{name}} tuzgan. Agar taom bolaga to‘g‘ri kelmasa, avval mutaxassisga yozgan ma’qul.",
+      "searching": "Qidiryapmiz…"
     },
     "targets": {
       "kcalLabel": "Kaloriya",
       "kcalOfTarget": "{{value}} / {{target}} kkal",
-      "kcalLeft": "Sutkalik me’yorni to‘ldirish uchun yana {{value}} kkal qo‘shing",
-      "kcalOver": "me’yordan {{value}} kkal ortiq",
+      "kcalLeft": "Menyuda kunlik me’yorgacha {{value}} kkal yetishmaydi",
+      "kcalOver": "menyuda me’yordan {{value}} kkal ortiq",
       "carbsLabel": "Uglevodlar",
       "carbsOfLimit": "{{value}} / {{limit}} g",
       "carbsLeft": "{{value}} g qoldi",
@@ -168,7 +169,7 @@
       "proteinOfMin": "{{value}} / {{min}} g",
       "proteinLeft": "tayinlangan me’yorgacha yana {{value}} g",
       "proteinReached": "tayinlangan me’yor to‘ldi",
-      "kcalReached": "Sutkalik me’yor to‘ldi"
+      "kcalReached": "Menyu bo‘yicha kunlik me’yor to‘ladi"
     },
     "tomorrowNoEaten": "«Yedi» belgisini bola ovqatlangan kuni qo‘yish mumkin.",
     "backToToday": "Bugun",
@@ -197,7 +198,7 @@
   "verdict": {
     "withinTolerance": "Kunning keto nisbati tayinlovga mos.",
     "offTolerance": {
-      "title": "Kun yakunlari tayinlovdan farq qiladi",
+      "title": "Kun menyusi tayinlovdan farq qiladi",
       "body": "Kunning keto nisbati tayinlangandan ruxsat etilganidan ko‘proq farq qiladi. Ovqatlanishlar tarkibini yoki porsiya hajmini o‘zgartiring."
     },
     "ratioUnknown": "Keto nisbatini hisoblab bo‘lmaydi: taomlarda oqsil va uglevod yo‘q.",
@@ -206,7 +207,7 @@
       "title": "Uglevodlar me’yordan ko‘p",
       "body": "Kun davomidagi uglevodlar tayinlovda ruxsat etilganidan ko‘p. Uglevodli taomni almashtiring yoki porsiyani kamaytiring."
     },
-    "kcalBelowTarget": "To‘plandi: {{value}} kkal, me’yor — {{target}} kkal. Sutkalik me’yorni to‘ldirish uchun yana {{left}} kkal qo‘shing.",
+    "kcalBelowTarget": "Menyu bo‘yicha {{target}} kkal dan {{value}} kkal. Kunlik me’yorni to‘ldirish uchun menyuga yana {{left}} kkal qo‘shing.",
     "kcalBelowTargetPlain": "Kunning kaloriyasi hozircha sutkalik me’yordan past. Uni to‘ldirish uchun qolgan ovqatlanishlarga taomlar qo‘shing.",
     "noPrescription": "Yakunlarni solishtiradigan narsa yo‘q: tayinlov yo‘q.",
     "engineChanged": "Bu kun ancha oldin tuzilgan — tayinlov bilan solishtirish ko‘rsatilmaydi.",
@@ -329,7 +330,8 @@
       "choose": "Tanlang",
       "seizureTypeRequired": "Qanday xuruj bo‘lganini tanlang.",
       "takenQuestion": "Dori berildimi?",
-      "seizureTypeNone": "Tanlanmagan"
+      "seizureTypeNone": "Tanlanmagan",
+      "methodRequired": "Qanday o‘lchanganini tanlang."
     },
     "next": "Keyingi",
     "back": "Orqaga",
@@ -410,10 +412,13 @@
     },
     "hints": {
       "ketones": "Odatda ertalab, nonushtadan oldin.",
-      "medications": "Dori beradigan vaqtingizda.",
-      "weight": "Bir necha kunda bir marta yetarli — eslatma faqat kun uchun yozuv bo‘lmasa keladi.",
+      "medications": "Kuniga bitta eslatma. Agar bugun biror dori allaqachon belgilangan bo‘lsa, u kelmaydi — bot har bir qabul haqida eslatmaydi.",
+      "weight": "Kun davomida vazn yozilmaguncha har kuni shu vaqtda keladi.",
       "no_records": "Kechqurun, agar kun davomida birorta ham yozuv bo‘lmasa."
-    }
+    },
+    "turnedOn": "Eslatmalar yoqildi",
+    "turnedOff": "Eslatmalar o‘chirildi",
+    "kindOff": "«{{kind}}» eslatmasi o‘chirildi"
   },
   "calculator": {
     "title": "Hisob",
@@ -467,7 +472,7 @@
     "unknownProduct": "mahsulot ma’lumotnomadan o‘chirilgan",
     "proteinMin": "Oqsil kamida, g",
     "carbsMax": "Uglevodlar ko‘pi bilan, g",
-    "limitsHint": "Majburiy emas, faqat tanlash uchun. Bo‘sh maydon — chegara yo‘q.",
+    "limitsHint": "Ixtiyoriy. Ularsiz tanlash oqsil va uglevodlarni bolaning tayinlovidan oladi.",
     "calculating": "Hisoblanmoqda…",
     "doSolve": "Grammni tanlash",
     "factor": "Ko‘paytirish",
@@ -526,6 +531,13 @@
       "replaceBody": "Hisobda hozir yig‘ilgan mahsulotlar saqlanmagan va yo‘qoladi.",
       "replace": "Almashtirish",
       "keep": "Yig‘ilganini qoldirish"
+    },
+    "prescriptionFailed": "Tayinlov yuklanmadi — ovqatlanish maqsadi hozircha ko‘rsatilmagan.",
+    "prescriptionLoading": "Tayinlov yuklanmoqda…",
+    "solved": {
+      "changed": "Grammlar tanlandi — ularni tarkibda tekshiring.",
+      "unchanged": "Grammlar allaqachon mos — o‘zgartirish kerak emas.",
+      "reshaped": "Sizning grammlaringiz bilan maqsadga erishilmadi, shuning uchun miqdorlar sezilarli o‘zgardi — ularni tarkibda tekshiring."
     }
   },
   "recipes": {
@@ -648,7 +660,8 @@
     "sendFailed": "Savolni yuborib bo‘lmadi. Yana bir bor urinib ko‘ring.",
     "loadFailed": "Suhbatni yuklab bo‘lmadi",
     "loadFailedHint": "Aloqani tekshirib, qaytaring.",
-    "slow": "Javob odatdagidan uzoqroq tayyorlanmoqda — u shu yerda paydo bo‘ladi, keyinroq qaytishingiz mumkin."
+    "slow": "Javob odatdagidan uzoqroq tayyorlanmoqda — u shu yerda paydo bo‘ladi, keyinroq qaytishingiz mumkin.",
+    "timedOut": "Javob kelmadi. Yana so‘rang."
   },
   "webAccess": {
     "title": "Kabinetga kirish",
@@ -745,9 +758,10 @@
     },
     "menu": {
       "title": "Bugungi menyu",
-      "next": "Hozir — {{index}}-ovqatlanish",
+      "next": "Belgilanmagan: {{index}}-ovqatlanish",
       "allEaten": "Bugungi menyudagi hammasi yeyildi deb belgilangan.",
-      "open": "Menyuni ochish"
+      "open": "Menyuni ochish",
+      "allEatenEmpty": "Belgilangani yeyilgan. {{list}}-ovqatlanishlarda hali taom yo‘q."
     },
     "medications": {
       "title": "Bugungi dorilar",

@@ -224,6 +224,21 @@ export function CalculatorScreen({
    * из результата вёл один выход — принять как есть.
    */
   const solvedItems = solve.data?.dish.items;
+  const solveOutcome: "reshaped" | "unchanged" | "changed" | null = (() => {
+    if (solve.data === undefined || solve.variables === undefined) return null;
+    if (solve.data.reshaped) return "reshaped";
+    const before = new Map(
+      solve.variables.rows.map((row) => [
+        row.product.id,
+        parseAmount(row.grams),
+      ]),
+    );
+    return solve.data.dish.items.every(
+      (item) => before.get(item.product_id) === item.grams,
+    )
+      ? "unchanged"
+      : "changed";
+  })();
   // Приправы (ADR-0054) ядро не видит, но порция меняет и их массу: сервер
   // присылает её отдельно. При подборе приправ в ответе нет — их масса
   // остаётся той, что ввела семья.
@@ -714,11 +729,35 @@ export function CalculatorScreen({
           />
         </div>
 
-        {goal === null && (
-          <p className="m-0 text-sm text-muted-foreground">
-            {t("calculator.noTargets")}
-          </p>
-        )}
+        {/* «Цель не задана» — только когда назначения правда нет: пока
+            сводка грузится или не пришла, это незнание, а не факт (аудит
+            26.11.2026, 2.14). */}
+        {goal === null &&
+          (overview.isError ? (
+            <div className="flex flex-col gap-field">
+              <p className="m-0 text-sm text-warning-strong">
+                {t("calculator.prescriptionFailed")}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch self-start"
+                onClick={() => void overview.refetch()}
+              >
+                {t("actions.retry")}
+              </Button>
+            </div>
+          ) : overview.data === undefined ? (
+            <p className="m-0 text-sm text-muted-foreground">
+              {overview.fetchStatus === "paused"
+                ? t("errors.waitingForNetwork")
+                : t("calculator.prescriptionLoading")}
+            </p>
+          ) : (
+            <p className="m-0 text-sm text-muted-foreground">
+              {t("calculator.noTargets")}
+            </p>
+          ))}
 
         {/* Пустой расчёт молчит: о ненабранном составе сказано выше. Кроме
             ожидания связи — иначе набранный состав остаётся без ответа и без
@@ -838,6 +877,14 @@ export function CalculatorScreen({
             ? t("calculator.calculating")
             : t("calculator.doSolve")}
         </Button>
+        {/* Что сделал подбор — словами: числа в полях менялись молча, а если
+            блюдо уже подходило, не менялось ничего и ничего не говорилось
+            (аудит 26.11.2026, 2.12). */}
+        {solveOutcome !== null && (
+          <p role="status" className="m-0 text-sm">
+            {t(`calculator.solved.${solveOutcome}`)}
+          </p>
+        )}
 
         <div className="flex items-end gap-field">
           <NumberField

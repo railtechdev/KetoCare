@@ -285,9 +285,34 @@ export function MenuScreen({
                 {/* Без назначения приёмов нет: их задаёт врач (ADR-0029).
                     «Назначения нет» — утверждение о клиническом факте, и
                     говорить его из незнания нельзя: сводка могла ещё не прийти. */}
-                {!dayPrescription.isSuccess ? (
+                {dayPrescription.isError ? (
+                  // Отказ — словами и с повтором, а не «Загружаем…» навсегда:
+                  // собрать день без назначения нельзя, и причина должна быть
+                  // видна (аудит 26.11.2026, 2.4).
+                  <WarningBanner
+                    level="danger"
+                    title={t("calculator.plan.prescriptionFailed")}
+                  >
+                    <span className="flex flex-col gap-field">
+                      <span>
+                        {errorMessageOf(dayPrescription.error) ??
+                          t("home.loadErrorHint")}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="min-h-touch self-start"
+                        onClick={() => void dayPrescription.refetch()}
+                      >
+                        {t("actions.retry")}
+                      </Button>
+                    </span>
+                  </WarningBanner>
+                ) : !dayPrescription.isSuccess ? (
                   <p className="m-0 text-muted-foreground">
-                    {t("menu.compose.prescriptionUnknown")}
+                    {dayPrescription.fetchStatus === "paused"
+                      ? t("errors.waitingForNetwork")
+                      : t("menu.compose.prescriptionUnknown")}
                   </p>
                 ) : (
                   meals.length === 0 && (

@@ -63,6 +63,22 @@ export function RemindersBlock({ session }: { session: Session }) {
       onError: () => haptic("error"),
     });
   };
+  // Выключатель и «Выключить» записываются сразу: это действия, а не поля
+  // формы. Прежде они меняли только форму, и «Назад» без «Сохранить» молча
+  // оставлял напоминания включёнными — семья в больнице их «выключила», а
+  // они шли (аудит 26.11.2026, 2.5). Время по-прежнему сохраняет кнопка: его
+  // набирают по цифре.
+  const apply = (next: ReminderValues, done: string) => {
+    if (save.isPending) return;
+    setForm(next);
+    save.mutate(next, {
+      onSuccess: () => {
+        haptic("success");
+        toast.success(done);
+      },
+      onError: () => haptic("error"),
+    });
+  };
   // Изменено ли что-то против сохранённого: «Сохранить» нужен только тогда.
   const dirty =
     form !== null &&
@@ -111,8 +127,13 @@ export function RemindersBlock({ session }: { session: Session }) {
               }
             : null
         }
-        // Без сети об этом уже говорит сводка выше.
-        waiting={null}
+        // Блок живёт на экране настроек, где сводки нет: без сети он
+        // говорит об этом сам, а не стоит пустым (аудит 26.11.2026, 2.7).
+        waiting={
+          settings.fetchStatus === "paused"
+            ? t("errors.waitingForNetwork")
+            : null
+        }
         retryLabel={t("actions.retry")}
         onRetry={() => void settings.refetch()}
         isEmpty={false}
@@ -137,8 +158,14 @@ export function RemindersBlock({ session }: { session: Session }) {
                 <Switch
                   checked={form.enabled}
                   aria-describedby={`${ids}-enabled-hint`}
+                  disabled={save.isPending}
                   onChange={(event) =>
-                    setForm({ ...form, enabled: event.target.checked })
+                    apply(
+                      { ...form, enabled: event.target.checked },
+                      event.target.checked
+                        ? t("reminders.turnedOn")
+                        : t("reminders.turnedOff"),
+                    )
                   }
                 />
                 <span className="min-w-0 flex-1">{t("reminders.enabled")}</span>
@@ -185,10 +212,13 @@ export function RemindersBlock({ session }: { session: Session }) {
                         type="button"
                         variant="ghost"
                         className="min-h-touch"
-                        disabled={!form.enabled}
+                        disabled={!form.enabled || save.isPending}
                         aria-label={t("reminders.clearAria", { kind: label })}
                         onClick={() =>
-                          setForm({ ...form, [FIELD[kind]]: null })
+                          apply(
+                            { ...form, [FIELD[kind]]: null },
+                            t("reminders.kindOff", { kind: label }),
+                          )
                         }
                       >
                         {t("reminders.clear")}

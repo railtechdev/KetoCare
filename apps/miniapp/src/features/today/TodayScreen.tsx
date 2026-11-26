@@ -514,6 +514,9 @@ function NextMealBlock({
   const meals = mealNumbers(overview.prescription?.meals_per_day ?? null);
   const items = menu.data?.items ?? [];
   const next = nextMeal(items);
+  const emptyMeals = meals.filter(
+    (meal) => !items.some((item) => item.meal_index === meal),
+  );
 
   return (
     <Section title={t("today.menu.title")} density="compact">
@@ -561,9 +564,20 @@ function NextMealBlock({
             {/* Над граммами, по которым сейчас взвешивают (аудит 26.11.2026). */}
             {menu.data != null && <MenuProductWarnings menu={menu.data} />}
             {next.kind === "allEaten" ? (
-              <p role="status" className="m-0 text-success">
-                {t("today.menu.allEaten")}
-              </p>
+              // «Всё съедено» — только когда блюда стоят во всех приёмах:
+              // иначе зелёная строка читалась как «день закрыт», а три приёма
+              // из пяти пусты (аудит 26.11.2026, 2.2).
+              emptyMeals.length === 0 ? (
+                <p role="status" className="m-0 text-success">
+                  {t("today.menu.allEaten")}
+                </p>
+              ) : (
+                <p role="status" className="m-0">
+                  {t("today.menu.allEatenEmpty", {
+                    list: emptyMeals.join(", "),
+                  })}
+                </p>
+              )
             ) : (
               <>
                 <h3 className="m-0 text-card-title">

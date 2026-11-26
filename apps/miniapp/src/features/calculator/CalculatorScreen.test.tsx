@@ -1282,6 +1282,27 @@ describe("калькулятор в Mini App", () => {
     expect(await screen.findByLabelText(/Масло сливочное, граммы/)).toHaveValue(
       "42,5",
     );
+    // И сказано словами, что сделано (аудит 26.11.2026, 2.12).
+    expect(
+      screen.getByText("Граммы подобраны — проверьте их в составе."),
+    ).toBeInTheDocument();
+  });
+
+  it("подбор, которому пришлось заметно изменить пропорции, так и говорит", async () => {
+    respond({ "/calc/solve": { ...solveResponse(), reshaped: true } });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    await user.click(
+      screen.getByRole("button", { name: "Подобрать граммовку" }),
+    );
+
+    expect(
+      await screen.findByText(
+        /цель не получалась, поэтому количества заметно изменились/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("подбор без сети называет причину и доходит с возвратом связи", async () => {

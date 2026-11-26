@@ -106,7 +106,10 @@ const SEIZURE_FIRST_STEP = [
  * Лекарство по умолчанию «дали» — как в боте, где отметка о приёме и есть
  * запись; «пропустили» выбирается явно.
  */
-function defaultsOf(kind: CreatableKind): Values {
+function defaultsOf(
+  kind: CreatableKind,
+  ketoneMethod: "blood" | "urine" | null,
+): Values {
   const occurredAt = toDateTimeLocalInput(new Date());
   switch (kind) {
     case "seizures":
@@ -120,7 +123,10 @@ function defaultsOf(kind: CreatableKind): Values {
         triggers: "",
       };
     case "ketones":
-      return { occurredAt, value: "", method: "blood" };
+      // Способ — последнего замера ребёнка, как в боте. Всегда «по крови»
+      // семья с полосками для мочи записывала бы кровь (аудит 26.11.2026,
+      // 2.9). Замеров не было — ничего не подставляется: выбор за человеком.
+      return { occurredAt, value: "", method: ketoneMethod ?? "" };
     case "weight":
       return { occurredAt, weightKg: "", heightCm: "" };
     case "medications":
@@ -224,6 +230,8 @@ export interface EntryEditSheetProps {
   onDelete?: () => void;
   /** Удаление уже отправлено — кнопка ждёт ответа. */
   deleting?: boolean;
+  /** Способ последнего замера кетонов ребёнка — умолчание новой записи. */
+  lastKetoneMethod?: "blood" | "urine" | null;
 }
 
 /**
@@ -247,6 +255,7 @@ export function EntryEditSheet({
   onBack = onClose,
   onDelete,
   deleting = false,
+  lastKetoneMethod = null,
 }: EntryEditSheetProps) {
   const { t } = useTranslation();
   const creating = "kind" in target;
@@ -255,7 +264,9 @@ export function EntryEditSheet({
   // не должно уезжать с каждой отрисовкой, иначе форма сочла бы себя
   // изменённой, ничего не получив от человека.
   const [initial] = useState<Values>(() =>
-    "kind" in target ? defaultsOf(target.kind) : valuesOf(target.entry),
+    "kind" in target
+      ? defaultsOf(target.kind, lastKetoneMethod)
+      : valuesOf(target.entry),
   );
   const [values, setValues] = useState<Values>(initial);
   const [errors, setErrors] = useState<Errors>({});
@@ -608,9 +619,11 @@ function EntryFields({
             value={text("method")}
             onChange={set("method")}
             options={[
+              ...(text("method") === "" ? choose : []),
               { id: "blood", name: t("diary.form.methodBlood") },
               { id: "urine", name: t("diary.form.methodUrine") },
             ]}
+            error={errors.method && t("diary.form.methodRequired")}
           />
         </>
       );
