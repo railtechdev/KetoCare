@@ -56,6 +56,10 @@ class MessageRead(BaseModel):
     #: The refusal is a spent limit or budget, not a question for the doctor:
     #: the cabinet and the Mini App show no «ask the doctor» step under it.
     limited: bool = False
+    #: The refusal is «no article on this» — a question about the app the
+    #: knowledge base does not cover: the cabinet and the Mini App suggest
+    #: asking in other words, not «ask the doctor» (audit 26.11.2026, 3.10).
+    no_material: bool = False
 
 
 class ConversationRead(BaseModel):

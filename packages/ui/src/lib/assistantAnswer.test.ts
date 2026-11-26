@@ -49,4 +49,10 @@ describe("refusalNextStep", () => {
       refusalNextStep({ status: "done", blocked: true, limited: true }),
     ).toBe("none");
   });
+
+  it("нет статьи — спросить иначе, а не к врачу (аудит 26.11.2026, 3.10)", () => {
+    expect(
+      refusalNextStep({ status: "done", blocked: true, no_material: true }),
+    ).toBe("rephrase");
+  });
 });

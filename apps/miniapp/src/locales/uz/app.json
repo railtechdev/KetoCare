@@ -670,7 +670,7 @@
     "disclaimer": "Shifokor maslahatining o‘rnini bosmaydi.",
     "sources": "Manba:",
     "retry": "Yana so‘rash",
-    "askDoctor": "Qabulda shifokordan so‘rang.",
+    "askDoctor": "Buni davolovchi shifokor bilan muhokama qiling. Shoshilinch bo‘lsa — qabulni kutmang, klinikaga qo‘ng‘iroq qiling.",
     "day": {
       "today": "Bugun",
       "yesterday": "Kecha"
@@ -687,7 +687,8 @@
     "loadFailed": "Suhbatni yuklab bo‘lmadi",
     "loadFailedHint": "Aloqani tekshirib, qaytaring.",
     "slow": "Javob odatdagidan uzoqroq tayyorlanmoqda — u shu yerda paydo bo‘ladi, keyinroq qaytishingiz mumkin.",
-    "timedOut": "Javob kelmadi. Yana so‘rang."
+    "timedOut": "Javob kelmadi. Yana so‘rang.",
+    "rephrase": "Boshqa so‘zlar bilan so‘rab ko‘ring yoki yuqoridagi tayyor savolni tanlang."
   },
   "webAccess": {
     "title": "Kabinetga kirish",

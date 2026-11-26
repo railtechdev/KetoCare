@@ -766,7 +766,7 @@ describe("переписка (аудит Mini App 2026-11 — общие час�
     renderPage();
 
     expect(
-      await screen.findByText("Спросите врача на приёме."),
+      await screen.findByText("Обсудите это с лечащим врачом. Если срочно — не ждите приёма, звоните в клинику."),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("link", { name: "+998 71 200-00-00" }),
@@ -792,7 +792,7 @@ describe("переписка (аудит Mini App 2026-11 — общие час�
     renderPage();
 
     await screen.findByText(/Он обновится завтра/);
-    expect(screen.queryByText("Спросите врача на приёме.")).toBeNull();
+    expect(screen.queryByText("Обсудите это с лечащим врачом. Если срочно — не ждите приёма, звоните в клинику.")).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Спросить ещё раз" }),
     ).toBeNull();

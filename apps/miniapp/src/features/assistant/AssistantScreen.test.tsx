@@ -826,6 +826,28 @@ describe("переписка на телефоне (аудит Mini App 2026-11)
     );
   });
 
+  it("нет статьи — спросить иначе, а не к врачу (аудит 26.11.2026, 3.10)", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Я отвечаю только по материалам приложения, и подходящей статьи не нашлось.",
+          blocked: true,
+          no_material: true,
+          source_articles: [],
+        }),
+      ],
+      phone: "+998 71 200-00-00",
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(/Попробуйте спросить другими словами/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Обсудите это с лечащим врачом/)).toBeNull();
+  });
+
   it("отклонённый вопрос — своим видом, к врачу и телефон клиники (П4)", async () => {
     serve({
       messages: [
@@ -843,7 +865,11 @@ describe("переписка на телефоне (аудит Mini App 2026-11)
 
     await screen.findByText("Этот вопрос нужно обсудить с лечащим врачом.");
     expect(container.querySelector('[data-refusal="true"]')).not.toBeNull();
-    expect(screen.getByText("Спросите врача на приёме.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Обсудите это с лечащим врачом. Если срочно — не ждите приёма, звоните в клинику.",
+      ),
+    ).toBeInTheDocument();
     const call = await screen.findByRole("link", { name: "+998 71 200-00-00" });
     expect(call).toHaveAttribute("href", "tel:+998712000000");
     expect(
@@ -869,7 +895,11 @@ describe("переписка на телефоне (аудит Mini App 2026-11)
     const retry = await screen.findByRole("button", {
       name: "Спросить ещё раз",
     });
-    expect(screen.queryByText("Спросите врача на приёме.")).toBeNull();
+    expect(
+      screen.queryByText(
+        "Обсудите это с лечащим врачом. Если срочно — не ждите приёма, звоните в клинику.",
+      ),
+    ).toBeNull();
     await user.click(retry);
     await waitFor(() => {
       expect(api.POST).toHaveBeenCalledTimes(1);
@@ -936,7 +966,11 @@ describe("переписка на телефоне (аудит Mini App 2026-11)
 
     await screen.findByText(/Он обновится завтра/);
     expect(container.querySelector('[data-refusal="true"]')).not.toBeNull();
-    expect(screen.queryByText("Спросите врача на приёме.")).toBeNull();
+    expect(
+      screen.queryByText(
+        "Обсудите это с лечащим врачом. Если срочно — не ждите приёма, звоните в клинику.",
+      ),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Спросить ещё раз" }),
     ).toBeNull();
