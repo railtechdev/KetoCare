@@ -196,7 +196,11 @@ function Problem({
   return (
     <ErrorState
       title={t("session.failed.title")}
-      description={t("session.failed.description")}
+      description={
+        problem === "server"
+          ? t("session.failed.server")
+          : t("session.failed.description")
+      }
       retryLabel={t("actions.retry")}
       onRetry={onRetry}
     />

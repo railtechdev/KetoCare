@@ -26,7 +26,8 @@
     },
     "failed": {
       "title": "Ilovani ochib bo‘lmadi",
-      "description": "Aloqani tekshirib, yana urinib ko‘ring. Yordam bermasa — ilovani yoping va bot chatidan qaytadan oching."
+      "description": "Aloqani tekshirib, yana urinib ko‘ring. Yordam bermasa — ilovani yoping va bot chatidan qaytadan oching.",
+      "server": "Ilova hozir ishlamayapti — bu sizning aloqangiz sababli emas. Bir necha daqiqadan keyin urinib ko‘ring; yordam bermasa — ilovani yoping va bot bilan chatdan qayta oching."
     },
     "relaunch": {
       "title": "Ilovani yoping va chatdan qayta oching",
@@ -38,7 +39,8 @@
     "network": "Aloqa yo‘q. Internetni tekshiring.",
     "waitingForNetwork": "Aloqa yo‘q — paydo bo‘lishi bilan ko‘rsatamiz.",
     "sectionFailed": "Bo‘lim ochilmadi",
-    "sectionFailedHint": "Aloqa uzilganga o‘xshaydi. Internetni tekshiring va «Qaytarish»ni bosing."
+    "sectionFailedHint": "Aloqa uzilganga o‘xshaydi. Internetni tekshiring va «Qaytarish»ni bosing.",
+    "server": "Ilova hozir ishlamayapti — bu sizning aloqangiz sababli emas. Bir necha daqiqadan keyin urinib ko‘ring."
   },
   "actions": {
     "retry": "Qaytarish",

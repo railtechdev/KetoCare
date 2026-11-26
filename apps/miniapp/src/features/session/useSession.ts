@@ -55,8 +55,13 @@ export type SessionProblem =
    * из чата, и экран говорит именно это.
    */
   | "relaunch"
-  /** Сервер недоступен или ответил иначе. */
-  | "failed";
+  /** Запрос не дошёл: нет связи. */
+  | "failed"
+  /**
+   * Сервер ответил, но не открыл (5xx, неожиданный отказ): связь у семьи
+   * есть. Прежде и это называлось «Проверьте связь» (аудит 26.11.2026, 2.20).
+   */
+  | "server";
 
 /** Что открыть: по умолчанию — ребёнка, выбранного в прошлый раз. */
 export interface OpenSessionRequest {
@@ -164,7 +169,7 @@ async function launch(initData: string, patientId?: string): Promise<Session> {
         ? "not_linked"
         : response.status === 401
           ? "relaunch"
-          : "failed"
+          : "server"
     ) satisfies SessionProblem;
   }
 
