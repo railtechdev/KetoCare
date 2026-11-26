@@ -186,6 +186,7 @@ export function MenuScreen({
         recipeId={recipeId}
         patientId={session.patientId}
         backLabel={t("recipes.backToMenu")}
+        fromMenu
         onBack={() => setRecipeId(null)}
       />
     );

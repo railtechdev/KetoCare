@@ -1651,6 +1651,11 @@ describe("сборка по приёмам (ADR-0075)", () => {
       await screen.findByRole("button", { name: "К меню" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "К списку" })).toBeNull();
+    // Граммов шаблона на весь выход здесь нет — взвешивают по меню (Т8).
+    expect(screen.queryByRole("heading", { name: /^Состав/ })).toBeNull();
+    expect(
+      screen.getByText(/Сколько взвесить на этот день — в меню/),
+    ).toBeInTheDocument();
   });
 
   it("у блюда ребёнка шаги приготовления раскрываются под блюдом", async () => {

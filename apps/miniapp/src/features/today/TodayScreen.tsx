@@ -126,6 +126,7 @@ export function TodayScreen({
         patientId={session.patientId}
         // Списка здесь нет: «Назад» ведёт к сводке дня.
         backLabel={t("recipes.backToToday")}
+        fromMenu
         onBack={() => {
           setView({ at: "summary" });
           window.scrollTo(0, 0);

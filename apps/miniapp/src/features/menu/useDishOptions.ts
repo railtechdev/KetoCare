@@ -29,6 +29,11 @@ export interface DishOption {
   fits: boolean | undefined;
   /** Порций в раскладке рецепта; у своего блюда их нет. */
   servings: number | null;
+  /**
+   * У ребёнка есть своё блюдо из этого рецепта — рецепт здесь шаблон, и
+   * ставить в день стоит блюдо ребёнка (аудит 26.11.2026, Т7).
+   */
+  hasOwnDish?: boolean;
 }
 
 export function customDishesKey(patientId: string) {
@@ -141,6 +146,9 @@ export function useDishOptions(patientId: string, query: string) {
     (page) => page.items,
   );
 
+  const ownRecipeIds = new Set(
+    (dishes.data ?? []).map((dish) => dish.source_recipe_id),
+  );
   const options: DishOption[] = [
     ...matched.map((dish) => ({
       key: `custom:${dish.id}`,
@@ -161,6 +169,7 @@ export function useDishOptions(patientId: string, query: string) {
       ratio: recipe.per_portion?.ratio ?? recipe.computed?.ratio ?? null,
       fits: recipe.ratio_fits_prescription ?? undefined,
       servings: recipe.servings,
+      hasOwnDish: ownRecipeIds.has(recipe.id),
     })),
   ];
 

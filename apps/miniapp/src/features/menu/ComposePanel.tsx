@@ -262,6 +262,11 @@ export function ComposePanel({
                 }}
               >
                 <span className="block break-words">{option.title}</span>
+                {option.hasOwnDish === true && (
+                  <span className="block text-sm text-warning-strong">
+                    {t("recipes.ownDish.row")}
+                  </span>
+                )}
                 {/* Показатели блюда, а не цель приёма: цель зависит от
                     назначения и считается в ките, а здесь выбирают из чего
                     собрать. Значок соотношения один и тот же у рецепта и у
