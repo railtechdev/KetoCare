@@ -18,6 +18,7 @@ Telegram отказывает в правке сообщения старше д
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from aiogram.exceptions import TelegramBadRequest
@@ -68,17 +69,28 @@ async def show(
         await open_card(message, state, text, markup)
         return
 
+    # Карточку правим, только если она стоит НИЖЕ набранного: правка
+    # сообщения выше не даёт ни уведомления, ни прокрутки, и родитель решал,
+    # что бот не ответил, — вводил замер снова или бросал запись (аудит
+    # 26.11.2026, 1.11). Иначе — новое сообщение под набранным, а у прежней
+    # карточки снимаются кнопки: отвечать надо на новую.
     card_id = (await state.get_data()).get(CARD_KEY)
     bot: Any = getattr(message, "bot", None)
     if isinstance(card_id, int) and bot is not None:
-        try:
-            await bot.edit_message_text(
-                text=text, chat_id=message.chat.id, message_id=card_id, reply_markup=markup
-            )
-            return
-        except TelegramBadRequest as error:
-            if _unchanged(error):
+        if card_id > message.message_id:
+            try:
+                await bot.edit_message_text(
+                    text=text, chat_id=message.chat.id, message_id=card_id, reply_markup=markup
+                )
                 return
+            except TelegramBadRequest as error:
+                if _unchanged(error):
+                    return
+        else:
+            with contextlib.suppress(TelegramBadRequest):
+                await bot.edit_message_reply_markup(
+                    chat_id=message.chat.id, message_id=card_id, reply_markup=None
+                )
     await open_card(message, state, text, markup)
 
 

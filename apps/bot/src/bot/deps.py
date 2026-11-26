@@ -246,6 +246,8 @@ async def submit_log(
     method: str | None = None,
     extra: dict[str, Any] | None = None,
     occurred_at: datetime | None = None,
+    parts: list[str] | None = None,
+    part_template: str | None = None,
 ) -> None:
     """Сохраняет запись (или несколько — лекарства) и отвечает эхом в карточке.
 
@@ -286,6 +288,10 @@ async def submit_log(
             "method": method,
             "extra": extra or {},
             "occurred_at": occurred_at.isoformat() if occurred_at else None,
+            # Подпись каждой записи серии — чтобы «Отмена» после частичного
+            # сбоя назвала то, что уже в дневнике (аудит 26.11.2026, 1.9).
+            "parts": parts,
+            "part_template": part_template,
         }
         await state.update_data({PENDING: pending})
     await send_pending(
@@ -334,7 +340,12 @@ async def send_pending(
             # транзакцией, а ответ 502/504 прокси или «такой же запрос ещё
             # выполняется» (409) не значит, что запись не сохранилась. Новый
             # ключ при повторе тогда завёл бы её второй раз (ревью ADR-0076).
-            await state.update_data({PENDING: pending | {"keys": keys, "done": done}})
+            # Обрыв, 5xx и 409 не значат «не сохранено»: «Отмена» потом скажет
+            # проверить дневник, а не «Отменено» про запись, которая там есть.
+            uncertain = exc.code == TRANSPORT_ERROR or exc.status >= 500 or exc.status == 409
+            await state.update_data(
+                {PENDING: pending | {"keys": keys, "done": done, "uncertain": uncertain}}
+            )
             failure = texts.NO_CONNECTION if exc.code == TRANSPORT_ERROR else texts.API_UNAVAILABLE
             saved = sum(1 for log_id in done if log_id)
             if saved:
@@ -346,14 +357,42 @@ async def send_pending(
         done[index] = str(created.get("id") or "")
         await state.update_data({PENDING: pending | {"keys": keys, "done": done}})
 
-    several = await several_children(store, message.chat.id)
     log_ids = [log_id for log_id in done if log_id]
+    await _show_receipt(
+        message,
+        state,
+        store=store,
+        binding=binding,
+        settings=settings,
+        pending=pending,
+        log_ids=log_ids,
+        summary=str(pending.get("summary") or ""),
+        own=own,
+    )
+
+
+async def _show_receipt(
+    message: Message,
+    state: FSMContext,
+    *,
+    store: BindingStore,
+    binding: Binding,
+    settings: BotSettings,
+    pending: dict[str, Any],
+    log_ids: list[str],
+    summary: str,
+    own: bool,
+    tail: str = "",
+) -> None:
+    """«Записано ✓» с квитанцией — «Другое время» и «Удалить запись» под ним."""
+
+    several = await several_children(store, message.chat.id)
     method = pending.get("method")
     receipt: dict[str, Any] = {
-        "kind": kind,
+        "kind": str(pending["kind"]),
         "patient_id": str(binding.patient_id),
         "log_ids": log_ids,
-        "summary": pending.get("summary") or "",
+        "summary": summary,
         "occurred_at": pending.get("occurred_at"),
         "child": binding.first_name if several else None,
         "method": method,
@@ -364,8 +403,62 @@ async def send_pending(
     if log_ids:
         await store.put_receipt(message.chat.id, key, receipt)
         markup = keyboards.record_actions(key, method=method if isinstance(method, str) else None)
-    await card.show(message, state, echo_text(receipt, tz=settings.tz), markup, own=own)
+    text = echo_text(receipt, tz=settings.tz) + (f"\n\n{tail}" if tail else "")
+    await card.show(message, state, text, markup, own=own)
     await state.clear()
+
+
+async def cancel_pending(
+    message: Message,
+    state: FSMContext,
+    *,
+    store: BindingStore,
+    settings: BotSettings,
+) -> bool:
+    """«Отмена» после сбоя записи — честно о том, что уже в дневнике.
+
+    Прежде «Отмена» отвечала «Отменено.», даже когда два лекарства из трёх уже
+    сохранились: у них не было кнопок «Удалить запись», а повтор «Дали все»
+    записывал их второй раз (аудит 26.11.2026, 1.9). Теперь сохранённое
+    получает обычное «Записано ✓» с кнопками, а если сбой был такой, что
+    запись могла дойти (обрыв, 5xx), — просьбу проверить дневник.
+
+    False — незаконченной записи нет, вызывающий отвечает обычным «Отменено».
+    """
+
+    pending = (await state.get_data()).get(PENDING)
+    if not isinstance(pending, dict) or "bodies" not in pending:
+        return False
+    done: list[str | None] = list(pending.get("done") or [])
+    saved = [index for index, log_id in enumerate(done) if log_id]
+    if not saved:
+        if not pending.get("uncertain"):
+            return False
+        await state.clear()
+        await card.show(message, state, texts.CANCELLED_UNSURE, None, own=True)
+        return True
+    binding = await scenario_binding(message, state, store, settings)
+    if binding is None:
+        return True
+    parts = pending.get("parts")
+    template = pending.get("part_template")
+    if isinstance(parts, list) and isinstance(template, str) and len(parts) == len(done):
+        summary = template.format(list=", ".join(str(parts[i]) for i in saved))
+    else:
+        summary = str(pending.get("summary") or "")
+    await _show_receipt(
+        message,
+        state,
+        store=store,
+        binding=binding,
+        settings=settings,
+        pending=pending,
+        log_ids=[str(done[i]) for i in saved],
+        summary=summary,
+        own=True,
+        tail=texts.CANCEL_REST_NOT_SAVED,
+    )
+    return True
 
 
 def receipt_key(log_ids: list[str]) -> str:

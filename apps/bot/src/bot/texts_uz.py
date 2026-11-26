@@ -380,3 +380,13 @@ SUMMARY_MEDICATIONS_GIVEN = "Berildi: {list}"
 SUMMARY_MEDICATIONS_SKIPPED = "O‘tkazib yuborildi: {list}"
 
 SAVED_PARTIAL = "{total} tadan {done} tasi saqlandi; «Qayta urinish» faqat qolganlarini yuboradi."
+
+
+# --- Аудит семейного канала 26.11.2026, этап 1 ---
+CANCEL_REST_NOT_SAVED = "Qolganlari yozilmadi."
+CANCELLED_UNSURE = "Bekor qilindi. Bundan oldin aloqa yo‘q edi, yozuv baribir saqlangan bo‘lishi mumkin — ilovada «Kundalik» bo‘limida tekshiring."
+RECORD_TIME_FAILED = "Vaqtni o‘zgartirib bo‘lmadi — «🕒 Boshqa vaqt»ni yana bosing."
+RECORD_METHOD_FAILED = "Usulni o‘zgartirib bo‘lmadi — tugmani yana bosing."
+TEXT_ONLY = (
+    "Ovozli xabar, rasm va stikerlarni o‘qimayman. Matn bilan yozing yoki «Bekor qilish»ni bosing."
+)
