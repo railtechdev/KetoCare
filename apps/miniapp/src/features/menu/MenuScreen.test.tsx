@@ -461,9 +461,72 @@ describe("план дня в Mini App", () => {
       }),
       response: { status: 200 },
     });
+    const post = api.POST as Mock;
+    post.mockResolvedValue({
+      data: menu(),
+      response: { status: 200 },
+    });
+    const user = userEvent.setup();
     renderScreen();
 
-    expect(await screen.findByText(/Рецепт изменился/)).toBeInTheDocument();
+    // Не серая строка без действия, а что случилось и что делать (1.3).
+    expect(
+      await screen.findByText(/Состав блюда изменили после того/),
+    ).toHaveTextContent("Ниже — прежние граммы.");
+    await user.click(
+      screen.getByRole("button", { name: "Взять новые граммы" }),
+    );
+
+    expect(post).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/menus/items/{item_id}/refresh",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          path: expect.objectContaining({ item_id: "item-1" }),
+        }),
+      }),
+    );
+  });
+
+  it("у съеденного блюда граммы не обновляются — и это сказано", async () => {
+    (api.GET as Mock).mockResolvedValue({
+      data: menu({
+        items: [{ ...menu().items[0], changed_since_saved: true, eaten: true }],
+      }),
+      response: { status: 200 },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(/граммы оставлены прежние/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Взять новые граммы" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("исключённый продукт назван вместе с блюдом и приёмом (1.1)", async () => {
+    const item = menu().items[0] as {
+      id: string;
+      title: string;
+      meal_index: number;
+    };
+    (api.GET as Mock).mockResolvedValue({
+      data: menu({
+        excluded_products: [
+          { product_id: "p-x", name_ru: "Арахис", item_ids: [item.id] },
+        ],
+      }),
+      response: { status: 200 },
+    });
+    renderScreen();
+
+    const banner = (
+      await screen.findByText("В меню есть продукты, исключённые ребёнку")
+    ).closest("[role=alert]") as HTMLElement;
+    expect(banner).toHaveTextContent(
+      `Арахис — «${item.title}», приём ${item.meal_index}`,
+    );
+    expect(banner).toHaveTextContent("Уточните у врача или диетолога");
   });
 });
 

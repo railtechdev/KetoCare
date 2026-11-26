@@ -231,11 +231,13 @@ describe("«Добавить запись» в Mini App", () => {
 
     await choose(user, "Лекарство");
     const drug = await screen.findByLabelText("Лекарство");
+    // Действующее — с дозой; отменённое не предлагается (аудит 26.11.2026, 1.4).
     await waitFor(() =>
       expect(
-        screen.getByRole("option", { name: "Депакин" }),
+        screen.getByRole("option", { name: "Депакин, 150 мг" }),
       ).toBeInTheDocument(),
     );
+    expect(screen.queryByRole("option", { name: /Топамакс/ })).toBeNull();
     await user.selectOptions(drug, "m1");
     // Как в боте, по умолчанию — «дали».
     expect(screen.getByRole("radio", { name: "Дали" })).toBeChecked();
@@ -262,7 +264,9 @@ describe("«Добавить запись» в Mini App", () => {
       expect(screen.getByRole("button", { name: "Лекарство" })).toBeDisabled(),
     );
     expect(
-      screen.getByText("Врач ещё не добавил лекарства — отмечать пока нечего."),
+      screen.getByText(
+        "На сегодня лекарств в схеме нет. Если ребёнок их принимает, скажите врачу — список ведёт он.",
+      ),
     ).toBeInTheDocument();
   });
 

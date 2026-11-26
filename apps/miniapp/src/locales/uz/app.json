@@ -36,7 +36,9 @@
   },
   "errors": {
     "network": "Aloqa yo‘q. Internetni tekshiring.",
-    "waitingForNetwork": "Aloqa yo‘q — paydo bo‘lishi bilan ko‘rsatamiz."
+    "waitingForNetwork": "Aloqa yo‘q — paydo bo‘lishi bilan ko‘rsatamiz.",
+    "sectionFailed": "Bo‘lim ochilmadi",
+    "sectionFailedHint": "Aloqa uzilganga o‘xshaydi. Internetni tekshiring va «Qaytarish»ni bosing."
   },
   "actions": {
     "retry": "Qaytarish",
@@ -85,10 +87,22 @@
     "composition": "Nimani tortish kerak",
     "grams": "{{value}} g",
     "uncounted": "ziravor, hisobga kirmaydi",
-    "changedSinceSaved": "Menyu saqlangan kundan beri retsept o‘zgargan.",
+    "stale": {
+      "body": "Taom menyuga qo‘yilgandan keyin uning tarkibi o‘zgartirildi. Quyida — avvalgi grammlar.",
+      "eaten": "Taom menyuga qo‘yilgandan keyin uning tarkibi o‘zgartirildi. Taom yeyilgan deb belgilangan, shuning uchun grammlar avvalgidek qoldirildi.",
+      "refresh": "Yangi grammlarni olish",
+      "refreshing": "Yangilanmoqda…",
+      "failed": "Yangi grammlarni olib bo‘lmadi"
+    },
     "totals": "Kun yakunlari",
     "excluded": "Menyuda bolaga taqiqlangan mahsulotlar bor",
-    "withdrawn": "Menyuda arxivdagi mahsulotlar bor",
+    "withdrawn": "Menyuda mahsulotlar ro‘yxatidan olib tashlangan mahsulotlar bor",
+    "excludedHint": "Bu taomlarni berishdan oldin shifokor yoki dietologdan aniqlashtiring.",
+    "withdrawnHint": "Ularni nima bilan almashtirishni dietologdan so‘rang.",
+    "flagged": {
+      "line": "{{product}} — {{dishes}}",
+      "dish": "«{{title}}», {{index}}-ovqatlanish"
+    },
     "markFailed": "Belgi saqlanmadi",
     "markFailedHint": "Yana bir bor urinib ko‘ring.",
     "openWeb": "Kompyuterda qulayroqmi? Kabinetni ochish",
@@ -324,7 +338,7 @@
       "mealsTitle": "Ovqat — menyuda",
       "mealsBody": "Ovqat menyuda belgilanadi: taomni tanlang va «Yeyildi»ni bosing. Shunda shifokor bola aslida qancha yeganini ko‘radi.",
       "openMenu": "Menyuni ochish",
-      "noMedications": "Shifokor hali dorilarni kiritmagan — hozircha belgilaydigan narsa yo‘q.",
+      "noMedications": "Bugun sxemada dorilar yo‘q. Agar bola dori ichayotgan bo‘lsa, shifokorga ayting — ro‘yxatni u yuritadi.",
       "kinds": {
         "seizures": "Xuruj",
         "ketones": "Ketonlar",
@@ -735,6 +749,9 @@
     "medications": {
       "title": "Bugungi dorilar",
       "loadError": "Dorilar yuklanmadi",
+      "marksLoading": "Bugun nima belgilanganini tekshiryapmiz…",
+      "marksFailed": "Bugungi belgilar yuklanmadi",
+      "marksFailedHint": "Bugun berilgan dorilar ko‘rsatilmagan bo‘lishi mumkin. Belgilashdan oldin «Qaytarish»ni bosing.",
       "give": "Berildi",
       "skip": "O‘tkazib yuborildi",
       "giveAria": "Berildi: {{name}}",

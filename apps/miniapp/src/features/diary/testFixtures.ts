@@ -124,7 +124,25 @@ export function fakeGet(
     }
     if (path.endsWith("/medications")) {
       return Promise.resolve({
-        data: { items: [{ id: "m1", drug_name: "Депакин", dose: "150 мг" }] },
+        data: {
+          items: [
+            {
+              id: "m1",
+              drug_name: "Депакин",
+              dose: "150 мг",
+              started_at: "2026-01-01",
+              stopped_at: null,
+            },
+            // Отменённое: в новую запись не предлагается (аудит 26.11.2026).
+            {
+              id: "m0",
+              drug_name: "Топамакс",
+              dose: "25 мг",
+              started_at: "2025-06-01",
+              stopped_at: "2025-12-31",
+            },
+          ],
+        },
       });
     }
     return Promise.reject(new Error(`unexpected GET ${path}`));

@@ -443,19 +443,31 @@ describe("сохранённое блюдо — в план дня", () => {
     expect(api.PUT).not.toHaveBeenCalled();
   });
 
-  it("правка состава после сохранения возвращает форму: это уже другое блюдо", async () => {
+  it("правка после сохранения идёт в то же блюдо, а не заводит второе (аудит 26.11.2026, 1.5)", async () => {
     const user = userEvent.setup();
     renderScreen();
     await saveDish(user);
+
+    // «Новое блюдо» — сразу, не только после «Добавить в меню».
+    expect(
+      screen.getByRole("button", { name: "Новое блюдо" }),
+    ).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/Масло сливочное, граммы/), "5");
 
     expect(
       screen.queryByText("Блюдо «Масло сливочное» сохранено."),
     ).not.toBeInTheDocument();
+    // Сохранённое стало открытым: первым — запись в него же.
     expect(
-      screen.getByRole("button", { name: "Сохранить блюдо" }),
+      await screen.findByRole("button", { name: "Сохранить изменения" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Сохранить как новое блюдо" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Сохранить блюдо" }),
+    ).not.toBeInTheDocument();
   });
 });
 

@@ -1,4 +1,4 @@
-import { Button, FormSheet } from "@ketocare/ui";
+import { Button, FormSheet, toDateInput } from "@ketocare/ui";
 import { useContext, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -97,7 +97,16 @@ export function AddEntry({
       step={step}
       // Пустая схема — отмечать нечего; пока не загружена, выбор открыт:
       // форма скажет сама, если выбрать не из чего.
-      noMedications={medications.data?.length === 0}
+      noMedications={
+        medications.data !== undefined &&
+        !medications.data.some((item) => {
+          const day = toDateInput(new Date());
+          return (
+            item.startedAt <= day &&
+            (item.stoppedAt === null || item.stoppedAt >= day)
+          );
+        })
+      }
       onStep={setStep}
       onClose={onClose}
     />

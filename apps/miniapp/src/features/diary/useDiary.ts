@@ -53,6 +53,10 @@ export interface NamedOption {
 
 export interface MedicationOption extends NamedOption {
   dose: string;
+  /** Срок по схеме врача, `YYYY-MM-DD`: новая запись предлагает только
+   * лекарства, действующие на её дату (аудит 26.11.2026, 1.4). */
+  startedAt: string;
+  stoppedAt: string | null;
 }
 
 /**
@@ -200,6 +204,8 @@ export function useMedications(patientId: string) {
         id: item.id,
         name: item.drug_name,
         dose: item.dose,
+        startedAt: item.started_at,
+        stoppedAt: item.stopped_at ?? null,
       }));
     },
   });

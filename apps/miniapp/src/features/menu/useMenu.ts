@@ -166,6 +166,34 @@ export function useMarkEaten(patientId: string, day: string) {
   });
 }
 
+/**
+ * Взять в позицию дня состав блюда таким, какой он сейчас (ADR-0089).
+ *
+ * Ответ — день целиком: он кладётся в кэш сразу, чтобы «Что взвесить» показало
+ * новые граммы без ещё одного запроса. Сводка перечитывается: итоги дня
+ * поменялись вместе с составом.
+ */
+export function useRefreshItem(patientId: string, day: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (itemId: string) => {
+      const { data, error } = await api.POST(
+        "/api/v1/patients/{patient_id}/menus/items/{item_id}/refresh",
+        { params: { path: { patient_id: patientId, item_id: itemId } } },
+      );
+      if (error || !data) throw error ?? new Error("Empty menu response");
+      return data;
+    },
+    onSuccess: (menu) => {
+      haptic("success");
+      queryClient.setQueryData(menuKey(patientId, day), menu);
+      void queryClient.invalidateQueries({
+        queryKey: ["patient", patientId, "overview"],
+      });
+    },
+  });
+}
+
 /** Отметку отвергли потому, что план дня изменился, — сказать это над планом. */
 export function isPlanChanged(error: unknown): boolean {
   return errorCodeOf(error) === "conflict";

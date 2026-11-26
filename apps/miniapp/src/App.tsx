@@ -18,6 +18,7 @@ import {
   kitLabelsFrom,
 } from "@ketocare/ui";
 import { TabBar, type TabBarItem } from "./components/TabBar";
+import { SectionErrorBoundary } from "./components/SectionErrorBoundary";
 import type { CreatableKind } from "./features/diary/useDiary";
 import { ChildSwitcher } from "./features/session/ChildSwitcher";
 import { SessionGate } from "./features/session/SessionGate";
@@ -271,18 +272,20 @@ export function Screens({
                 <TabVisibleContext value={id === tab && settings === null}>
                   {/* Своя граница ожидания у каждой вкладки: чанк новой
                     вкладки не должен прятать уже открытые за скелетоном. */}
-                  <Suspense fallback={<TabSkeleton />}>
-                    {id === "today" && (
-                      <TodayScreen session={session} request={todayRequest} />
-                    )}
-                    {id === "diary" && (
-                      <DiaryScreen session={session} request={diaryRequest} />
-                    )}
-                    {id === "dishes" && <DishesScreen session={session} />}
-                    {id === "assistant" && (
-                      <AssistantScreen session={session} />
-                    )}
-                  </Suspense>
+                  <SectionErrorBoundary>
+                    <Suspense fallback={<TabSkeleton />}>
+                      {id === "today" && (
+                        <TodayScreen session={session} request={todayRequest} />
+                      )}
+                      {id === "diary" && (
+                        <DiaryScreen session={session} request={diaryRequest} />
+                      )}
+                      {id === "dishes" && <DishesScreen session={session} />}
+                      {id === "assistant" && (
+                        <AssistantScreen session={session} />
+                      )}
+                    </Suspense>
+                  </SectionErrorBoundary>
                 </TabVisibleContext>
               </div>
             ))}

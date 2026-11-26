@@ -128,6 +128,67 @@ beforeEach(() => {
 });
 
 describe("«Лекарства сегодня» на главной Mini App (Д4)", () => {
+  it("пока сегодняшние отметки не пришли, «Дали» заперто: лекарство могли уже дать (1.2)", async () => {
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("/logs/medications"))
+        return new Promise(() => undefined);
+      if (path.endsWith("/medications")) {
+        return Promise.resolve({
+          data: { items: [medication("m1", "Депакин")], total: 1 },
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    renderBlock();
+
+    expect(
+      await screen.findByText("Проверяем, что уже отмечено сегодня…"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Дали: Депакин" }),
+    ).toBeDisabled();
+  });
+
+  it("отметки не загрузились — предупреждение и «Повторить», кнопки заперты (1.2)", async () => {
+    const user = userEvent.setup();
+    let failLogs = true;
+    (api.GET as Mock).mockImplementation((path: string) => {
+      if (path.endsWith("/logs/medications")) {
+        return failLogs
+          ? Promise.resolve({ error: { error: { code: "internal" } } })
+          : Promise.resolve({
+              data: {
+                items: [mark("l1", "m1", true, "2026-11-26T05:10:00Z")],
+                total: 1,
+              },
+            });
+      }
+      if (path.endsWith("/medications")) {
+        return Promise.resolve({
+          data: { items: [medication("m1", "Депакин")], total: 1 },
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
+    });
+    renderBlock();
+
+    expect(
+      await screen.findByText("Сегодняшние отметки не загрузились"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Дали: Депакин" }),
+    ).toBeDisabled();
+
+    failLogs = false;
+    await user.click(screen.getByRole("button", { name: "Повторить" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Дали: Депакин" }),
+      ).toBeEnabled(),
+    );
+    expect(screen.getByText(/^дали в /)).toBeInTheDocument();
+  });
   it("показывает только препараты, которые принимаются сегодня", async () => {
     serve([
       medication("m1", "Депакин"),

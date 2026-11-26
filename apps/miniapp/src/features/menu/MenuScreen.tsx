@@ -39,6 +39,8 @@ import {
   menuDatesOf,
 } from "./planDays";
 import { ShoppingScreen } from "./ShoppingScreen";
+import { MenuProductWarnings } from "./MenuProductWarnings";
+import { StaleItemNote } from "./StaleItemNote";
 import type { Menu, MenuItem } from "./useMenu";
 import {
   dayAt,
@@ -336,6 +338,8 @@ export function MenuScreen({
                 )}
 
                 <DayPlan
+                  patientId={session.patientId}
+                  day={day}
                   menu={menu.data ?? null}
                   meals={mealsOfDay(meals, menu.data?.items ?? [])}
                   canMarkEaten={dayOffset <= 0}
@@ -398,6 +402,8 @@ export function MenuScreen({
 }
 
 function DayPlan({
+  patientId,
+  day,
   menu,
   meals,
   canMarkEaten,
@@ -414,6 +420,8 @@ function DayPlan({
   failedId,
   failure,
 }: {
+  patientId: string;
+  day: string;
   menu: Menu | null;
   meals: number[];
   canMarkEaten: boolean;
@@ -462,19 +470,7 @@ function DayPlan({
         </p>
       )}
 
-      {menu !== null && menu.excluded_products.length > 0 && (
-        // Молчать нельзя: по этому меню кормят сегодня. Но и запрещать день
-        // нельзя — исключения уточняются по ходу терапии (вопрос 29).
-        <WarningBanner level="danger" title={t("menu.excluded")}>
-          {menu.excluded_products.map((product) => product.name_ru).join(", ")}
-        </WarningBanner>
-      )}
-
-      {menu !== null && menu.withdrawn_products.length > 0 && (
-        <WarningBanner level="warning" title={t("menu.withdrawn")}>
-          {menu.withdrawn_products.map((product) => product.name_ru).join(", ")}
-        </WarningBanner>
-      )}
+      {menu !== null && <MenuProductWarnings menu={menu} />}
 
       {meals.map((mealIndex) => {
         const inMeal = items.filter((item) => item.meal_index === mealIndex);
@@ -531,6 +527,11 @@ function DayPlan({
                         )
                       }
                     >
+                      <StaleItemNote
+                        item={item}
+                        patientId={patientId}
+                        day={day}
+                      />
                       <ItemDetails item={item} onOpenRecipe={onOpenRecipe} />
                     </MealItem>
                   </li>
