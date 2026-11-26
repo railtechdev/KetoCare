@@ -127,7 +127,15 @@ export function AssistantScreen({ session }: { session: Session }) {
   const latestFailed = latest.isError && chosenId === undefined;
   // Недописанный вопрос: Telegram спросит, прежде чем закрыться.
   useUnsavedGuard(question.trim() !== "");
-  const limited = errorCodeOf(ask.error) === "rate_limited";
+  // Дневной предел вопросов приходит ответом в переписке (`limited`), а не
+  // отказом отправки: прежде поле не выключалось, хотя статья обещала это.
+  // А минутный предел частоты (429) выключал поле до полуночи — теперь он
+  // обычная ошибка отправки (аудит 26.11.2026, 2.19).
+  const lastMessage = messages.at(-1);
+  const limited =
+    lastMessage?.role === "assistant" &&
+    lastMessage.limited === true &&
+    today(new Date(lastMessage.created_at)) === today();
 
   // Предел вопросов — суточный: в полночь он снят, и поле должно включиться
   // само. Прежде отказ «на сегодня вопросов больше нет» висел до перезапуска
@@ -480,7 +488,7 @@ export function AssistantScreen({ session }: { session: Session }) {
         />
         {limited && (
           <p role="status" className="m-0 text-sm text-warning-strong">
-            {errorMessageOf(ask.error) ?? t("assistant.limited")}
+            {t("assistant.limited")}
           </p>
         )}
         {ask.isError && !limited && (

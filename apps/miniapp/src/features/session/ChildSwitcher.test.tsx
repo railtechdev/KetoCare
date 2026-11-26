@@ -14,11 +14,15 @@ import { SessionGate } from "./SessionGate";
  */
 
 const launchData = vi.hoisted(() => vi.fn<() => string | null>());
+const unsaved = vi.hoisted(() => ({ value: false }));
 const post = vi.hoisted(() => vi.fn());
 
 vi.mock("../../lib/telegram", () => ({
   launchData,
   webApp: () => null,
+  hasUnsavedInput: () => unsaved.value,
+  // Подтверждение закрывается «Назад» Telegram — вне Telegram кнопки нет.
+  showBackButton: () => () => undefined,
   launchDiagnosis: () => ({ telegram: true, launchParams: true }),
 }));
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -118,6 +122,36 @@ describe("несколько детей в одном Telegram", () => {
       body: { patient_id: TIMUR },
     });
     expect(screen.getByLabelText("Ребёнок")).toHaveValue(TIMUR);
+  });
+
+  it("набранное не пропадает молча: переход к другому ребёнку спрашивают (3.9)", async () => {
+    launchData.mockReturnValue("user=...&hash=...");
+    post.mockImplementation((path: string) =>
+      Promise.resolve(
+        path === "/api/v1/auth/miniapp/switch" ? opened(TIMUR) : opened(ANYA),
+      ),
+    );
+    unsaved.value = true;
+    try {
+      renderApp();
+      const select = await screen.findByLabelText("Ребёнок");
+
+      await userEvent.selectOptions(select, TIMUR);
+
+      expect(
+        await screen.findByRole("alertdialog", { name: /Перейти к Тимур/ }),
+      ).toBeInTheDocument();
+      expect(post).not.toHaveBeenCalledWith(
+        "/api/v1/auth/miniapp/switch",
+        expect.anything(),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Перейти" }));
+      expect(
+        await screen.findByText("Открыт Тимур Иванов"),
+      ).toBeInTheDocument();
+    } finally {
+      unsaved.value = false;
+    }
   });
 
   it("при следующем запуске открывает выбранного в прошлый раз", async () => {

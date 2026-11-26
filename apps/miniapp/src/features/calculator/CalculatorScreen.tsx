@@ -224,6 +224,9 @@ export function CalculatorScreen({
    * из результата вёл один выход — принять как есть.
    */
   const solvedItems = solve.data?.dish.items;
+  const solvedExcludedIds = (solve.data?.excluded ?? []).map(
+    (product) => product.product_id,
+  );
   const solveOutcome: "reshaped" | "unchanged" | "changed" | null = (() => {
     if (solve.data === undefined || solve.variables === undefined) return null;
     if (solve.data.reshaped) return "reshaped";
@@ -255,19 +258,26 @@ export function CalculatorScreen({
     if (items === undefined) return;
 
     const grams = new Map(items.map((item) => [item.product_id, item.grams]));
+    // Исключённое ребёнку подбор не трогал, но оставлял строкой в составе:
+    // показатели считались с ним, и блюдо сохранялось вместе с ним. Подбор
+    // убирает его и называет (аудит 26.11.2026, 3.7).
+    const dropped = new Set(solvedItems === undefined ? [] : solvedExcludedIds);
     setRows((current) =>
-      current.map((row) => {
-        const next = grams.get(row.product.id);
-        // Как есть, без своего округления: кабинет кладёт в поле то же число,
-        // а «21,8» вместо 21,75 — уже другая граммовка, пусть и на 0,05 г.
-        // Запятой, как остальные числа экрана (П45): с шагом 0,5 г на
-        // маленьком приёме (вопрос 62) дробь приходит из подбора; разбор поля
-        // понимает и запятую, и точку.
-        return next === undefined
-          ? row
-          : { ...row, grams: String(next).replace(".", ",") };
-      }),
+      current
+        .filter((row) => !dropped.has(row.product.id))
+        .map((row) => {
+          const next = grams.get(row.product.id);
+          // Как есть, без своего округления: кабинет кладёт в поле то же число,
+          // а «21,8» вместо 21,75 — уже другая граммовка, пусть и на 0,05 г.
+          // Запятой, как остальные числа экрана (П45): с шагом 0,5 г на
+          // маленьком приёме (вопрос 62) дробь приходит из подбора; разбор поля
+          // понимает и запятую, и точку.
+          return next === undefined
+            ? row
+            : { ...row, grams: String(next).replace(".", ",") };
+        }),
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- состав меняет ответ, а не список
   }, [solvedItems, scaledItems]);
 
   /**

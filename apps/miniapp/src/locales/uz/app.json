@@ -1,7 +1,11 @@
 {
   "opening": "Ilova ochilmoqda…",
   "child": {
-    "label": "Bola"
+    "label": "Bola",
+    "switchTitle": "{{name}}ga o‘tilsinmi?",
+    "switchBody": "{{name}} uchun kiritilgan narsa saqlanmagan va yo‘qoladi.",
+    "switchConfirm": "O‘tish",
+    "switchCancel": "Qolish"
   },
   "language": {
     "label": "Til / Язык",
@@ -485,7 +489,7 @@
     "waitingForNetwork": "Aloqa yo‘q — paydo bo‘lganda hisoblaymiz.",
     "excluded": "Tarkibda bolaga taqiqlangan mahsulotlar bor",
     "excludedVerify": "{{list}}. Hisob qanday bo‘lsa shunday qilingan — tarkibni siz belgiladingiz. Mahsulotni olib tashlang yoki uni shifokor bilan kelishing.",
-    "excludedSolve": "Tanlashda qatnashmadi: {{list}} — bu mahsulotlar bolaga taqiqlangan, taqsimot ularsiz tuzildi.",
+    "excludedSolve": "Tarkibdan olib tashlandi: {{list}} — bu mahsulotlar bolaga taqiqlangan. Grammlar ularsiz tanlandi.",
     "unknownProduct": "bu mahsulot endi mahsulotlar ro‘yxatida yo‘q",
     "proteinMin": "Oqsil kamida, g",
     "carbsMax": "Uglevodlar ko‘pi bilan, g",
@@ -674,7 +678,7 @@
       "close": "Yopish",
       "gone": "Bu maqola ilova materiallarida endi yo‘q."
     },
-    "limited": "Bugun yordamchiga boshqa savol berib bo‘lmaydi — ertaga yana paydo bo‘ladi.",
+    "limited": "Bugun yordamchiga boshqa savol berib bo‘lmaydi — ertaga yana paydo bo‘ladi. Shoshilinch bo‘lsa — klinikaga qo‘ng‘iroq qiling.",
     "sendFailed": "Savolni yuborib bo‘lmadi. Yana bir bor urinib ko‘ring.",
     "loadFailed": "Suhbatni yuklab bo‘lmadi",
     "loadFailedHint": "Aloqani tekshirib, qaytaring.",

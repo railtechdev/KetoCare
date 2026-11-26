@@ -325,9 +325,11 @@ describe("помощник в Mini App", () => {
     expect(keys[2]).not.toBe(keys[0]);
   });
 
-  it("исчерпанный предел выключает поле, а не предлагает повтор", async () => {
+  it("минутный предел частоты — ошибка отправки, а не выключенное до завтра поле", async () => {
     (api.POST as Mock).mockResolvedValue({
-      error: { error: { code: "rate_limited", message: "На сегодня хватит." } },
+      error: {
+        error: { code: "rate_limited", message: "Слишком много попыток." },
+      },
       response: { status: 429 },
     });
     const user = userEvent.setup();
@@ -335,9 +337,10 @@ describe("помощник в Mini App", () => {
 
     await ask(user);
 
-    await waitFor(() => {
-      expect(screen.getByLabelText(/куда записать кетоны/i)).toBeDisabled();
-    });
+    expect(
+      await screen.findByText("Слишком много попыток."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/куда записать кетоны/i)).toBeEnabled();
   });
 
   it("до первого вопроса за телом переписки не ходит", async () => {
@@ -880,7 +883,7 @@ describe("переписка на телефоне (аудит Mini App 2026-11)
     expect(options.params.header["Idempotency-Key"]).toMatch(KEY_FORMAT);
   });
 
-  it("повтор после недоступности недоступен, пока исчерпан предел", async () => {
+  it("повтор после недоступности не теряется на минутном пределе", async () => {
     serve({
       messages: [
         QUESTION,
@@ -893,7 +896,9 @@ describe("переписка на телефоне (аудит Mini App 2026-11)
       ],
     });
     (api.POST as Mock).mockResolvedValue({
-      error: { error: { code: "rate_limited", message: "На сегодня хватит." } },
+      error: {
+        error: { code: "rate_limited", message: "Слишком много попыток." },
+      },
       response: { status: 429 },
     });
     const user = userEvent.setup();
@@ -904,8 +909,11 @@ describe("переписка на телефоне (аудит Mini App 2026-11)
     });
     await user.click(retry);
 
+    expect(
+      await screen.findByText("Слишком много попыток."),
+    ).toBeInTheDocument();
     await waitFor(() => {
-      expect(retry).toBeDisabled();
+      expect(retry).toBeEnabled();
     });
   });
   it("исчерпанный предел — без «спросите врача» и без телефона (П4)", async () => {
@@ -973,6 +981,65 @@ describe("переписка на телефоне (аудит Mini App 2026-11)
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveClass("pt-(--safe-top,0px)", "pb-(--safe-bottom,0px)");
+  });
+
+  it("дневной предел из переписки выключает поле до завтра (2.19)", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "Дневной лимит вопросов исчерпан.",
+          limited: true,
+          blocked: true,
+          source_articles: [],
+          created_at: new Date().toISOString(),
+        }),
+      ],
+    });
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/куда записать кетоны/i)).toBeDisabled();
+    });
+    expect(
+      screen.getByText(/На сегодня вопросов к помощнику больше нет/),
+    ).toBeInTheDocument();
+  });
+
+  it("в полночь поле включается само", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 10, 20, 23, 59, 30));
+    try {
+      serve({
+        messages: [
+          QUESTION,
+          message({
+            seq: 1,
+            text: "Дневной лимит вопросов исчерпан.",
+            limited: true,
+            blocked: true,
+            source_articles: [],
+            created_at: new Date().toISOString(),
+          }),
+        ],
+      });
+      renderScreen();
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/куда записать кетоны/i)).toBeDisabled();
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/куда записать кетоны/i)).toBeEnabled();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -1145,39 +1212,6 @@ describe("пустой экран: о чём спросить (П7, решени
       );
     } finally {
       applyLanguage("ru");
-    }
-  });
-});
-
-describe("суточный предел вопросов", () => {
-  it("в полночь поле включается само", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.setSystemTime(new Date(2026, 10, 20, 23, 59, 30));
-    try {
-      (api.GET as Mock).mockResolvedValue({ data: { items: [], total: 0 } });
-      (api.POST as Mock).mockResolvedValue({
-        error: {
-          error: { code: "rate_limited", message: "На сегодня хватит." },
-        },
-        response: { status: 429 },
-      });
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderScreen();
-
-      await ask(user);
-      await waitFor(() => {
-        expect(screen.getByLabelText(/куда записать кетоны/i)).toBeDisabled();
-      });
-
-      await act(async () => {
-        vi.advanceTimersByTime(60_000);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByLabelText(/куда записать кетоны/i)).toBeEnabled();
-      });
-    } finally {
-      vi.useRealTimers();
     }
   });
 });
