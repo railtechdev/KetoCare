@@ -340,12 +340,11 @@ let unsavedCount = 0;
  */
 export function guardUnsavedInput(): () => void {
   const app = webApp();
-  if (app === null) return () => undefined;
 
   unsavedCount += 1;
   if (unsavedCount === 1) {
-    app.enableClosingConfirmation?.();
-    app.disableVerticalSwipes?.();
+    app?.enableClosingConfirmation?.();
+    app?.disableVerticalSwipes?.();
   }
   let released = false;
   return () => {
@@ -353,10 +352,21 @@ export function guardUnsavedInput(): () => void {
     released = true;
     unsavedCount -= 1;
     if (unsavedCount === 0) {
-      app.disableClosingConfirmation?.();
-      app.enableVerticalSwipes?.();
+      app?.disableClosingConfirmation?.();
+      app?.enableVerticalSwipes?.();
     }
   };
+}
+
+/**
+ * Есть ли сейчас незаконченный ввод — спросить, прежде чем его потерять.
+ *
+ * Смена ребёнка в шапке собирает экраны заново: недописанный вопрос, состав
+ * в расчёте, открытая форма пропадали от одного касания, хотя закрытие
+ * приложения с тем же вводом Telegram переспрашивает (аудит 26.11.2026, 3.9).
+ */
+export function hasUnsavedInput(): boolean {
+  return unsavedCount > 0;
 }
 
 /**

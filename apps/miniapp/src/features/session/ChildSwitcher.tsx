@@ -1,8 +1,10 @@
 import { Button, NativeSelect } from "@ketocare/ui";
 import { Settings } from "lucide-react";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { TelegramConfirmDialog } from "../../components/TelegramConfirmDialog";
+import { hasUnsavedInput } from "../../lib/telegram";
 import type { Session } from "./useSession";
 
 /**
@@ -31,6 +33,10 @@ export function ChildSwitcher({
   const { t } = useTranslation();
   const id = useId();
   const several = session.children.length >= 2;
+  // Ребёнок, к которому просятся перейти при незаконченном вводе.
+  const [asked, setAsked] = useState<string | null>(null);
+  const askedName =
+    session.children.find((child) => child.patientId === asked)?.name ?? "";
 
   return (
     <header className="flex items-center gap-field border-b border-border bg-card px-4 py-1">
@@ -43,8 +49,10 @@ export function ChildSwitcher({
             id={id}
             value={session.patientId}
             onChange={(event) => {
-              if (event.target.value !== session.patientId)
-                onSwitch(event.target.value);
+              const next = event.target.value;
+              if (next === session.patientId) return;
+              if (hasUnsavedInput()) setAsked(next);
+              else onSwitch(next);
             }}
             className="flex-1 font-semibold"
           >
@@ -61,6 +69,20 @@ export function ChildSwitcher({
           {session.patientName}
         </p>
       )}
+      <TelegramConfirmDialog
+        open={asked !== null}
+        onOpenChange={(open) => {
+          if (!open) setAsked(null);
+        }}
+        title={t("child.switchTitle", { name: askedName })}
+        description={t("child.switchBody", { name: session.patientName })}
+        confirmLabel={t("child.switchConfirm")}
+        cancelLabel={t("child.switchCancel")}
+        onConfirm={() => {
+          if (asked !== null) onSwitch(asked);
+          setAsked(null);
+        }}
+      />
       {onOpenSettings !== undefined && (
         <Button
           type="button"

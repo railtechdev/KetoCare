@@ -1742,9 +1742,12 @@ describe("калькулятор в Mini App", () => {
       screen.getByRole("button", { name: "Подобрать граммовку" }),
     );
 
+    // Исключённое не остаётся строкой в составе: подбор его убирает и
+    // называет (аудит 26.11.2026, 3.7).
     expect(
-      await screen.findByText(/Не участвовало в подборе: Арахис/),
+      await screen.findByText(/Убрали из состава: Арахис/),
     ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Масло сливочное, граммы/)).toBeNull();
   });
 
   it("правка состава снимает прежний отказ подбора", async () => {
