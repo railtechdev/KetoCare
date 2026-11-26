@@ -17,7 +17,13 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
-import { useEntryMutations } from "../diary/useDiary";
+import { EntryEditSheet } from "../diary/EntryEditSheet";
+import {
+  type DiaryLog,
+  useEntryMutations,
+  useMedications,
+} from "../diary/useDiary";
+import { useFamily } from "../family/useFamily";
 import type { Session } from "../session/useSession";
 import {
   type ActiveMedication,
@@ -80,7 +86,11 @@ export function MedicationsToday({
   const day = toDateInput(new Date());
   const medications = useActiveMedications(session.patientId, day);
   const logs = useTodayMedicationLogs(session.patientId);
-  const { create, remove } = useEntryMutations(session.patientId);
+  const { create, update, remove } = useEntryMutations(session.patientId);
+  const family = useFamily(session.patientId);
+  const me = family.data?.find((member) => member.is_me)?.id ?? null;
+  const medicationOptions = useMedications(session.patientId);
+  const [editingMark, setEditingMark] = useState<TodayMark | null>(null);
   // Препараты, отметка которых ещё в пути. Ссылка — для проверки в момент
   // нажатия (два касания до перерисовки), состояние — для кнопок.
   const inFlight = useRef(new Set<string>());
@@ -236,17 +246,40 @@ export function MedicationsToday({
                   </p>
                 )}
                 {marks.length > 0 && (
-                  <p className="m-0 text-sm tabular-nums">
-                    {marks
-                      .map((entry) =>
-                        t(
-                          entry.taken
-                            ? "today.medications.givenAt"
-                            : "today.medications.skippedAt",
-                          { time: formatTime(new Date(entry.occurred_at)) },
-                        ),
-                      )
-                      .join(", ")}
+                  // Своя отметка нажимается и открывает правку — время, «дали /
+                  // пропустили», удаление. «Отменить» жило несколько секунд в
+                  // тосте, а потом ошибочную отметку с «Сегодня» было не
+                  // исправить (аудит 26.11.2026, 3.4).
+                  <p className="m-0 flex flex-wrap gap-x-2 text-sm tabular-nums">
+                    {marks.map((entry) => {
+                      const label = t(
+                        entry.taken
+                          ? "today.medications.givenAt"
+                          : "today.medications.skippedAt",
+                        { time: formatTime(new Date(entry.occurred_at)) },
+                      );
+                      return me !== null && entry.created_by === me ? (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          className="min-h-touch text-left text-primary underline underline-offset-2"
+                          aria-label={t("today.medications.editMarkAria", {
+                            mark: label,
+                            name: medication.drug_name,
+                          })}
+                          onClick={() => setEditingMark(entry)}
+                        >
+                          {label}
+                        </button>
+                      ) : (
+                        <span
+                          key={entry.id}
+                          className="inline-flex min-h-touch items-center"
+                        >
+                          {label}
+                        </span>
+                      );
+                    })}
                   </p>
                 )}
                 <div className="flex gap-field">
@@ -307,6 +340,41 @@ export function MedicationsToday({
           </Button>
         )}
       </AsyncSection>
+      {editingMark !== null && (
+        <EntryEditSheet
+          key={editingMark.id}
+          target={{ entry: editingMark }}
+          title={t("diary.editTitle")}
+          seizureTypes={[]}
+          durationOptions={[]}
+          medications={medicationOptions.data ?? []}
+          pending={update.isPending}
+          error={update.error}
+          onSave={(body, onSaved) =>
+            update.mutate(
+              { logId: editingMark.id, body },
+              { onSuccess: onSaved },
+            )
+          }
+          onClose={() => setEditingMark(null)}
+          deleting={remove.isPending}
+          onDelete={() =>
+            remove.mutate(
+              { kind: "medications", id: editingMark.id },
+              {
+                onSuccess: () => {
+                  toast.success(t("diary.deleted"));
+                  setEditingMark(null);
+                },
+                onError: (error) =>
+                  toast.error(errorMessageOf(error) ?? t("diary.deleteFailed")),
+              },
+            )
+          }
+        />
+      )}
     </Section>
   );
 }
+
+type TodayMark = Extract<DiaryLog, { kind: "medications" }>;

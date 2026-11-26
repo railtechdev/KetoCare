@@ -831,7 +831,8 @@
         "four_times_daily": "4 раза в сутки",
         "every_other_day": "Через день",
         "as_needed": "По требованию"
-      }
+      },
+      "editMarkAria": "Исправить отметку «{{mark}}» — {{name}}"
     }
   },
   "clinic": {
