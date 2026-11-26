@@ -49,6 +49,11 @@ export type SessionProblem =
   /** Telegram есть, привязки нет — нужен код из кабинета. */
   | "not_linked"
   /**
+   * Привязка была, доступ закрыли (врач или тот, кто пригласил). «Ещё не
+   * привязан» для того, кто вчера вёл дневник, — неправда (аудит 2.17).
+   */
+  | "access_closed"
+  /**
    * Сервер не принял подпись запуска (401). Почти всегда — она устарела:
    * Telegram подписывает запуск на ограниченное время, а приложение висело
    * открытым дольше. Повтор с той же подписью не поможет — только новый запуск
@@ -166,7 +171,9 @@ async function launch(initData: string, patientId?: string): Promise<Session> {
     // может это исправить сама, и приложение должно сказать как.
     throw (
       response.status === 404
-        ? "not_linked"
+        ? errorDetailsOf(error)?.reason === "access_closed"
+          ? "access_closed"
+          : "not_linked"
         : response.status === 401
           ? "relaunch"
           : "server"

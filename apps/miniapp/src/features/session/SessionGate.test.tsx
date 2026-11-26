@@ -126,7 +126,9 @@ describe("вход в Mini App", () => {
 
     renderGate();
 
-    expect(await screen.findByText(/ещё не привязан/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/пока нет доступа к ребёнку/),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Отправьте код сообщением в чат с ботом/),
     ).toBeInTheDocument();
@@ -269,13 +271,19 @@ describe("истечение сессии посреди работы", () => {
     await screen.findByText(/Кабинет Амина/);
 
     // Привязку отозвали: повторный обмен строки запуска отвечает 404.
-    post.mockResolvedValue({ error: {}, response: { status: 404 } });
+    post.mockResolvedValue({
+      error: {
+        error: { code: "not_found", details: { reason: "access_closed" } },
+      },
+      response: { status: 404 },
+    });
     act(() => {
       notifySessionExpired();
     });
 
     expect(
-      await screen.findByText(/Этот Telegram ещё не привязан/),
+      // Для того, кто вёл дневник, — «доступ закрыт», а не «ещё не привязан» (2.17).
+      await screen.findByText(/Доступ к ребёнку закрыт/),
     ).toBeInTheDocument();
   });
 });

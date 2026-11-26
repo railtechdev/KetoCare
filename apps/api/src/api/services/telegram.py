@@ -46,6 +46,10 @@ _NOT_LINKED = (
     "Пришлите боту код доступа от врача или родителя ребёнка."
 )
 _CHILD_NOT_LINKED = "Этот ребёнок не подключён к вашему Telegram."
+_ACCESS_CLOSED = (
+    "Доступ к ребёнку с этого Telegram закрыт. Чтобы вернуться, попросите новый "
+    "код у врача или у того, кто вас пригласил."
+)
 
 
 async def _openable_links(session: AsyncSession, chat_id: int) -> list[TelegramAccount]:
@@ -191,7 +195,14 @@ async def issue_miniapp_session(
     if not links:
         # Отдельный код, а не «недостаточно прав»: приложению нужно показать
         # инструкцию по привязке, а не сообщение об отказе (раздел 9 ТЗ).
-        raise ApiError(ErrorCode.NOT_FOUND, _NOT_LINKED)
+        # Причина — в `details`: «ещё не подключали» и «доступ закрыли»
+        # требуют разных слов (аудит семейного канала 26.11.2026, 2.17).
+        closed = await telegram_repo.chat_was_ever_linked(session, parsed.user_id)
+        raise ApiError(
+            ErrorCode.NOT_FOUND,
+            _ACCESS_CLOSED if closed else _NOT_LINKED,
+            details={"reason": "access_closed" if closed else "not_linked"},
+        )
 
     link = links[0] if patient_id is None else _pick(links, patient_id)
     return await _miniapp_session_for(

@@ -127,6 +127,16 @@ function Problem({
 }) {
   const { t } = useTranslation();
 
+  if (problem === "access_closed") {
+    return (
+      <EmptyState
+        title={t("session.accessClosed.title")}
+        description={t("session.accessClosed.description")}
+        action={<CloseAppButton />}
+      />
+    );
+  }
+
   if (problem === "not_linked") {
     // Код вводят не здесь, а в чате с ботом: поля для кода в приложении нет, и
     // «пришлите код сюда» было тупиком. Кнопка возвращает в чат.

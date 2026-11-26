@@ -64,6 +64,18 @@ async def list_active_links_by_chat(session: AsyncSession, chat_id: int) -> list
     return list((await session.scalars(stmt)).all())
 
 
+async def chat_was_ever_linked(session: AsyncSession, chat_id: int) -> bool:
+    """Была ли у чата хоть одна привязка — в том числе отозванная.
+
+    Mini App говорит взрослому, у которого закрыли доступ, «доступ закрыт», а
+    не «ещё не привязан»: для того, кто вчера вёл дневник, второе — неправда
+    (аудит семейного канала 26.11.2026, 2.17).
+    """
+
+    stmt = select(TelegramAccount.id).where(TelegramAccount.chat_id == chat_id).limit(1)
+    return (await session.scalar(stmt)) is not None
+
+
 async def get_active_link_for_child(
     session: AsyncSession, *, chat_id: int, patient_id: uuid.UUID
 ) -> TelegramAccount | None:

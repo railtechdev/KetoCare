@@ -15,8 +15,8 @@
   },
   "session": {
     "notLinked": {
-      "title": "Bu Telegram hali ulanmagan",
-      "description": "Kirish kodini qabulda shifokor yoki bolaga kirish huquqi allaqachon bor ota-ona beradi. Kodni bot bilan chatga xabar qilib yuboring va ilovani qayta oching."
+      "title": "Bu Telegramda hali bolaga kirish yo‘q",
+      "description": "Kodni qabulda shifokor yoki bolaga allaqachon kirishi bor ota-ona beradi. Kodni bot bilan chatga xabar qilib yuboring va ilovani qayta oching."
     },
     "outside": {
       "title": "Ilova Telegram ichida ochiladi",
@@ -37,7 +37,11 @@
       "title": "Ilovani yoping va chatdan qayta oching",
       "description": "Telegram ilova ishga tushirilishini cheklangan vaqtga tasdiqlaydi va u tugadi. Ilovani yoping va bot bilan chatdagi «Ilova» tugmasi orqali qayta oching. Saqlangan yozuvlar joyida; agar hozir nimadir kiritayotgan bo‘lsangiz — ochgandan keyin kundalikni tekshiring va qayta kiriting."
     },
-    "close": "Yopish va chatga qaytish"
+    "close": "Yopish va chatga qaytish",
+    "accessClosed": {
+      "title": "Bolaga kirish yopilgan",
+      "description": "Uni shifokor yoki sizni taklif qilgan kattalar yopgan. Siz qilgan yozuvlar kundalikda qoldi. Qaytish uchun ulardan yangi kod so‘rang va uni bot bilan chatga yuboring."
+    }
   },
   "errors": {
     "network": "Aloqa yo‘q. Internetni tekshiring.",
