@@ -99,6 +99,7 @@ async def notify_family(ctx: dict[str, Any], patient_id: str, starts_on: str | N
                     # Новое назначение — значит, заново составить меню.
                     reply_markup=buttons.open_app(
                         language,
+                        patient_id=uuid.UUID(str(patient_id)),
                         base=settings.miniapp_url,
                         target="menu",
                         label_key="btn_open_menu",
@@ -174,6 +175,7 @@ async def notify_family_joined(
                     # Закрыть доступ незнакомцу — в разделе «Близкие».
                     reply_markup=buttons.open_app(
                         languages.get(chat_id),
+                        patient_id=uuid.UUID(str(patient_id)),
                         base=settings.miniapp_url,
                         target="family",
                         label_key="btn_open_family",
@@ -257,6 +259,7 @@ async def notify_family_nudge(
                     text=named(text, names.get(chat_id)),
                     reply_markup=buttons.open_app(
                         languages.get(chat_id),
+                        patient_id=uuid.UUID(str(patient_id)),
                         base=settings.miniapp_url,
                         target="diary",
                         label_key="btn_open_diary",
@@ -342,6 +345,7 @@ async def notify_family_menu_composed(
                     text=named(text, names.get(chat_id)),
                     reply_markup=buttons.open_app(
                         languages.get(chat_id),
+                        patient_id=uuid.UUID(str(patient_id)),
                         base=settings.miniapp_url,
                         target="menu",
                         label_key="btn_open_menu",

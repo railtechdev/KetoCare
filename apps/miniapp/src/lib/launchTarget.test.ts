@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   LAUNCH_VALUES,
+  launchPatientOf,
   launchTargetOf,
   launchValue,
   targetOf,
@@ -98,5 +99,25 @@ describe("куда ведёт значение", () => {
       if (value === "today") continue;
       expect(targetOf(value)).not.toEqual({ tab: "today" });
     }
+  });
+});
+
+describe("ребёнок из кнопки бота (аудит 26.11.2026, 1.7)", () => {
+  const ID = "11111111-1111-4111-8111-111111111111";
+
+  it("берётся из строки запроса и из хеша", () => {
+    expect(
+      launchPatientOf({ search: `?open=menu&patient=${ID}`, hash: "" }),
+    ).toBe(ID);
+    expect(
+      launchPatientOf({ search: "", hash: `#tgWebAppData=x&patient=${ID}` }),
+    ).toBe(ID);
+  });
+
+  it("не идентификатор — не ребёнок", () => {
+    expect(
+      launchPatientOf({ search: "?patient=../admin", hash: "" }),
+    ).toBeNull();
+    expect(launchPatientOf({ search: "?open=menu", hash: "" })).toBeNull();
   });
 });

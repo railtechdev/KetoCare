@@ -74,15 +74,27 @@ def quiet(now_local: datetime) -> bool:
     return moment >= QUIET_FROM or moment < QUIET_TO
 
 
-def app_link(base: str, target: str) -> str | None:
-    """Адрес Mini App, открывающий экран `target`; None — кнопки не будет."""
+def app_link(base: str, target: str, patient_id: uuid.UUID | None = None) -> str | None:
+    """Адрес Mini App, открывающий экран `target`; None — кнопки не будет.
+
+    `patient_id` — ребёнок, о котором сообщение. У семьи с двумя детьми кнопка
+    открывала приложение на ребёнке, выбранном на телефоне в прошлый раз, и
+    отметка уходила не тому (аудит 26.11.2026, 1.7). Приложение открывает
+    ребёнка из адреса раньше запомненного; права проверяет сервер, как всегда.
+    """
 
     base = base.strip()
     if not base.startswith("https://") or target not in OPEN_TARGETS:
         return None
     parts = urlsplit(base)
-    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "open"]
+    query = [
+        (k, v)
+        for k, v in parse_qsl(parts.query, keep_blank_values=True)
+        if k not in ("open", "patient")
+    ]
     query.append(("open", target))
+    if patient_id is not None:
+        query.append(("patient", str(patient_id)))
     return urlunsplit(parts._replace(query=urlencode(query)))
 
 
@@ -92,20 +104,29 @@ def _markup(rows: list[list[dict[str, Any]]]) -> dict[str, Any] | None:
 
 
 def _app_button(
-    language: str | None, base: str, target: str, label_key: str
+    language: str | None,
+    base: str,
+    target: str,
+    label_key: str,
+    patient_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
-    url = app_link(base, target)
+    url = app_link(base, target, patient_id)
     if url is None:
         return []
     return [{"text": texts.text(language, label_key), "web_app": {"url": url}, "style": "primary"}]
 
 
 def open_app(
-    language: str | None, *, base: str, target: str, label_key: str
+    language: str | None,
+    *,
+    base: str,
+    target: str,
+    label_key: str,
+    patient_id: uuid.UUID | None = None,
 ) -> dict[str, Any] | None:
     """Одна кнопка приложения под уведомлением — или ничего без адреса."""
 
-    return _markup([_app_button(language, base, target, label_key)])
+    return _markup([_app_button(language, base, target, label_key, patient_id)])
 
 
 def reminder(
@@ -125,5 +146,5 @@ def reminder(
         ]
     ]
     if kind == "no_records":
-        rows.append(_app_button(language, base, "diary", "btn_open_diary"))
+        rows.append(_app_button(language, base, "diary", "btn_open_diary", patient_id))
     return _markup(rows)

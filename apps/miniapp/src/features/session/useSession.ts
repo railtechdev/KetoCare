@@ -3,6 +3,7 @@ import { createContext, useContext } from "react";
 
 import { api, errorDetailsOf, setTokens } from "../../lib/api";
 import { applyLanguage, currentLanguage, knownLanguage } from "../../lib/i18n";
+import { readLaunchPatient } from "../../lib/launchTarget";
 import { launchData } from "../../lib/telegram";
 
 /** Ребёнок, которого ведёт этот Telegram (ADR-0048). */
@@ -191,7 +192,10 @@ export function useOpenSession() {
 
       const initData = launchData();
       if (initData === null) throw "outside_telegram" satisfies SessionProblem;
-      return launch(initData, switchTo ?? rememberedChild());
+      return launch(
+        initData,
+        switchTo ?? readLaunchPatient() ?? rememberedChild(),
+      );
     },
   });
 }

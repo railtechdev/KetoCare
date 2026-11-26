@@ -46,7 +46,7 @@ class TestReminderButtons:
 
         assert markup is not None
         app = markup["inline_keyboard"][1][0]
-        assert app["web_app"] == {"url": "https://tma.example.uz/?open=diary"}
+        assert app["web_app"] == {"url": f"https://tma.example.uz/?open=diary&patient={PATIENT}"}
         assert app["text"] == texts.text("uz", "btn_open_diary")
 
     def test_unknown_kind_has_no_buttons(self):
@@ -80,6 +80,18 @@ class TestAppButton:
     def test_existing_query_is_kept_and_open_replaced(self):
         url = buttons.app_link("https://tma.example.uz/app?lang=uz&open=old", "family")
         assert url == "https://tma.example.uz/app?lang=uz&open=family"
+
+    def test_link_names_the_child_of_the_message(self):
+        """Кнопка открывает того ребёнка, о ком сообщение (аудит 26.11.2026, 1.7)."""
+
+        child = uuid.UUID("11111111-1111-4111-8111-111111111111")
+        url = buttons.app_link("https://tma.example.uz/app?patient=old&open=old", "menu", child)
+        assert url == f"https://tma.example.uz/app?open=menu&patient={child}"
+        markup = buttons.open_app(
+            "ru", base=APP, target="family", label_key="btn_open_family", patient_id=child
+        )
+        assert markup is not None
+        assert f"patient={child}" in markup["inline_keyboard"][0][0]["web_app"]["url"]
 
     def test_unknown_screen_is_refused(self):
         assert buttons.app_link(APP, "admin") is None
@@ -196,7 +208,10 @@ class TestNotificationsCarryTheAppButton:
         assert await notify.notify_family({}, str(PATIENT)) == 1
 
         markup = sent[0]["reply_markup"]
-        assert markup["inline_keyboard"][0][0]["web_app"]["url"] == f"{APP}?open=menu"
+        # Ребёнок — тот, о ком сообщение (аудит 26.11.2026, 1.7).
+        assert markup["inline_keyboard"][0][0]["web_app"]["url"] == (
+            f"{APP}?open=menu&patient={PATIENT}"
+        )
         assert sent[0]["disable_notification"] is True
 
 
