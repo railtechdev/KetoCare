@@ -551,6 +551,14 @@
     "withdrawnTitle": "Tarkibda arxivdagi mahsulot bor",
     "withdrawnBody": "Arxivda: {{list}}. Dietolog bilan aniqlashtiring.",
     "ratioDiffers": "Keto nisbati tayinlovdagidek emas",
+    "ratioDiffersBody": "Bu retsept grammlari bolaning tayinloviga moslab hisoblanmagan. Kun menyusi bo‘yicha tayyorlang yoki dietologdan so‘rang.",
+    "ownDish": {
+      "row": "Bola uchun grammlar boshqa",
+      "title": "Bu taom bola uchun alohida hisoblangan",
+      "body": "Bu bazadagi umumiy retsept. Bola uchun taom alohida hisoblangan — grammlar va kaloriyalar boshqa. Bola taomi yoki kun menyusi bo‘yicha tayyorlang.",
+      "open": "Bola taomini ochish",
+      "openList": "Bola taomlarini ochish"
+    },
     "toMenu": "Menyuga qo‘shish"
   },
   "assistant": {
