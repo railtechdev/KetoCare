@@ -220,6 +220,22 @@ describe("вход в Mini App", () => {
   });
 });
 
+describe("сбой сервера при входе — не связь семьи (аудит 26.11.2026, 2.20)", () => {
+  it("ответ 500 называется сбоем приложения, а не «проверьте связь»", async () => {
+    launchData.mockReturnValue("user=...&hash=...");
+    post.mockResolvedValue({
+      error: { error: { code: "internal" } },
+      response: { status: 500 },
+    });
+    renderGate();
+
+    expect(
+      await screen.findByText(/это не из-за вашей связи/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Проверьте связь/)).toBeNull();
+  });
+});
+
 describe("истечение сессии посреди работы", () => {
   it("без сети вход не висит, а говорит «не удалось открыть» с повтором", async () => {
     // Запросы без сети отказывают сразу (ADR-0034), и отказ клиента не должен

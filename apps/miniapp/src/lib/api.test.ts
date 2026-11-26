@@ -16,4 +16,13 @@ describe("объяснение отказа в Mini App", () => {
     ).toBe("Сбой.");
     expect(errorMessageOf(new TypeError("x"))).toBeNull();
   });
+
+  it("ответ не нашим конвертом — сбой у нас, а не связь семьи (2.20)", () => {
+    expect(errorMessageOf("<html>502 Bad Gateway</html>")).toBe(
+      "Приложение сейчас недоступно — это не из-за вашей связи. Попробуйте через несколько минут.",
+    );
+    expect(errorMessageOf({})).toMatch(/не из-за вашей связи/);
+    // Наш конверт без сообщения — слово за экраном.
+    expect(errorMessageOf({ error: { code: "internal" } })).toBeNull();
+  });
 });

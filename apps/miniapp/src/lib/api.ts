@@ -119,9 +119,18 @@ export function errorDetailsOf(body: unknown): Record<string, unknown> | null {
  * каждом экране: записи без сети отказывают сразу (ADR-0034).
  */
 export function errorMessageOf(body: unknown): string | null {
+  if (body === null || body === undefined) return null;
   if (body instanceof NetworkError) return i18n.t("errors.network");
-  if (typeof body !== "object" || body === null || !("error" in body))
-    return null;
-  const { error } = body as { error?: { message?: unknown } };
-  return typeof error?.message === "string" ? error.message : null;
+  // Исключение в коде — не ответ сервера: объяснять его семье нечем.
+  if (body instanceof Error) return null;
+  if (typeof body === "object" && "error" in body) {
+    // Наш конверт: сообщение сервера или, без него, слова экрана о том, что
+    // не получилось.
+    const { error } = body as { error?: { message?: unknown } };
+    return typeof error?.message === "string" ? error.message : null;
+  }
+  // Ответ пришёл, но не нашим конвертом (502 прокси, пустое тело): связь у
+  // семьи есть, сбой — у нас. Прежде экраны подставляли «Проверьте связь», и
+  // родитель искал причину в своём интернете (аудит 26.11.2026, 2.20).
+  return i18n.t("errors.server");
 }
