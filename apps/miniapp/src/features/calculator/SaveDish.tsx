@@ -68,7 +68,7 @@ export function SaveDish({
   patientId: string;
   rows: DishRow[];
   /** Блюдо ребёнка, чей состав сейчас в расчёте. */
-  editing?: { id: string; title: string } | null;
+  editing?: { id: string; title: string; calculatedBy?: string | null } | null;
   /** Почему сохранить нельзя сейчас; `null` — состав проверен и готов. */
   blockedBy: string | null;
   /** Блюдо записано: экран считает его открытым. */
@@ -158,7 +158,11 @@ export function SaveDish({
       description={
         editing === null
           ? t("calculator.save.description")
-          : t("calculator.save.editDescription", { title: editing.title })
+          : editing.calculatedBy
+            ? // Порцию рассчитал специалист: перезаписать её — не то же, что
+              // поправить своё (аудит 26.11.2026, 1.6).
+              `${t("calculator.save.editDescription", { title: editing.title })} ${t("calculator.save.bySpecialist", { name: editing.calculatedBy })}`
+            : t("calculator.save.editDescription", { title: editing.title })
       }
       density="compact"
     >

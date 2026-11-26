@@ -79,6 +79,48 @@ class TestCreate:
             "сохранённый расчёт обязан нести версию движка (раздел 4.1 ТЗ)"
         )
 
+    async def test_dish_names_who_saved_it(
+        self, client, session, make_user, make_patient, auth_headers
+    ):
+        """Автор блюда — в ответе: семья не должна переписывать порцию диетолога,
+        не зная, чья она (аудит семейного канала 26.11.2026, 1.6). Потребители —
+        Mini App (карточка блюда ребёнка, расчёт) и кабинет.
+        """
+
+        parent, patient = await _linked_parent(session, make_user, make_patient)
+        dietitian = await make_user(UserRole.DIETITIAN)
+        await patients_repo.link_doctor(session, doctor_id=dietitian.id, patient_id=patient.id)
+        butter = await _product(session, "Масло сливочное", **BUTTER)
+        body = {
+            "title": "Порция диетолога",
+            "ingredients": [{"product_id": str(butter.id), "grams": 30}],
+        }
+
+        created = await client.post(
+            f"/api/v1/patients/{patient.id}/custom-dishes",
+            json=body,
+            headers=auth_headers(dietitian),
+        )
+        assert created.status_code == 201, created.text
+        assert created.json()["created_by_name"] == dietitian.full_name
+        assert created.json()["created_by_role"] == "dietitian"
+
+        listed = await client.get(
+            f"/api/v1/patients/{patient.id}/custom-dishes", headers=auth_headers(parent)
+        )
+        assert listed.status_code == 200
+        [item] = listed.json()["items"]
+        assert item["created_by_role"] == "dietitian"
+
+        # Правка семьёй автора не меняет: порцию рассчитал диетолог.
+        updated = await client.put(
+            f"/api/v1/patients/{patient.id}/custom-dishes/{item['id']}",
+            json=body | {"title": "Порция диетолога (правка)"},
+            headers=auth_headers(parent),
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["created_by_role"] == "dietitian"
+
     async def test_macros_come_from_database_not_request(
         self, client, session, make_user, make_patient, auth_headers
     ):

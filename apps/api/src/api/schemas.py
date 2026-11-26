@@ -1206,6 +1206,12 @@ class CustomDishRead(BaseModel):
     engine_version: str | None
     instructions: str | None = None
     source_recipe_id: uuid.UUID | None = None
+    #: Кто сохранил блюдо — имя и роль (аудит семейного канала 26.11.2026, 1.6).
+    #: Семья перезаписывала и удаляла порцию, рассчитанную диетологом, не зная,
+    #: чья она. `None` у блюд, сохранённых до того, как автора стали помнить.
+    #: Потребители: Mini App (карточка блюда ребёнка, расчёт) и кабинет.
+    created_by_name: str | None = None
+    created_by_role: UserRole | None = None
     created_at: datetime
 
 

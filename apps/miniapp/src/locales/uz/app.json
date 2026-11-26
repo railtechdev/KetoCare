@@ -495,7 +495,8 @@
         "notChecked": "Hisobdan keyin saqlash mumkin.",
         "checkFailed": "Avval hisobni tuzating — sababi yuqorida.",
         "busy": "Grammni tanlash yoki porsiyalarni qayta hisoblash tugashini kuting."
-      }
+      },
+      "bySpecialist": "Bu taomni {{name}} hisoblagan: agar u bolaga to‘g‘ri kelmasa, avval klinikaga qo‘ng‘iroq qiling, o‘z variantingizni esa yangi taom sifatida saqlang."
     },
     "plan": {
       "title": "Menyuga qo‘shish",
@@ -817,7 +818,14 @@
       "deleteTitle": "«{{title}}» taomini o‘chirasizmi?",
       "deleteBody": "Taom ro‘yxatdan va menyu tuzishdagi tanlovdan chiqadi, uni menyuga qayta qo‘yib bo‘lmaydi. U allaqachon turgan kunlarda nomi va grammlari qoladi va bu kunlarni avvalgidek o‘zgartirish mumkin, «Qanday tayyorlanadi» qadamlari esa u yerda endi bo‘lmaydi.",
       "keep": "Qoldirish",
-      "deleteFailed": "Taomni o‘chirib bo‘lmadi"
+      "deleteFailed": "Taomni o‘chirib bo‘lmadi",
+      "calculatedBy": "Hisoblagan: {{name}}",
+      "deleteBySpecialist": "Bu taomni {{name}} hisoblagan. Agar u bolaga to‘g‘ri kelmasa, avval klinikaga qo‘ng‘iroq qiling.",
+      "role": {
+        "doctor": "shifokor",
+        "dietitian": "dietolog",
+        "other": "mutaxassis"
+      }
     }
   },
   "settings": {

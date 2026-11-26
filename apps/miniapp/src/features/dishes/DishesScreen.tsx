@@ -6,7 +6,7 @@ import { TabVisibleContext } from "../../lib/useTelegram";
 import type { CalculatorSeed } from "../calculator/useCalculator";
 import { RecipesScreen } from "../recipes/RecipesScreen";
 import type { Session } from "../session/useSession";
-import { ChildDishes } from "./ChildDishes";
+import { ChildDishes, calculatedBy } from "./ChildDishes";
 
 /**
  * Расчёт тянет за собой свой код подбора и проверки — грузится по первому
@@ -92,6 +92,7 @@ export function DishesScreen({ session }: { session: Session }) {
                     dishId: dish.id,
                     title: dish.title,
                     ingredients: dish.ingredients,
+                    calculatedBy: calculatedBy(dish, t),
                   }));
                   open("calculator");
                   window.scrollTo(0, 0);

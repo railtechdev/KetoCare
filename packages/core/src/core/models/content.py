@@ -320,6 +320,13 @@ class CustomDish(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin, SoftDeleteMi
     source_recipe_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("recipes.id", ondelete="SET NULL")
     )
+    #: Who saved the dish. A family overwrote or deleted a portion the dietitian
+    #: had calculated without a word of warning: the dish did not say whose it
+    #: was (family-channel audit 26.11.2026, 1.6). `None` for dishes saved
+    #: before the column existed — their author is not known.
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
 
 
 class RecipeImportDraft(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
