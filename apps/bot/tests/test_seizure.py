@@ -337,7 +337,9 @@ class TestWhenThingsGoWrong:
 
         await scenarios.seizure_start(message, state, api, linked_store, SETTINGS)
 
-        assert message.last == texts.API_UNAVAILABLE
+        # «Не удалось сохранить» до первого шага — неправда; и совет записать
+        # приступ на бумаге (аудит 26.11.2026, 2.23).
+        assert message.last == texts.SEIZURE_LOAD_FAILED
         assert await state.get_state() is None
 
     @pytest.mark.asyncio

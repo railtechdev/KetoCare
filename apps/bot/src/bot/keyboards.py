@@ -214,12 +214,18 @@ def record_actions(key: str, *, method: str | None = None) -> InlineKeyboardMark
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def record_times(key: str, *, morning: bool) -> InlineKeyboardMarkup:
-    """Быстрые варианты времени. «Утром» — только когда утро уже наступило."""
+def record_times(
+    key: str, *, morning: bool, labels: dict[str, str] | None = None
+) -> InlineKeyboardMarkup:
+    """Быстрые варианты времени. «Утром» — только когда утро уже наступило.
 
+    `labels` — подписи «15 мин» и «час» временем, которое встанет: «В 13:45».
+    """
+
+    labels = labels or {}
     quick = [
-        (QUICK_15_MIN, texts.BTN_TIME_15_MIN),
-        (QUICK_HOUR, texts.BTN_TIME_HOUR),
+        (QUICK_15_MIN, labels.get(QUICK_15_MIN, texts.BTN_TIME_15_MIN)),
+        (QUICK_HOUR, labels.get(QUICK_HOUR, texts.BTN_TIME_HOUR)),
         *([(QUICK_MORNING, texts.BTN_TIME_MORNING)] if morning else []),
         (QUICK_YESTERDAY_EVENING, texts.BTN_TIME_YESTERDAY_EVENING),
     ]

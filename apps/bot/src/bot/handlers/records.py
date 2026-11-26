@@ -98,11 +98,44 @@ def quick_moment(code: str, *, now: datetime, tz: str) -> datetime | None:
     return None
 
 
-def _times_markup(key: str, settings: BotSettings) -> Any:
+def record_moment(receipt: dict[str, Any], *, tz: str) -> datetime:
+    """Время записи из квитанции; у старых квитанций без него — «сейчас»."""
+
+    raw = receipt.get("occurred_at")
+    zone = ZoneInfo(tz)
+    if isinstance(raw, str):
+        try:
+            return datetime.fromisoformat(raw).astimezone(zone)
+        except ValueError:
+            pass
+    return datetime.now(zone)
+
+
+def _times_markup(key: str, settings: BotSettings, receipt: dict[str, Any]) -> Any:
+    """Быстрые варианты считаются от времени записи и подписаны тем, что встанет.
+
+    «Час назад» считался от нажатия: вес, записанный в 14:00 и поправленный в
+    20:00, вставал на 19:00 (аудит 26.11.2026, 2.24).
+    """
+
     now = datetime.now(ZoneInfo(settings.tz))
+    base = record_moment(receipt, tz=settings.tz)
+    labels = {
+        code: _moment_label(moment, now)
+        for code in (keyboards.QUICK_15_MIN, keyboards.QUICK_HOUR)
+        if (moment := quick_moment(code, now=base, tz=settings.tz)) is not None
+    }
     return keyboards.record_times(
-        key, morning=(now.hour, now.minute) >= (MORNING_AT.hour, MORNING_AT.minute)
+        key,
+        morning=(now.hour, now.minute) >= (MORNING_AT.hour, MORNING_AT.minute),
+        labels=labels,
     )
+
+
+def _moment_label(moment: datetime, now: datetime) -> str:
+    if moment.date() == now.date():
+        return texts.BTN_TIME_AT.format(time=moment.strftime("%H:%M"))
+    return texts.BTN_TIME_ON.format(date=moment.strftime("%d.%m"), time=moment.strftime("%H:%M"))
 
 
 @router.callback_query(F.data.startswith(keyboards.RECORD_TIME_PREFIX))
@@ -123,7 +156,7 @@ async def other_time(
         message,
         state,
         texts.RECORD_TIME_ASK.format(summary=receipt.get("summary") or ""),
-        _times_markup(key, settings),
+        _times_markup(key, settings, receipt),
         own=True,
     )
 
@@ -161,7 +194,9 @@ async def quick_time(
         return
     message, receipt = found
     now = datetime.now(ZoneInfo(settings.tz))
-    moment = quick_moment(code, now=now, tz=settings.tz)
+    relative = code in (keyboards.QUICK_15_MIN, keyboards.QUICK_HOUR)
+    base = record_moment(receipt, tz=settings.tz) if relative else now
+    moment = quick_moment(code, now=base, tz=settings.tz)
     if moment is None or moment > now or now - moment > MAX_BACKDATE:
         # Кнопка «Сегодня в 08:00», нажатая до восьми, — из старого сообщения.
         await callback.answer(texts.WHEN_IN_FUTURE, show_alert=True)
@@ -210,7 +245,7 @@ async def typed_time(
         reason = {"future": texts.WHEN_IN_FUTURE, "too_old": texts.WHEN_TOO_OLD}.get(
             str(moment), texts.WHEN_BAD_FORMAT
         )
-        await card.show(message, state, reason, _times_markup(key, settings))
+        await card.show(message, state, reason, _times_markup(key, settings, receipt))
         return
     await _apply_time(
         message,
@@ -396,7 +431,7 @@ async def delete_confirmed(
             if exc.status == 404:
                 continue
             logger.warning("record_delete_failed", status=exc.status, code=exc.code)
-            await callback.answer(texts.API_UNAVAILABLE, show_alert=True)
+            await callback.answer(texts.DELETE_FAILED, show_alert=True)
             return
     await callback.answer()
     await store.drop_receipt(message.chat.id, key)

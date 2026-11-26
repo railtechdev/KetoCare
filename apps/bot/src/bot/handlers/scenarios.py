@@ -38,6 +38,7 @@ from ..api import BotApi, BotApiError, LinkRevokedError
 from ..config import BotSettings
 from ..deps import (
     PENDING,
+    abandon_unfinished,
     begin_scenario,
     cancel_pending,
     child_label,
@@ -184,6 +185,7 @@ async def _start_seizure(
     тем, что видит врач в карте.
     """
 
+    await abandon_unfinished(message, state)
     await state.clear()
     binding = await begin_scenario(message, state, store, binding)
     if binding is None:
@@ -196,7 +198,7 @@ async def _start_seizure(
         return
     except BotApiError as exc:
         logger.warning("seizure_types_failed", status=exc.status, code=exc.code)
-        await message.answer(texts.API_UNAVAILABLE)
+        await message.answer(texts.SEIZURE_LOAD_FAILED)
         return
 
     if not types:
@@ -249,6 +251,7 @@ async def _start_seizure(
 async def _start_ketones(
     message: Message, state: FSMContext, *, store: BindingStore, binding: Binding | None = None
 ) -> None:
+    await abandon_unfinished(message, state)
     await state.clear()
     binding = await begin_scenario(message, state, store, binding)
     if binding is None:
@@ -265,6 +268,7 @@ async def _start_ketones(
 async def _start_weight(
     message: Message, state: FSMContext, *, store: BindingStore, binding: Binding | None = None
 ) -> None:
+    await abandon_unfinished(message, state)
     await state.clear()
     binding = await begin_scenario(message, state, store, binding)
     if binding is None:
@@ -281,6 +285,7 @@ async def _start_weight(
 async def _start_wellbeing(
     message: Message, state: FSMContext, *, store: BindingStore, binding: Binding | None = None
 ) -> None:
+    await abandon_unfinished(message, state)
     await state.clear()
     binding = await begin_scenario(message, state, store, binding)
     if binding is None:
@@ -310,6 +315,7 @@ async def _start_medications(
     было нельзя вовсе — а пропуск врачу важен не меньше приёма.
     """
 
+    await abandon_unfinished(message, state)
     await state.clear()
     binding = await begin_scenario(message, state, store, binding)
     if binding is None:
@@ -328,7 +334,7 @@ async def _start_medications(
         return
     except BotApiError as exc:
         logger.warning("medications_fetch_failed", status=exc.status, code=exc.code)
-        await message.answer(texts.API_UNAVAILABLE)
+        await message.answer(texts.LOAD_FAILED)
         return
 
     if not items:
@@ -364,6 +370,7 @@ async def _start_meal(
     придуманная ботом еда попала бы в итоги дня наравне с настоящей.
     """
 
+    await abandon_unfinished(message, state)
     await state.clear()
     binding = await begin_scenario(message, state, store, binding)
     if binding is None:
@@ -1088,7 +1095,7 @@ async def _ask_seizure_duration(
     except BotApiError as exc:
         logger.warning("duration_options_failed", status=exc.status, code=exc.code)
         await state.clear()
-        await card.show(message, state, texts.API_UNAVAILABLE, None, own=own)
+        await card.show(message, state, texts.SEIZURE_LOAD_FAILED, None, own=own)
         return
 
     buttons = [(str(item["id"]), str(item["name_ru"])) for item in options]
@@ -1266,7 +1273,7 @@ async def _fetch_menu_items(
     except BotApiError as exc:
         logger.warning("menu_fetch_failed", status=exc.status, code=exc.code)
         await state.clear()
-        await message.answer(texts.API_UNAVAILABLE)
+        await message.answer(texts.LOAD_FAILED)
         return None
     if menu is None:
         return []
@@ -1332,7 +1339,7 @@ async def _mark(
                     message, state, api=api, store=store, settings=settings, binding=binding
                 )
                 return False
-            await callback.answer(texts.API_UNAVAILABLE, show_alert=True)
+            await callback.answer(texts.MARK_FAILED, show_alert=True)
             return False
     return True
 

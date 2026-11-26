@@ -385,7 +385,10 @@ class TestKetones:
         confirmation = callback.message.last
         assert confirmation.startswith("Записано ✓")
         assert "3,2" in confirmation and "ммоль/л" in confirmation and "кровь" in confirmation
-        assert texts.WHEN_JUST_NOW in confirmation
+        # Время часами, а не «только что»: эхо читают и через шесть часов
+        # (аудит 26.11.2026, 2.24).
+        assert "сегодня в " in confirmation
+        assert texts.WHEN_JUST_NOW not in confirmation
         assert await state.get_state() is None
         # Под ответом — исправить на месте.
         assert texts.BTN_OTHER_TIME in labels(callback.message.last_markup)
@@ -480,6 +483,44 @@ class TestWellbeing:
         assert "2000" in message.last
         assert await state.get_state() == scenarios.Wellbeing.symptom.state
         assert not api.logs
+
+
+class TestAbandonedRecord:
+    """Брошенная запись так и названа, а не «сохранена или отменена» (2.21)."""
+
+    @pytest.mark.asyncio
+    async def test_menu_button_mid_record_marks_the_old_card(self, linked_store, state):
+        await state.set_state(scenarios.Weight.value)
+        await state.update_data({"card_message_id": 1001})
+        pressed = FakeMessage(text=texts.BTN_KETONES, message_id=1200)
+
+        await scenarios.ketones_start(pressed, state, linked_store)
+
+        assert (texts.RECORD_ABANDONED, None) in pressed.answers
+        assert await state.get_state() == scenarios.Ketones.value.state
+
+    @pytest.mark.asyncio
+    async def test_finished_record_is_not_marked(self, linked_store, state):
+        pressed = FakeMessage(text=texts.BTN_KETONES, message_id=1200)
+
+        await scenarios.ketones_start(pressed, state, linked_store)
+
+        assert all(text != texts.RECORD_ABANDONED for text, _ in pressed.answers)
+
+
+class TestQuickTimesAreRecordTimes:
+    """«Час назад» — от времени записи и подписан тем, что встанет (2.24)."""
+
+    def test_labels_show_the_resulting_time(self):
+        markup = records._times_markup(
+            "k" * 32,
+            SETTINGS,
+            {"occurred_at": "2026-11-26T09:00:00+00:00"},
+        )
+        texts_on_buttons = labels(markup)
+        # 09:00 UTC = 14:00 в Ташкенте: на кнопках 13:45 и 13:00.
+        assert any(label.endswith("13:45") for label in texts_on_buttons)
+        assert any(label.endswith("13:00") for label in texts_on_buttons)
 
 
 class TestTypedAnswersComeBelow:

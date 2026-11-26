@@ -13,7 +13,7 @@ from aiogram.types import CallbackQuery, InaccessibleMessage, Message, ReplyKeyb
 from .. import i18n, keyboards, language, texts
 from ..api import BotApi, BotApiError, LinkVerified
 from ..config import BotSettings
-from ..deps import menu
+from ..deps import abandon_unfinished, menu
 from ..storage import Binding, BindingStore
 
 router = Router(name="start")
@@ -66,6 +66,7 @@ async def start_with_code(
 ) -> None:
     if await _group(message, store):
         return
+    await abandon_unfinished(message, state)
     await state.clear()
     await _link(message, api=api, store=store, settings=settings, code=(command.args or ""))
 
@@ -76,6 +77,7 @@ async def start_without_code(
 ) -> None:
     if await _group(message, store):
         return
+    await abandon_unfinished(message, state)
     await state.clear()
     bindings = await store.all(message.chat.id)
     binding = await store.get(message.chat.id)
@@ -126,6 +128,7 @@ async def help_command(
 
     if message.chat.type != "private":
         return
+    await abandon_unfinished(message, state)
     await state.clear()
     await message.answer(_help_short(settings), reply_markup=keyboards.help_menu(settings))
 
@@ -177,6 +180,7 @@ async def handle_bare_code(
     которого начаты (`deps.scenario_binding`), — это вторая линия.
     """
 
+    await abandon_unfinished(message, state)
     await state.clear()
     await _link(message, api=api, store=store, settings=settings, code=message.text or "")
 
@@ -220,7 +224,7 @@ async def _link(
         if exc.status == 404:
             await message.answer(texts.LINK_CODE_INVALID)
             return
-        await message.answer(texts.API_UNAVAILABLE)
+        await message.answer(texts.CODE_CHECK_FAILED)
         return
 
     # Привязка ребёнка добавляется к уже имеющимся и становится выбранной: код
@@ -334,6 +338,7 @@ def _bot_of(message: Message) -> Bot | None:
 async def language_menu(message: Message, state: FSMContext) -> None:
     if message.chat.type != "private":
         return
+    await abandon_unfinished(message, state)
     await state.clear()
     await message.answer(texts.LANGUAGE_ASK, reply_markup=keyboards.languages())
 
@@ -353,6 +358,7 @@ async def language_chosen(
     chosen = i18n.known((callback.data or "").removeprefix(keyboards.LANGUAGE_PREFIX))
     if chosen is None:
         return
+    await abandon_unfinished(message, state)
     await state.clear()
     await language.choose(api=api, store=store, chat_id=message.chat.id, language=chosen)
     # Подтверждение — уже на выбранном языке: так человек и видит, что выбор
@@ -384,6 +390,7 @@ async def child_menu(
 ) -> None:
     if message.chat.type != "private":
         return
+    await abandon_unfinished(message, state)
     await state.clear()
     bindings = await store.all(message.chat.id)
     active = await store.get(message.chat.id)
@@ -415,6 +422,7 @@ async def child_chosen(
     # обработчик в ранний возврат.
     if message is None or isinstance(message, InaccessibleMessage):
         return
+    await abandon_unfinished(message, state)
     await state.clear()
     try:
         patient_id = uuid.UUID((callback.data or "").removeprefix(keyboards.CHILD_PREFIX))
