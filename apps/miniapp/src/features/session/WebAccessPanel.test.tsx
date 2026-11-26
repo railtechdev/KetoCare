@@ -9,6 +9,12 @@ import { type Session, SessionUpdateContext } from "./useSession";
 import { WebAccessPanel } from "./WebAccessPanel";
 
 const post = vi.hoisted(() => vi.fn());
+const launchAge = vi.hoisted(() => ({ value: null as number | null }));
+
+vi.mock("../../lib/telegram", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/telegram")>();
+  return { ...actual, launchAgeSeconds: () => launchAge.value };
+});
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -36,6 +42,24 @@ function renderPanel(value: Session = session) {
 }
 
 describe("вход в кабинет из Mini App", () => {
+  it("запуск старше десяти минут — сказать о перезапуске до формы (3.13)", async () => {
+    launchAge.value = 20 * 60;
+    try {
+      renderPanel({ ...session, hasWebCredentials: true });
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Забыли пароль? Задать новый" }),
+      );
+
+      expect(
+        screen.getByText(/только в только что открытом приложении/),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText(/Новый пароль/)).toBeNull();
+    } finally {
+      launchAge.value = null;
+    }
+  });
+
   it("у кого кабинет уже есть — адрес и сброс пароля, а не повторное включение", async () => {
     // Признак приходит с сервера: экран, решающий сам, однажды предложил бы
     // то, что кончится отказом 409. Забытый пароль сбрасывается здесь же —

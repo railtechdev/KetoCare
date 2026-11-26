@@ -444,6 +444,18 @@ export function haptic(kind: "success" | "error" | "selection"): void {
 }
 
 /** Можно ли закрыть приложение кнопкой на экране — только внутри Telegram. */
+/**
+ * Сколько секунд назад Telegram подписал запуск (`auth_date` строки запуска);
+ * `null` — строки нет или в ней нет даты.
+ */
+export function launchAgeSeconds(now: number = Date.now()): number | null {
+  const data = launchData();
+  if (data === null) return null;
+  const raw = new URLSearchParams(data).get("auth_date");
+  const signed = raw === null ? Number.NaN : Number(raw);
+  return Number.isFinite(signed) ? Math.max(0, now / 1000 - signed) : null;
+}
+
 export function canCloseApp(): boolean {
   const app = webApp();
   return app?.close !== undefined && launchData() !== null;
