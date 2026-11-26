@@ -1,11 +1,12 @@
 import { SegmentedControl, Skeleton } from "@ketocare/ui";
-import { Suspense, lazy, useContext, useState } from "react";
+import { Suspense, lazy, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TabVisibleContext } from "../../lib/useTelegram";
 import type { CalculatorSeed } from "../calculator/useCalculator";
 import { RecipesScreen } from "../recipes/RecipesScreen";
 import type { Session } from "../session/useSession";
+import { useCustomDishes } from "../menu/useDishOptions";
 import { ChildDishes, calculatedBy } from "./ChildDishes";
 
 /**
@@ -20,7 +21,10 @@ const CalculatorScreen = lazy(() =>
 
 export type DishesSection = "recipes" | "dishes" | "calculator";
 
-const SECTIONS: readonly DishesSection[] = ["recipes", "dishes", "calculator"];
+// Блюда ребёнка — первыми: это его порции, рассчитанные под назначение, а
+// рецепты базы — шаблоны. Вкладка открывалась на шаблонах, и семья сверяла
+// лист диетолога с рецептом (аудит 26.11.2026, 3.17).
+const SECTIONS: readonly DishesSection[] = ["dishes", "recipes", "calculator"];
 
 /**
  * «Блюда» — рецепты, блюда ребёнка и расчёт на одной вкладке (ADR-0075).
@@ -37,10 +41,22 @@ export function DishesScreen({ session }: { session: Session }) {
   // скрытой вкладки: открытая карточка рецепта не должна закрываться нажатием,
   // сделанным в расчёте.
   const tabVisible = useContext(TabVisibleContext);
-  const [section, setSection] = useState<DishesSection>("recipes");
-  const [visited, setVisited] = useState<ReadonlySet<DishesSection>>(
-    () => new Set<DishesSection>(["recipes"]),
+  const childDishes = useCustomDishes(session.patientId);
+  const [chosen, setChosen] = useState<DishesSection | null>(null);
+  // Пока человек не выбрал сам: блюда ребёнка, а если их нет — рецепты.
+  // Решается один раз, когда список пришёл: удалив последнее блюдо, человек
+  // не должен оказаться в рецептах.
+  const loadedEmpty = childDishes.data?.length === 0;
+  useEffect(() => {
+    if (chosen === null && childDishes.data !== undefined) {
+      setChosen(childDishes.data.length === 0 ? "recipes" : "dishes");
+    }
+  }, [chosen, childDishes.data]);
+  const section: DishesSection = chosen ?? (loadedEmpty ? "recipes" : "dishes");
+  const [visitedByChoice, setVisited] = useState<ReadonlySet<DishesSection>>(
+    () => new Set<DishesSection>(),
   );
+  const visited = new Set<DishesSection>([...visitedByChoice, section]);
 
   // Блюдо ребёнка, открытое в расчёте (Б1). Состояние здесь, а не в
   // расчёте: «Открыть в расчёте» нажимают в соседнем разделе.
@@ -49,8 +65,8 @@ export function DishesScreen({ session }: { session: Session }) {
   const [dishId, setDishId] = useState<string | null>(null);
 
   const open = (next: DishesSection) => {
-    setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
-    setSection(next);
+    setVisited((prev) => new Set<DishesSection>([...prev, section, next]));
+    setChosen(next);
   };
 
   return (

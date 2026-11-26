@@ -514,6 +514,11 @@ function NextMealBlock({
   const meals = mealNumbers(overview.prescription?.meals_per_day ?? null);
   const items = menu.data?.items ?? [];
   const next = nextMeal(items);
+  const upcomingDay = overview.upcoming_prescription
+    ? parseDateInput(overview.upcoming_prescription.effective_from)
+    : null;
+  const upcomingFrom =
+    upcomingDay === null ? null : formatDayMonth(upcomingDay);
   const emptyMeals = meals.filter(
     (meal) => !items.some((item) => item.meal_index === meal),
   );
@@ -553,9 +558,26 @@ function NextMealBlock({
               </Button>
             </div>
           ) : (
-            <p className="m-0 text-muted-foreground">
-              {t("menu.compose.noPrescription")}
-            </p>
+            // Без назначения на сегодня меню всё равно открывается: врач мог
+            // записать назначение «с понедельника», и собрать понедельник
+            // можно уже сейчас (аудит 26.11.2026, 3.1).
+            <div className="flex flex-col gap-field">
+              <p className="m-0 text-muted-foreground">
+                {upcomingFrom === null
+                  ? t("menu.compose.noPrescription")
+                  : t("home.today.noPrescriptionUpcoming", {
+                      date: upcomingFrom,
+                    })}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-touch w-full"
+                onClick={onOpenMenu}
+              >
+                {t("today.menu.open")}
+              </Button>
+            </div>
           )
         }
       >
