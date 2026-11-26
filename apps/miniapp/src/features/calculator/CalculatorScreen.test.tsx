@@ -1267,6 +1267,28 @@ describe("калькулятор в Mini App", () => {
     expect(screen.queryByText(/0f9b7c33/)).not.toBeInTheDocument();
   });
 
+  it("цель приёма — белок и углеводы — стоит на экране, а не только в «больше цели» (4.8)", async () => {
+    respond({
+      "/calc/verify": verifyResponse({
+        meal_goal: {
+          fat_g: 24,
+          protein_g: 4.6,
+          net_carbs_g: 4.3,
+          non_fat_g: 8.9,
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    renderScreen();
+    await addProduct(user);
+
+    expect(
+      await screen.findByText(
+        /^Цель приёма: белок 4,6 г · углеводы без клетчатки 4,3 г$/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("подобранные массы попадают в состав, а не остаются в ответе", async () => {
     // Иначе цепочка «подобрал → округлил под кухонные весы → проверил»
     // рвётся на первом шаге: из подбора ведёт один выход — принять как есть.

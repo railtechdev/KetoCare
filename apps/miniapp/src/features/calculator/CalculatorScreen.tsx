@@ -803,6 +803,18 @@ export function CalculatorScreen({
               />
             </div>
 
+            {/* Цель приёма — белок и углеводы, о которых говорят «больше / меньше
+                цели»: прежде её не было на экране вовсе, и сравнение шло с
+                тем, чего родитель не видел (аудит 26.11.2026, 4.8). */}
+            {verdict?.meal_goal?.protein_g != null &&
+              verdict.meal_goal.net_carbs_g != null && (
+                <p className="m-0 text-sm text-muted-foreground tabular-nums">
+                  {t("calculator.mealGoal", {
+                    protein: formatGrams(verdict.meal_goal.protein_g),
+                    carbs: formatGrams(verdict.meal_goal.net_carbs_g),
+                  })}
+                </p>
+              )}
             <Verdict
               stale={stale}
               waitingForNetwork={waitingForNetwork}

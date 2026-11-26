@@ -5,8 +5,10 @@ import {
   RatioBadge,
   Section,
   WarningBanner,
+  formatDayMonth,
   formatGrams,
   formatKcal,
+  parseDateInput,
 } from "@ketocare/ui";
 import { ArrowLeft, Calculator, ChevronRight, CookingPot } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -21,6 +23,7 @@ import {
   useCustomDishes,
   useDeleteCustomDish,
 } from "../menu/useDishOptions";
+import { useDishUsage } from "../menu/useDishUsage";
 import { ProductComposition } from "../recipes/ProductComposition";
 
 /**
@@ -77,6 +80,7 @@ export function ChildDishes({
 }) {
   const { t } = useTranslation();
   const dishes = useCustomDishes(patientId);
+  const usage = useDishUsage(patientId);
   const opened = dishes.data?.find((dish) => dish.id === openId) ?? null;
 
   // Список остаётся смонтированным под карточкой, как у рецептов: прокрутка
@@ -150,6 +154,18 @@ export function ChildDishes({
                       <span className="text-sm text-muted-foreground tabular-nums">
                         {t("menu.compose.kcal", {
                           value: formatKcal(dish.computed.kcal),
+                        })}
+                      </span>
+                    )}
+                    {/* Какое из одноимённых блюд стоит в меню (3.18). */}
+                    {usage.data?.get(dish.id) !== undefined && (
+                      <span className="text-sm text-muted-foreground">
+                        {t("dishes.inMenu", {
+                          date: formatDayMonth(
+                            parseDateInput(
+                              usage.data.get(dish.id)?.last_date ?? "",
+                            ) ?? new Date(),
+                          ),
                         })}
                       </span>
                     )}

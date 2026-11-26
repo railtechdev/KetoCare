@@ -564,7 +564,8 @@
       "unchanged": "Grammlar allaqachon mos — o‘zgartirish kerak emas.",
       "reshaped": "Sizning grammlaringiz bilan maqsadga erishilmadi, shuning uchun miqdorlar sezilarli o‘zgardi — ularni tarkibda tekshiring."
     },
-    "searchTruncated": "Birinchi {{count}} tasi ko‘rsatildi. Keraklisi yo‘q bo‘lsa — nomini aniqlashtiring."
+    "searchTruncated": "Birinchi {{count}} tasi ko‘rsatildi. Keraklisi yo‘q bo‘lsa — nomini aniqlashtiring.",
+    "mealGoal": "Ovqatlanish maqsadi: oqsil {{protein}} g · kletchatkasiz uglevodlar {{carbs}} g"
   },
   "recipes": {
     "category": "Bo‘lim",
@@ -874,7 +875,8 @@
         "dietitian": "dietolog",
         "other": "mutaxassis"
       }
-    }
+    },
+    "inMenu": "menyuda: {{date}}"
   },
   "settings": {
     "title": "Sozlamalar",
