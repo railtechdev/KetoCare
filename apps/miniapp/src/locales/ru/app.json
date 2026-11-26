@@ -177,7 +177,9 @@
     "addToMeal": "Добавить блюдо",
     "addToMealAria": "Добавить блюдо в приём {{index}}",
     "howToCook": "Как готовить",
-    "macroLine": "жиры {{fat}} г · белки {{protein}} г · углеводы {{carbs}} г"
+    "macroLine": "жиры {{fat}} г · белки {{protein}} г · углеводы {{carbs}} г",
+    "itemKcal": "{{kcal}} ккал",
+    "itemKcalRatio": "{{kcal}} ккал · {{ratio}}"
   },
   "shopping": {
     "open": "Что купить",

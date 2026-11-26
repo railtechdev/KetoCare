@@ -156,6 +156,11 @@ class MenuItemRead(BaseModel):
     #: nothing that is counted, and a corrected step has to reach the cook of
     #: a day already planned. `None` — the dish has no steps.
     instructions: str | None = None
+    #: Показатели этой позиции — калорийность и соотношение её порции, тем же
+    #: расчётом ядра по снимку, что и итоги дня. Семья сверяет блюдо меню с
+    #: карточкой диетолога, а сверить было нечем: диетолог дописывала калории
+    #: от руки (аудит 26.11.2026, 1.13). Нет снимка — `None`.
+    computed: DishComputed | None = None
 
 
 class WithdrawnProduct(BaseModel):

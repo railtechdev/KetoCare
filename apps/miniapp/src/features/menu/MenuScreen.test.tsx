@@ -487,6 +487,30 @@ describe("план дня в Mini App", () => {
     );
   });
 
+  it("у блюда стоит калорийность его порции — сверить с листом диетолога (1.13)", async () => {
+    (api.GET as Mock).mockResolvedValue({
+      data: menu({
+        items: [
+          {
+            ...menu().items[0],
+            computed: {
+              kcal: 254,
+              fat: 24,
+              protein: 6,
+              carbs: 3,
+              fiber: 1,
+              ratio: 2.7,
+            },
+          },
+        ],
+      }),
+      response: { status: 200 },
+    });
+    renderScreen();
+
+    expect(await screen.findByText(/^254 ккал · /)).toBeInTheDocument();
+  });
+
   it("у съеденного блюда граммы не обновляются — и это сказано", async () => {
     (api.GET as Mock).mockResolvedValue({
       data: menu({

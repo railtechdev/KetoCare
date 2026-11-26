@@ -98,12 +98,36 @@ export function menuDishCard(
 ): {
   kicker: string;
   title: string;
+  metrics: SheetMetric[];
   lines: WeighLine[];
   seasonings: string[];
   steps: string | null | undefined;
 } {
   const ingredients = item.ingredients ?? [];
+  // Калорийность и соотношение порции — на самом листе: диетолог дописывала
+  // калории от руки, а семье сверять блюдо было не с чем (аудит 26.11.2026).
+  const computed = item.computed ?? null;
+  const metrics: SheetMetric[] =
+    computed === null
+      ? []
+      : [
+          {
+            key: "kcal",
+            label: t("menu:week.print.kcal"),
+            value: t("menu:week.kcal", { value: formatKcal(computed.kcal) }),
+          },
+          ...(computed.ratio === null
+            ? []
+            : [
+                {
+                  key: "ratio",
+                  label: t("menu:week.print.ratio"),
+                  value: formatRatio(computed.ratio),
+                },
+              ]),
+        ];
   return {
+    metrics,
     kicker: t("menu:week.print.cardKicker", {
       number: item.meal_index,
       day: formatDayLabel(day.date),
