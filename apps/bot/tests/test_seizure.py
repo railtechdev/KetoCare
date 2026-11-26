@@ -509,3 +509,25 @@ class TestExactDurationEcho:
     )
     def test_minutes_not_seconds(self, seconds, text):
         assert scenarios.format_seconds(seconds) == text
+
+
+class TestDurationAsOnAStopwatch:
+    """«3:20» и «3 мин 20 с» — как показывает секундомер (аудит 26.11.2026, 3.25)."""
+
+    @pytest.mark.parametrize(
+        ("raw", "seconds"),
+        [
+            ("200", 200),
+            ("3:20", 200),
+            ("0:45", 45),
+            ("3 мин 20 с", 200),
+            ("2 мин", 120),
+            ("90 сек", 90),
+        ],
+    )
+    def test_accepted(self, raw: str, seconds: int) -> None:
+        assert scenarios.parse_duration(raw) == seconds
+
+    @pytest.mark.parametrize("raw", ["", "три минуты", "3:75", "-5", "3.5"])
+    def test_rejected(self, raw: str) -> None:
+        assert scenarios.parse_duration(raw) is None

@@ -58,10 +58,7 @@ LINK_SUCCESS_SEVERAL = (
     "ketadi; bolani almashtirish — pastdagi «{switch}» tugmasi.\n"
 )
 
-NOT_LINKED = (
-    "Chat hali bolaga ulanmagan. Bu yerga kirish kodini yuboring — sakkizta harf "
-    "va raqam. Uni shifokor yoki bolaning ota-onasi beradi."
-)
+NOT_LINKED = "Chat hali bolaga ulanmagan. Bu yerga shifokor yoki bolaning ota-onasidan olingan kodni yuboring — 8 ta harf va raqam."
 
 LINK_REVOKED = (
     "Bu chatda kundalikka kirish yopildi. Davom etish uchun sizni taklif qilgan "
@@ -80,17 +77,9 @@ BTN_CHILD = BTN_CHILD_PREFIX + ": {name}"
 CHILD_ASK = "Kimning kundaligini yuritamiz? Hozir tanlangan: {active}."
 CHILD_CHOSEN = "Tayyor: yozuvlar endi {name} uchun ketadi."
 CHILD_GONE = "Bu bola endi chatda yo‘q. Ro‘yxatdan qaytadan tanlang."
-SCENARIO_CHILD_GONE = (
-    "Yozuv saqlanmadi: uni boshlagan bolangiz endi bu chatda yo‘q. Bolani tanlang "
-    "va yozuvni menyudan qaytadan boshlang."
-)
-SCENARIO_CHILD_UNKNOWN = (
-    "Yozuv saqlanmadi: u qaysi bola uchun boshlangani noma’lum. Uni menyudan qaytadan boshlang."
-)
-CHILD_ONLY_ONE = (
-    "Bu chat bitta bolani yuritadi: {name}. Ikkinchisini qo‘shish uchun uning "
-    "kirish kodini shu yerga yuboring."
-)
+SCENARIO_CHILD_GONE = "Yozuv saqlanmadi: uni boshlagan bolangiz endi bu chatda yo‘q. Bolani tanlang va yozuvni pastdagi tugma bilan qaytadan boshlang."
+SCENARIO_CHILD_UNKNOWN = "Yozuv saqlanmadi: u qaysi bola uchun boshlangani noma’lum. Uni pastdagi tugma bilan qaytadan boshlang."
+CHILD_ONLY_ONE = "Bu chat bitta bolani yuritadi: {name}. Ikkinchisini qo‘shish uchun uning shifokordan olingan kodini shu yerga yuboring."
 
 # --- Asosiy menyu (раздел 7.2) ---
 
@@ -127,15 +116,9 @@ _DURATION_BOUNDARY_HINT = (
 )
 SEIZURE_ASK_DURATION = "Xuruj qancha davom etdi?\n" + _DURATION_BOUNDARY_HINT
 SEIZURE_ASK_DURATION_SERIES = "Ulardan eng uzog‘i qancha davom etdi?\n" + _DURATION_BOUNDARY_HINT
-SEIZURE_ASK_EXACT = (
-    "Xuruj necha soniya davom etdi? Raqam bilan — masalan, 90 (bu bir yarim daqiqa)."
-)
-SEIZURE_ASK_EXACT_SERIES = (
-    "Eng uzog‘i necha soniya davom etdi? Raqam bilan — masalan, 90 (bu bir yarim daqiqa)."
-)
-SEIZURE_EXACT_INVALID = (
-    "0 dan {limit} gacha butun soniyalar soni kerak. Yana bir bor urinib ko‘ring."
-)
+SEIZURE_ASK_EXACT = "Xuruj qancha davom etdi? Daqiqa va soniyani ikki nuqta bilan — masalan, 3:20, yoki soniyani raqam bilan — 90."
+SEIZURE_ASK_EXACT_SERIES = "Eng uzog‘i qancha davom etdi? Daqiqa va soniyani ikki nuqta bilan — masalan, 3:20, yoki soniyani raqam bilan — 90."
+SEIZURE_EXACT_INVALID = "Daqiqa va soniyani ikki nuqta bilan (3:20) yoki soniyani raqam bilan (200) yozing, {limit} soniyadan oshmasin."
 BTN_SEIZURE_EXACT = "Aniq kiritish"
 SEIZURE_SAVED = "{type}, {duration}"
 SEIZURE_SAVED_LONGEST = "eng uzog‘i — {duration}"
@@ -164,10 +147,7 @@ KETONE_METHOD_NAMES = {"blood": "qon", "urine": "siydik"}
 # --- Ovqat ---
 
 MEAL_ASK = "Bugungi menyudan nimalar allaqachon yeyildi? Taomni bosing — belgi darhol saqlanadi."
-MEAL_NO_MENU = (
-    "Bugun uchun menyu tuzilmagan. Yeyilganini so‘z bilan yozishingiz mumkin — "
-    "men tahlil qilib, nimani yozishni ko‘rsataman."
-)
+MEAL_NO_MENU = "Bugun uchun menyu tuzilmagan. Yeyilganini so‘z bilan yozishingiz mumkin — men o‘qib, nimani yozishni ko‘rsataman."
 
 # --- Ovqat so‘z bilan (раздел 10.3) ---
 #
@@ -175,27 +155,22 @@ MEAL_NO_MENU = (
 # понимает, но название, совпадающее со справочником, разбирается надёжнее.
 # Это сказано в подсказке, а не обнаруживается по списку «не нашла».
 BTN_MEAL_TEXT = "✍️ So‘z bilan yozish"
-MEAL_TEXT_ASK = (
-    "Bola nimani va qancha yeganini yozing. Masalan: «30 g sariyog‘ va bitta tuxum».\n"
-    "Mahsulot nomlarini ruscha yozsangiz, aniqroq tushunaman. Tahlil qilib, nimani "
-    "yozishni ko‘rsataman — faqat siz tasdiqlaganingizdan keyin saqlayman."
-)
-MEAL_TEXT_WORKING = "Tahlil qilyapman…"
+MEAL_TEXT_ASK = "Bola nimani va qancha yeganini yozing. Masalan: «30 g sariyog‘ va bitta tuxum».\nMahsulot nomlarini ruscha yozsangiz, aniqroq tushunaman. O‘qib, nimani yozishni ko‘rsataman — faqat siz tasdiqlaganingizdan keyin saqlayman."
+MEAL_TEXT_WORKING = "O‘qiyapman…"
 MEAL_TEXT_RESULT = "Mana nima chiqdi:\n\n{lines}"
 MEAL_TEXT_LINE = "• {name} — {grams} g"
 MEAL_TEXT_LINE_GUESS = "• {name} — taxminan {grams} g"
-MEAL_TEXT_UNMATCHED = "\n\nMa’lumotnomadan topilmadi: {list}. Bu mahsulotlar hisobga kirmaydi."
+MEAL_TEXT_UNMATCHED = (
+    "\n\nMahsulotlar orasidan topilmadi: {list}. Ular yozuvga kirmaydi — nomini tekshiring."
+)
 MEAL_TEXT_CONFIRM_HINT = "\n\nYozaymi?"
 MEAL_TEXT_SUMMARY_ITEM = "{name} {grams} g"
-MEAL_TEXT_CLARIFY = "{question}\n\nYana bir bor yozing — yoki menyuga qayting."
+MEAL_TEXT_CLARIFY = "{question}\n\nYana bir bor yozing yoki «Bekor qilish»ni bosing."
 MEAL_TEXT_EMPTY = "Nimani yozishni tushunmadim. Bola nimani va qancha yeganini yozing."
 MEAL_TEXT_LIMIT = (
-    "Bugun so‘z bilan tahlil qilish boshqa mavjud emas. Yeyilganini menyuda "
-    "belgilang — pastdagi «🍽 Ovqat» tugmasi."
+    "Bugun ovqatni so‘z bilan yozib bo‘lmaydi. Yeyilganini ilovadagi kun menyusida belgilang."
 )
-MEAL_TEXT_UNAVAILABLE = (
-    "Tahlil hozir mavjud emas. Yeyilganini menyuda belgilang yoki keyinroq urinib ko‘ring."
-)
+MEAL_TEXT_UNAVAILABLE = "O‘qib bo‘lmadi. «Qayta urinish»ni bosing — matnni qayta yozish shart emas."
 BTN_CONFIRM = "Tasdiqlash"
 MEAL_ALL_EATEN = "Bugungi menyudagi hammasi allaqachon belgilangan ✓"
 MEAL_UNKNOWN_DISH = "Taom"
@@ -223,7 +198,7 @@ CMD_LANGUAGE_DESCRIPTION = "Til / Язык — tilni almashtirish"
 # --- Dorilar ---
 
 MEDICATION_ASK = "Qaysi dorilar berildi? Hammasi bo‘lsa — darhol «Hammasi berildi» tugmasini bosing; hammasi bo‘lmasa — ularni belgilang."
-MEDICATION_NONE = "Shifokor hali dorilarni qo‘shmagan."
+MEDICATION_NONE = "Bugun sxemada dorilar yo‘q. Agar bola dori ichayotgan bo‘lsa, shifokorga ayting — ro‘yxatni u yuritadi."
 MEDICATION_DOSE = "{name} — {dose}"
 
 # --- Qachon bo‘lgan ---
@@ -232,12 +207,8 @@ WHEN_BAD_FORMAT = (
     "Vaqtni tushunib bo‘lmadi. Bugun bo‘lgan bo‘lsa 07:30, oldinroq bo‘lgan "
     "bo‘lsa 29.08 21:00 deb kiriting."
 )
-WHEN_IN_FUTURE = "Bu vaqt hali kelmagan. Tekshirib ko‘ring — balki allaqachon yozgandirsiz?"
-WHEN_TOO_OLD = (
-    "Bir haftadan oldingi voqeani yozib bo‘lmaydi: ko‘pincha bu sanadagi xato. "
-    "Agar yozuv haqiqatan eski bo‘lsa, uni kabinetda qo‘shish mumkin — "
-    "u ilovaning «Kabinetga kirish» bo‘limida yoqiladi."
-)
+WHEN_IN_FUTURE = "Bugun bu vaqt hali kelmagan. Agar kecha bo‘lgan bo‘lsa — sana bilan yozing, masalan 25.11 23:50."
+WHEN_TOO_OLD = "Bu yerda vaqtni bir haftadan ko‘p surib bo‘lmaydi. Yozuv avvalgi vaqt bilan qoldi. Oldinroq sanani ilovada qo‘ying: «Kundalik» bo‘limi → shu yozuvni bosing."
 
 UNKNOWN_INPUT = (
     "Nimani yozishni pastdagi tugma bilan tanlang. Qolgani — ilovada 📱, "
@@ -249,35 +220,14 @@ UNKNOWN_INPUT_NO_APP = (
 
 # --- Yordam (/help) ---
 
-HELP = (
-    "Bot nimalar qila oladi:\n\n"
-    "⚡ Xuruj, 🩸 Ketonlar, ⚖️ Vazn, 🙂 O‘zini his qilish — kundalikka yozuvlar\n"
-    "🍽 Ovqat — menyudan yeyilganini belgilash yoki so‘z bilan yozish\n"
-    "💊 Dorilar — dori berilganini belgilash\n"
-    "{app_line}"
-    "💻 Kabinet — qabul uchun hisobotlar va hujjatlar. Ilovada, «Kabinetga kirish» "
-    "bo‘limida yoqiladi\n"
-    "\n"
-    "Yozuvda xato qildingizmi? Uni ilovaning «Kundalik» bo‘limida tuzatish yoki "
-    "o‘chirish mumkin.\n"
-    "⏰ Eslatmalar — ilovada, bosh sahifadagi «Eslatmalar» bloki.\n"
-    "👨‍👩‍👧 Yaqinlarni taklif qilish — ilovada, «Yaqinlar» bo‘limi.\n"
-    "👶 Ikkinchi bola? Uning kodini shu yerga yuboring.\n"
-    "Telefonni yo‘qotdingizmi? Shifokordan yoki sizni taklif qilgan odamdan "
-    "kirishni yopishni so‘rang.\n\n"
-    "Tibbiy savollar bilan shifokoringizga murojaat qiling."
-)
+HELP = "Bot nimalar qila oladi:\n\n⚡ Xuruj, 🩸 Ketonlar, ⚖️ Vazn, 🙂 O‘zini his qilish — kundalikka yozuvlar\n🍽 Ovqat — menyudan yeyilganini belgilash yoki so‘z bilan yozish\n💊 Dorilar — dori berilganini belgilash\n{app_line}⏰ Eslatmalar, 👨\u200d👩\u200d👧 «Yaqinlar» va 💻 kabinetga kirish — ilovada: yuqoridagi «Sozlamalar» tishli g‘ildiragi\n\nYozuvda xato qildingizmi? Tuzatish yoki o‘chirish — ilovada, «Kundalik» bo‘limi: o‘z yozuvingizni bosing.\n👶 Ikkinchi bola? Uning kodini shu yerga yuboring.\nTelefonni yo‘qotdingizmi? Shifokor yoki sizni taklif qilgan odamdan kirishni yopishni so‘rang.\n\nTibbiy savollar bilan shifokoringizga murojaat qiling."
 HELP_APP_LINE = (
     "📱 Ilova — menyu, kundalik va grafiklar: yozish maydonining chap tomonidagi «Ilova» tugmasi\n"
 )
 
 CMD_START_DESCRIPTION = "Bolani ulash yoki qaytadan boshlash"
 CMD_HELP_DESCRIPTION = "Bot nimalar qila oladi"
-BOT_DESCRIPTION = (
-    "Bolaning kundaliklarini KetoCare’ga yozadi: ketonlar, vazn, ovqat (menyu "
-    "bo‘yicha yoki o‘z so‘zlaringiz bilan), dorilar va o‘zini his qilish. Ulash "
-    "uchun shifokor yoki bolaning ota-onasidan kod kerak."
-)
+BOT_DESCRIPTION = "Bolaning kundaliklarini KetoCare’ga yozadi: xurujlar, ketonlar, vazn, ovqat (menyu bo‘yicha yoki o‘z so‘zlaringiz bilan), dorilar va o‘zini his qilish. Ulash uchun shifokor yoki bolaning ota-onasidan kod kerak."
 BOT_SHORT_DESCRIPTION = "Bolaning KetoCare kundaliklari — chatdan"
 
 API_UNAVAILABLE = "Saqlab bo‘lmadi — bir daqiqadan keyin yana urinib ko‘ring."
@@ -313,7 +263,7 @@ BTN_HELP = "❓ Помощь · Yordam"
 BTN_BACK = "← Orqaga"
 BTN_RETRY = "Qayta urinish"
 BTN_OPEN_APP = "📱 Ilovani ochish"
-BUTTON_STEP_HINT = "Yuqoridagi tugma bilan tanlang yoki «Bekor qilish» tugmasini bosing."
+BUTTON_STEP_HINT = "Yuqoridagi xabardagi tugma bilan javob bering. Fikringiz o‘zgargan bo‘lsa — shu yerda «Bekor qilish»ni bosing."
 GROUP_ONLY_PRIVATE = (
     "Men faqat shaxsiy yozishmada ishlayman. Men bilan chatni oching va «Start» tugmasini bosing."
 )
@@ -327,13 +277,7 @@ HELP_SHORT = (
 HELP_SHORT_APP_LINE = "Menyu, kundalik va grafiklar — ilovada.\n"
 BTN_HELP_FIX = "Yozuvni qanday tuzatish mumkin"
 BTN_HELP_MORE = "Boshqa savollar"
-HELP_FIX = (
-    "Yozuvni qanday tuzatish mumkin:\n\n"
-    "• Yozuvdan so‘ng darhol — «Yozildi ✓» javobi ostidagi tugmalar: «Boshqa vaqt» "
-    "va «Yozuvni o‘chirish». Ular ikki sutka ishlaydi.\n"
-    "• Keyinroq — ilovada, «Kundalik» bo‘limi: o‘z yozuvingizda «Tuzatish» va «O‘chirish».\n\n"
-    "Boshqa odamning yozuvini uni qilgan odam tuzatadi."
-)
+HELP_FIX = "Yozuvni qanday tuzatish mumkin:\n\n• Yozuvdan so‘ng darhol — «Yozildi ✓» javobi ostidagi tugmalar: «Boshqa vaqt» va «Yozuvni o‘chirish». Ular ikki sutka ishlaydi.\n• Keyinroq — ilovada, «Kundalik» bo‘limi: o‘z yozuvingizni bosing, tuzating va saqlang yoki «Yozuvni o‘chirish»ni bosing.\n• «Yeyildi» belgisi kun menyusida olib tashlanadi.\n\nBoshqa odamning yozuvini uni qilgan odam tuzatadi."
 
 BTN_OTHER_TIME = "🕒 Boshqa vaqt"
 BTN_DELETE_RECORD = "🗑 Yozuvni o‘chirish"
@@ -351,9 +295,7 @@ RECORD_DELETE_ASK = "«{summary}» yozuvini o‘chiraymi?"
 BTN_DELETE_YES = "Ha, o‘chirish"
 RECORD_DELETED = "Yozuv o‘chirildi: {summary}."
 RECORD_GONE = "Bu yozuv endi yo‘q — u allaqachon o‘chirilgan."
-RECORD_EXPIRED = (
-    "Bu yozuvning tugmalari eskirgan. Uni ilovada, «Kundalik» bo‘limida tuzatish mumkin."
-)
+RECORD_EXPIRED = "Bu yozuvning tugmalari eskirgan. Uni ilovada tuzatish mumkin: «Kundalik» bo‘limi → yozuvni bosing."
 RECORD_CHILD_GONE = "Bu chatda ushbu bolaning kundaligiga kirish endi yo‘q."
 
 BTN_KETONES_WAS_URINE = "Bu siydik edi"
@@ -370,7 +312,7 @@ SEIZURE_SAVED_EXACT_MIN_SEC = "{minutes} daq {seconds} s"
 MEAL_TOAST_MARKED = "Belgilandi"
 MEAL_TOAST_UNMARKED = "Belgi olib tashlandi"
 BTN_MEAL_WHOLE = "{meal} to‘liq"
-MEAL_DONE = "Belgilandi ✓ {list}"
+MEAL_DONE = "Belgilandi ✓ {list}\nBelgini olib tashlash — ilovada, kun menyusida."
 
 BTN_MEDICATION_GIVEN_ALL = "Hammasi berildi"
 BTN_MEDICATION_GIVEN = "Belgilanganlar berildi ({count})"
@@ -401,3 +343,9 @@ DELETE_FAILED = "O‘chirib bo‘lmadi — bir daqiqadan keyin yana bosing."
 CODE_CHECK_FAILED = "Kodni tekshirib bo‘lmadi — bir daqiqadan keyin uni yana yuboring."
 BTN_TIME_AT = "Soat {time} da"
 BTN_TIME_ON = "{date}, soat {time} da"
+
+
+# --- Аудит семейного канала 26.11.2026, этап 3 ---
+SEIZURE_DURATION_FAILED = "Davomiylik variantlarini yuklab bo‘lmadi. «Qayta urinish»ni bosing — xuruj turi va soni saqlangan."
+BTN_OPEN_MENU = "📱 Menyuni ochish"
+MEAL_LIST_HINT = "Ovqatni so‘z bilan yozish uchun ro‘yxat ostidagi «✍️ So‘z bilan yozish»ni bosing. Tugatdingizmi — «Tayyor»."

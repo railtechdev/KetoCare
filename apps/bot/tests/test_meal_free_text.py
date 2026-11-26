@@ -103,7 +103,7 @@ class TestDraftBeforeSaving:
         await scenarios.meal_text_parse(message, state, api, linked_store, SETTINGS)
 
         assert "супчик" in message.last
-        assert "в расчёт не войдут" in message.last
+        assert "В записи их не будет" in message.last
 
 
 class TestConfirmation:
@@ -205,8 +205,12 @@ class TestWhenParsingFails:
 
         await scenarios.meal_text_parse(message, state, api, linked_store, SETTINGS)
 
+        # Набранное не пропадает: «Повторить» прочитает его снова (3.20).
         assert message.last == texts.MEAL_TEXT_UNAVAILABLE
-        assert "в меню" in message.last
+        assert texts.BTN_RETRY in [
+            b.text for row in message.last_markup.inline_keyboard for b in row
+        ]
+        assert (await state.get_data())["meal_retry_text"] == "30 г масла"
 
     @pytest.mark.asyncio
     async def test_revoked_link_ends_the_scenario(self, api, linked_store, state):

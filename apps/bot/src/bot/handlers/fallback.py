@@ -41,8 +41,16 @@ async def unknown(
     # что записать» здесь скрывал бы, что начатая запись ждёт ответа, а код
     # привязки посреди записи не разбирается: восемь букв, набранные в ответ
     # на вопрос, — это ответ, а не код.
-    if await state.get_state() is not None:
-        await message.answer(texts.BUTTON_STEP_HINT)
+    current = await state.get_state()
+    if current is not None:
+        # В списке еды словами пишут то, что съедено «не по меню»: путь к
+        # этому — кнопка под списком, о ней и сказано (аудит 26.11.2026, 3.24).
+        # Иначе — «Отмена» прямо под подсказкой: сообщение с кнопками может
+        # быть далеко выше или вчерашним (3.26).
+        if current == "Meal:choice":
+            await message.answer(texts.MEAL_LIST_HINT)
+            return
+        await message.answer(texts.BUTTON_STEP_HINT, reply_markup=keyboards.cancel_only())
         return
 
     # Код привязки, присланный сообщением. Проверяется до отбойника: родитель,
