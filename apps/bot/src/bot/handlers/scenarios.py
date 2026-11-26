@@ -1202,8 +1202,15 @@ def format_seconds(seconds: int) -> str:
 
 def _seizure_summary(data: dict[str, Any], duration: str) -> str:
     count = _seizure_count(data)
-    name = data.get("seizure_type_names", {}).get(
-        data["seizure_type_id"], texts.SEIZURE_UNNAMED_TYPE
+    # «Не знаю» — это узел «Неклассифицированный приступ» справочника; эхом
+    # родитель получал термин, которого не выбирал (аудит 26.11.2026, 4.10).
+    unknown = _unknown_type(data.get("seizure_types", []))
+    name = (
+        texts.SEIZURE_TYPE_UNKNOWN
+        if unknown is not None and data["seizure_type_id"] == unknown
+        else data.get("seizure_type_names", {}).get(
+            data["seizure_type_id"], texts.SEIZURE_UNNAMED_TYPE
+        )
     )
     if count > 1:
         return texts.SEIZURE_SAVED_SERIES.format(

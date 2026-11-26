@@ -357,3 +357,6 @@ KETONES_TOO_PRECISE = (
 WEIGHT_TOO_PRECISE = (
     "Vazn — verguldan keyin ko‘pi bilan ikkita raqam, masalan 18,45. Yana urinib ko‘ring."
 )
+
+# --- Аудит семейного канала 26.11.2026, 4.10 ---
+SEIZURE_TYPE_UNKNOWN = "Xuruj, turini bilmayman"

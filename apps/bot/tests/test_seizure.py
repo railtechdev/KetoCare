@@ -430,6 +430,19 @@ class TestTwoStepTypes:
         assert unknown == keyboards.SEIZURE_TYPE_PREFIX + ILAE_IDS["4"]
 
     @pytest.mark.asyncio
+    async def test_unknown_is_echoed_in_the_parents_words(self, ilae, linked_store, state):
+        """Эхо «Не знаю» — «Приступ, тип не знаю», а не термин справочника (4.10)."""
+
+        message = FakeMessage(text=texts.BTN_SEIZURE)
+        await scenarios.seizure_start(message, state, ilae, linked_store, SETTINGS)
+        await state.update_data(seizure_type_id=ILAE_IDS["4"])
+
+        summary = scenarios._seizure_summary(await state.get_data(), "1 мин")
+
+        assert summary.startswith(texts.SEIZURE_TYPE_UNKNOWN)
+        assert "Неклассифицированный" not in summary
+
+    @pytest.mark.asyncio
     async def test_without_history_the_groups_come_first(self, ilae, linked_store, state):
         message = FakeMessage(text=texts.BTN_SEIZURE)
 
