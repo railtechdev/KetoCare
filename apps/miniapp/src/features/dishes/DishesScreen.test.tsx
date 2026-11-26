@@ -80,6 +80,33 @@ const PRODUCTS: Record<string, unknown> = {
 
 let dishes: unknown[] = [DISH];
 
+/** Общий рецепт базы, из которого собрано блюдо ребёнка. */
+const RECIPE = {
+  id: "r1",
+  title: "Омлет",
+  category: "breakfast",
+  photo_path: null,
+  yield_g: 73,
+  servings: 1,
+  instructions: "",
+  status: "published",
+  computed: { kcal: 197, fat: 18, protein: 5, carbs: 3, fiber: 0, ratio: 2.4 },
+  per_portion: {
+    kcal: 197,
+    fat: 18,
+    protein: 5,
+    carbs: 3,
+    fiber: 0,
+    ratio: 2.4,
+  },
+  engine_version: "1.12.0",
+  author_id: "a1",
+  ingredients: [{ product_id: "p1", grams: 40 }],
+  created_at: "2026-08-01T10:00:00Z",
+};
+
+let recipes: unknown[] = [];
+
 function serve() {
   (api.GET as Mock).mockImplementation(
     async (
@@ -110,6 +137,15 @@ function serve() {
       if (path.endsWith("/menus")) {
         return { response: { status: 404 } };
       }
+      if (path.endsWith("{recipe_id}")) {
+        return { data: recipes[0], response: { status: 200 } };
+      }
+      if (path.endsWith("/recipes")) {
+        return {
+          data: { items: recipes, total: recipes.length },
+          response: { status: 200 },
+        };
+      }
       return { data: { items: [], total: 0 }, response: { status: 200 } };
     },
   );
@@ -136,6 +172,7 @@ async function openCard(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   vi.clearAllMocks();
   dishes = [DISH];
+  recipes = [];
   serve();
   (api.POST as Mock).mockImplementation(() => new Promise(() => undefined));
   (api.DELETE as Mock).mockResolvedValue({ response: { status: 204 } });
@@ -335,5 +372,75 @@ describe("карточка блюда ребёнка (Б1)", () => {
     } finally {
       delete PRODUCTS.p8;
     }
+  });
+});
+
+describe("рецепт базы и блюдо ребёнка из него (26.11.2026)", () => {
+  it("карточка рецепта говорит о своей граммовке ребёнка и ведёт к его блюду", async () => {
+    recipes = [RECIPE];
+    dishes = [{ ...DISH, source_recipe_id: "r1" }];
+    const user = userEvent.setup();
+    renderScreen();
+
+    // В списке — до нажатия: рецепт и блюдо называются одинаково.
+    const row = await screen.findByRole("button", { name: /Омлет/ });
+    await waitFor(() => {
+      expect(row).toHaveTextContent("У ребёнка своя граммовка");
+    });
+    await user.click(row);
+
+    const note = (
+      await screen.findByText("У ребёнка своя граммовка этого блюда")
+    ).closest("[role=status]") as HTMLElement;
+    expect(note).toHaveTextContent("граммы и калории другие");
+    expect(note).toHaveTextContent("по меню дня");
+
+    await user.click(
+      within(note).getByRole("button", { name: "Открыть блюдо ребёнка" }),
+    );
+
+    // Открылось блюдо ребёнка — со своими граммами, в своём разделе.
+    const title = await screen.findByRole("heading", {
+      level: 2,
+      name: "Омлет Амины",
+    });
+    expect(screen.getByRole("radio", { name: "Блюда ребёнка" })).toBeChecked();
+    expect(
+      within(title.closest("section") as HTMLElement).getByText("310 ккал"),
+    ).toBeInTheDocument();
+  });
+
+  it("блюд из рецепта несколько — кнопка ведёт к их списку, а не к одному из них", async () => {
+    recipes = [RECIPE];
+    dishes = [
+      { ...DISH, source_recipe_id: "r1" },
+      { ...DISH, id: "d2", title: "Омлет Амины 2", source_recipe_id: "r1" },
+    ];
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Открыть блюда ребёнка" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /Омлет Амины 2/ }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: /Омлет Амины/ }),
+    ).toBeNull();
+  });
+
+  it("рецепт без блюда ребёнка — без пометки и без полосы", async () => {
+    recipes = [RECIPE];
+    const user = userEvent.setup();
+    renderScreen();
+
+    const row = await screen.findByRole("button", { name: /Омлет/ });
+    await user.click(row);
+    await screen.findByRole("heading", { name: "На порцию" });
+
+    expect(screen.queryByText(/своя граммовка/)).toBeNull();
   });
 });

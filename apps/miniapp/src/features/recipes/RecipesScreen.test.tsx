@@ -3,7 +3,7 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
@@ -650,6 +650,12 @@ describe("рецепты в Mini App", () => {
       await screen.findByRole("heading", { name: "На порцию" })
     ).closest("section");
     expect(section).toHaveTextContent("Кетосоотношение не как в назначении");
+    // Полосой и со словами, что делать: бледную строку семья не замечала и
+    // сверяла граммы шаблона с карточкой диетолога (26.11.2026).
+    const note = within(section as HTMLElement).getByRole("status");
+    expect(note).toHaveTextContent(
+      "Граммы этого рецепта не рассчитаны под назначение ребёнка",
+    );
     expect(section?.querySelector("[data-state]")).toHaveAttribute(
       "data-state",
       "neutral",

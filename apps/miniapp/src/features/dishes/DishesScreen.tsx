@@ -45,6 +45,8 @@ export function DishesScreen({ session }: { session: Session }) {
   // Блюдо ребёнка, открытое в расчёте (Б1). Состояние здесь, а не в
   // расчёте: «Открыть в расчёте» нажимают в соседнем разделе.
   const [seed, setSeed] = useState<CalculatorSeed | null>(null);
+  // Открытое блюдо ребёнка — здесь же: к нему ведёт и карточка рецепта.
+  const [dishId, setDishId] = useState<string | null>(null);
 
   const open = (next: DishesSection) => {
     setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
@@ -69,11 +71,20 @@ export function DishesScreen({ session }: { session: Session }) {
         <div key={value} hidden={value !== section} data-section={value}>
           <TabVisibleContext value={tabVisible && value === section}>
             {value === "recipes" && (
-              <RecipesScreen patientId={session.patientId} />
+              <RecipesScreen
+                patientId={session.patientId}
+                onOpenChildDish={(id) => {
+                  setDishId(id);
+                  open("dishes");
+                  window.scrollTo(0, 0);
+                }}
+              />
             )}
             {value === "dishes" && (
               <ChildDishes
                 patientId={session.patientId}
+                openId={dishId}
+                onOpenIdChange={setDishId}
                 onOpenCalculator={() => open("calculator")}
                 onOpenInCalculator={(dish) => {
                   setSeed((prev) => ({

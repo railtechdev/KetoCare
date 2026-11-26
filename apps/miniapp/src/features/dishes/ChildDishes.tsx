@@ -9,7 +9,6 @@ import {
   formatKcal,
 } from "@ketocare/ui";
 import { ArrowLeft, Calculator, ChevronRight, CookingPot } from "lucide-react";
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { RemoveButton } from "../../components/RemoveButton";
@@ -38,10 +37,18 @@ import { ProductComposition } from "../recipes/ProductComposition";
  */
 export function ChildDishes({
   patientId,
+  openId,
+  onOpenIdChange,
   onOpenCalculator,
   onOpenInCalculator,
 }: {
   patientId: string;
+  /**
+   * Открытое блюдо. Живёт у вкладки, а не здесь: карточка рецепта открывает
+   * блюдо ребёнка из соседнего раздела.
+   */
+  openId: string | null;
+  onOpenIdChange: (dishId: string | null) => void;
   /** Пустой расчёт — из пустого списка. */
   onOpenCalculator: () => void;
   /** Состав блюда — в расчёт. */
@@ -49,7 +56,6 @@ export function ChildDishes({
 }) {
   const { t } = useTranslation();
   const dishes = useCustomDishes(patientId);
-  const [openId, setOpenId] = useState<string | null>(null);
   const opened = dishes.data?.find((dish) => dish.id === openId) ?? null;
 
   // Список остаётся смонтированным под карточкой, как у рецептов: прокрутка
@@ -60,7 +66,7 @@ export function ChildDishes({
         <DishCard
           dish={opened}
           patientId={patientId}
-          onBack={() => setOpenId(null)}
+          onBack={() => onOpenIdChange(null)}
           onOpenInCalculator={() => onOpenInCalculator(opened)}
         />
       )}
@@ -113,7 +119,7 @@ export function ChildDishes({
                   type="button"
                   className="flex min-h-touch w-full items-center gap-field rounded-xl border border-border px-3 py-2 text-left"
                   onClick={() => {
-                    setOpenId(dish.id);
+                    onOpenIdChange(dish.id);
                     window.scrollTo(0, 0);
                   }}
                 >

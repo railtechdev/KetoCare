@@ -7,6 +7,7 @@ import {
   SEARCH_DELAY_MS,
   Section,
   StatusNote,
+  WarningBanner,
   cn,
   formatGrams,
   formatKcal,
@@ -19,6 +20,7 @@ import { useTranslation } from "react-i18next";
 
 import { errorMessageOf } from "../../lib/api";
 import { AddToPlan } from "../menu/AddToPlan";
+import { type CustomDish, useCustomDishes } from "../menu/useDishOptions";
 import { useTelegramBack } from "../../lib/useTelegram";
 import { ProductComposition } from "./ProductComposition";
 import {
@@ -36,8 +38,17 @@ import {
  * Правка рецепта — работа диетолога в кабинете: по опубликованному рецепту
  * кормят не одного ребёнка, и менять его с телефона между делом нельзя. А
  * поставить рецепт в меню отсюда можно — «В меню» в карточке.
+ *
+ * `onOpenChildDish` — перейти к блюду ребёнка, собранному из открытого
+ * рецепта: `null` — к их списку, когда таких блюд несколько.
  */
-export function RecipesScreen({ patientId }: { patientId: string }) {
+export function RecipesScreen({
+  patientId,
+  onOpenChildDish,
+}: {
+  patientId: string;
+  onOpenChildDish?: (dishId: string | null) => void;
+}) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   // Список остаётся смонтированным под открытой карточкой: поиск, раздел и
@@ -52,6 +63,7 @@ export function RecipesScreen({ patientId }: { patientId: string }) {
           recipeId={openId}
           patientId={patientId}
           embedded
+          onOpenChildDish={onOpenChildDish}
           onBack={() => {
             setOpenId(null);
           }}
@@ -74,6 +86,10 @@ function RecipeList({
   const categoryId = useId();
   const debounced = useDebouncedValue(query, SEARCH_DELAY_MS);
   const recipes = useRecipeSearch(debounced, category, patientId);
+  const ownDishes = useCustomDishes(patientId);
+  const recipesWithOwnDish = new Set(
+    (ownDishes.data ?? []).map((dish) => dish.source_recipe_id),
+  );
   // Пока набор не устоялся, выдача относится к прежним буквам: `debounced`
   // отстаёт на задержку. «Ничего не нашлось» в эту паузу — ответ не о том, что
   // человек набрал.
@@ -175,6 +191,14 @@ function RecipeList({
                     названия и выталкивает соотношение за край экрана. */}
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="break-words">{recipe.title}</span>
+                  {/* Рецепт и блюдо ребёнка из него называются одинаково, а
+                      граммы у них разные: строка говорит, что открывается
+                      шаблон, ещё до нажатия. */}
+                  {recipesWithOwnDish.has(recipe.id) && (
+                    <span className="text-sm text-warning-strong">
+                      {t("recipes.ownDish.row")}
+                    </span>
+                  )}
                   {recipe.ratio_fits_prescription === false && (
                     <span className="text-sm text-warning-strong">
                       {t("recipes.ratioDiffers")}
@@ -221,10 +245,13 @@ export function RecipeCard({
   onBack,
   backLabel,
   embedded = false,
+  onOpenChildDish,
 }: {
   recipeId: string;
   patientId: string;
   onBack: () => void;
+  /** Перейти к блюду ребёнка из этого рецепта. Нет — кнопки перехода нет. */
+  onOpenChildDish?: (dishId: string | null) => void;
   /** Куда ведёт «Назад» — словами того места, откуда открыли. */
   backLabel?: string;
   embedded?: boolean;
@@ -280,6 +307,7 @@ export function RecipeCard({
             recipe={recipe.data}
             patientId={patientId}
             level={embedded ? 2 : 1}
+            onOpenChildDish={onOpenChildDish}
           />
         )}
       </AsyncSection>
@@ -291,14 +319,20 @@ function RecipeBody({
   recipe,
   patientId,
   level,
+  onOpenChildDish,
 }: {
   recipe: Recipe;
   patientId: string;
   level: 1 | 2;
+  onOpenChildDish?: (dishId: string | null) => void;
 }) {
   const { t } = useTranslation();
   const portion = recipe.per_portion;
   const Title = level === 1 ? "h1" : "h2";
+  const dishes = useCustomDishes(patientId);
+  const ownDishes = (dishes.data ?? []).filter(
+    (dish) => dish.source_recipe_id === recipe.id,
+  );
 
   // Порядок — как готовят (М5 аудита Mini App): что это за блюдо, из чего и
   // как его делать, и только потом — куда поставить. «Добавить в меню» над
@@ -307,6 +341,10 @@ function RecipeBody({
     <div className="flex flex-col gap-section">
       {/* Название рецепта из базы бывает длинным словом без пробелов. */}
       <Title className="m-0 break-words text-page-title">{recipe.title}</Title>
+
+      {ownDishes.length > 0 && (
+        <OwnDishNote dishes={ownDishes} onOpen={onOpenChildDish} />
+      )}
 
       <RecipePhoto recipeId={recipe.id} photoPath={recipe.photo_path} />
 
@@ -338,10 +376,12 @@ function RecipeBody({
             yield: formatMass(recipe.yield_g),
           })}
         </p>
+        {/* Полосой, а не бледной строкой: по граммам рецепта не под
+            назначение семья готовила, не заметив пометки (26.11.2026). */}
         {recipe.ratio_fits_prescription === false && (
-          <p className="m-0 text-sm text-warning-strong">
-            {t("recipes.ratioDiffers")}
-          </p>
+          <WarningBanner level="warning" title={t("recipes.ratioDiffers")}>
+            {t("recipes.ratioDiffersBody")}
+          </WarningBanner>
         )}
       </Section>
 
@@ -374,6 +414,48 @@ function RecipeBody({
         />
       </Section>
     </div>
+  );
+}
+
+/**
+ * «У ребёнка своя граммовка этого блюда» — над карточкой общего рецепта.
+ *
+ * Блюдо ребёнка, собранное из рецепта, называется так же, как рецепт, а граммы
+ * у него другие: диетолог пересчитывает их под назначение. Семья открывала
+ * рецепт из базы, видела другие граммы и калории, чем на выданной карточке, и
+ * решала, что расчёт неверен (сообщение клиники 26.11.2026), — или готовила бы
+ * по шаблону. Какое из блюд стоит в сегодняшнем приёме, знает только меню дня:
+ * поэтому текст называет и его.
+ */
+function OwnDishNote({
+  dishes,
+  onOpen,
+}: {
+  dishes: readonly CustomDish[];
+  onOpen?: (dishId: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const single = dishes.length === 1 ? dishes[0] : undefined;
+  return (
+    <WarningBanner level="warning" title={t("recipes.ownDish.title")}>
+      <span className="flex flex-col gap-field">
+        <span>{t("recipes.ownDish.body")}</span>
+        {onOpen !== undefined && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch self-start"
+            onClick={() => {
+              onOpen(single?.id ?? null);
+            }}
+          >
+            {single !== undefined
+              ? t("recipes.ownDish.open")
+              : t("recipes.ownDish.openList")}
+          </Button>
+        )}
+      </span>
+    </WarningBanner>
   );
 }
 
