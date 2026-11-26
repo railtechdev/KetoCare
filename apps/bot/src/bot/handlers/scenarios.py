@@ -63,6 +63,17 @@ router.message.filter(F.chat.type == "private")
 KETONES_MIN, KETONES_MAX = Decimal("0"), Decimal("12")
 WEIGHT_MIN, WEIGHT_MAX = Decimal("2"), Decimal("150")
 
+#: Знаков после запятой, которые хранит база (`ketone_logs.value` Numeric(4, 1),
+#: `weight_logs.weight_kg` Numeric(5, 2)): больше — эхо разошлось бы с записью.
+KETONES_DECIMALS = 1
+WEIGHT_DECIMALS = 2
+
+
+def _decimals(value: Decimal) -> int:
+    exponent = value.normalize().as_tuple().exponent
+    return -exponent if isinstance(exponent, int) and exponent < 0 else 0
+
+
 # Предел длительности приступа — тот же, что у API (`schemas_logs.MAX_DURATION_SEC`).
 MAX_DURATION_SEC = 86_400
 
@@ -609,6 +620,12 @@ async def ketones_value(
     if not KETONES_MIN <= value <= KETONES_MAX:
         await card.show(message, state, texts.KETONES_OUT_OF_RANGE, keyboards.cancel_only())
         return
+    # Хранится один знак после запятой: «3,25» сохранилось бы как 3,2 или 3,3,
+    # а эхо повторило бы 3,25 — подтверждение не того, что записано (аудит
+    # 26.11.2026, 2.25). Лишний знак — переспросить, а не округлить молча.
+    if _decimals(value) > KETONES_DECIMALS:
+        await card.show(message, state, texts.KETONES_TOO_PRECISE, keyboards.cancel_only())
+        return
 
     binding = await scenario_binding(message, state, store, settings)
     if binding is None:
@@ -720,6 +737,9 @@ async def weight_value(
         return
     if not WEIGHT_MIN <= value <= WEIGHT_MAX:
         await card.show(message, state, texts.WEIGHT_OUT_OF_RANGE, keyboards.cancel_only())
+        return
+    if _decimals(value) > WEIGHT_DECIMALS:
+        await card.show(message, state, texts.WEIGHT_TOO_PRECISE, keyboards.cancel_only())
         return
 
     binding = await scenario_binding(message, state, store, settings)

@@ -349,3 +349,11 @@ BTN_TIME_ON = "{date}, soat {time} da"
 SEIZURE_DURATION_FAILED = "Davomiylik variantlarini yuklab bo‘lmadi. «Qayta urinish»ni bosing — xuruj turi va soni saqlangan."
 BTN_OPEN_MENU = "📱 Menyuni ochish"
 MEAL_LIST_HINT = "Ovqatni so‘z bilan yozish uchun ro‘yxat ostidagi «✍️ So‘z bilan yozish»ni bosing. Tugatdingizmi — «Tayyor»."
+
+# --- Аудит семейного канала 26.11.2026, 2.25 ---
+KETONES_TOO_PRECISE = (
+    "Ketonlar — verguldan keyin bitta raqam bilan, masalan 3,2. Yana urinib ko‘ring."
+)
+WEIGHT_TOO_PRECISE = (
+    "Vazn — verguldan keyin ko‘pi bilan ikkita raqam, masalan 18,45. Yana urinib ko‘ring."
+)
