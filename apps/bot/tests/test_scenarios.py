@@ -1654,3 +1654,17 @@ class TestStateFromBeforeTheDeploy:
         assert api.logs[0]["payload"]["weight_kg"] == "18.4"
         assert message.last == texts.SAVED_BARE
         assert await state.get_state() is None
+
+
+class TestEchoMatchesStored:
+    """Эхо повторяет то, что сохранено: лишних знаков база не держит (2.25)."""
+
+    @pytest.mark.asyncio
+    async def test_ketones_with_two_decimals_are_asked_again(self, api, linked_store, state):
+        await state.set_state(scenarios.Ketones.value)
+        message = FakeMessage(text="3,25")
+
+        await scenarios.ketones_value(message, state, api, linked_store, SETTINGS)
+
+        assert message.last == texts.KETONES_TOO_PRECISE
+        assert not api.logs
