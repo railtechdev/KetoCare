@@ -24,6 +24,27 @@ import {
 import { ProductComposition } from "../recipes/ProductComposition";
 
 /**
+ * «диетолог Иванова А.» — кто рассчитал блюдо, если не семья; иначе `null`.
+ *
+ * Семья перезаписывала и удаляла порцию, рассчитанную диетологом, не зная, чья
+ * она (аудит 26.11.2026, 1.6). У блюд, сохранённых до того, как автора стали
+ * помнить, его нет — и пометки нет.
+ */
+export function calculatedBy(
+  dish: CustomDish,
+  t: (key: string) => string,
+): string | null {
+  const role = dish.created_by_role ?? null;
+  const name = dish.created_by_name ?? null;
+  if (role === null || name === null || role === "parent") return null;
+  const roleWord =
+    role === "dietitian" || role === "doctor"
+      ? t(`dishes.card.role.${role}`)
+      : t("dishes.card.role.other");
+  return `${roleWord} ${name}`;
+}
+
+/**
  * Блюда ребёнка — то, что семья собрала в расчёте или завёл специалист.
  *
  * Нажатие на блюдо открывает его карточку (Б1 аудита Mini App): показатели,
@@ -170,6 +191,7 @@ function DishCard({
   const remove = useDeleteCustomDish(patientId);
   const steps = (dish.instructions ?? "").trim();
   const computed = dish.computed;
+  const author = calculatedBy(dish, t);
 
   // «Назад» Telegram закрывает карточку, а не весь Mini App.
   useTelegramBack(remove.isPending ? null : onBack);
@@ -191,6 +213,11 @@ function DishCard({
       <h2 id={`dish-${dish.id}`} className="m-0 break-words text-page-title">
         {dish.title}
       </h2>
+      {author !== null && (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("dishes.card.calculatedBy", { name: author })}
+        </p>
+      )}
 
       <Section title={t("dishes.card.perDish")} density="compact">
         {computed == null ? (
@@ -254,7 +281,11 @@ function DishCard({
             />
           }
           title={t("dishes.card.deleteTitle", { title: dish.title })}
-          description={t("dishes.card.deleteBody")}
+          description={
+            author === null
+              ? t("dishes.card.deleteBody")
+              : `${t("dishes.card.deleteBySpecialist", { name: author })} ${t("dishes.card.deleteBody")}`
+          }
           confirmLabel={t("dishes.card.delete")}
           cancelLabel={t("dishes.card.keep")}
           destructive

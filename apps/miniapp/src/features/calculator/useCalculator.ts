@@ -361,6 +361,8 @@ export interface CalculatorSeed {
   dishId: string;
   title: string;
   ingredients: readonly { product_id: string; grams: number }[];
+  /** Кто рассчитал блюдо, если не семья: «диетолог Имя» (аудит 1.6). */
+  calculatedBy?: string | null;
 }
 
 export type SeedRows =

@@ -112,9 +112,11 @@ export function CalculatorScreen({
   } | null>(null);
   // Блюдо, состав которого сейчас в расчёте: «Сохранить изменения» пишет в
   // него, а не заводит второе блюдо рядом с ошибочным.
-  const [editing, setEditing] = useState<{ id: string; title: string } | null>(
-    null,
-  );
+  const [editing, setEditing] = useState<{
+    id: string;
+    title: string;
+    calculatedBy?: string | null;
+  } | null>(null);
   // Форма сохранения начинается заново, только когда в расчёт пришло другое
   // блюдо или начато новое, — не когда только что сохранённое стало открытым:
   // иначе строка «Блюдо сохранено» пропадала бы в момент появления.
@@ -129,7 +131,11 @@ export function CalculatorScreen({
         ? { missing: seeded.missing, withdrawn: seeded.withdrawn }
         : null,
     );
-    setEditing({ id: pendingSeed.dishId, title: pendingSeed.title });
+    setEditing({
+      id: pendingSeed.dishId,
+      title: pendingSeed.title,
+      calculatedBy: pendingSeed.calculatedBy ?? null,
+    });
   };
   if (seedReady && rows.length === 0) {
     // Состояние по ходу отрисовки, а не в эффекте: так новый состав виден в
@@ -939,7 +945,15 @@ export function CalculatorScreen({
           // Сохранённое блюдо становится открытым: следующая правка граммов
           // предложит «Сохранить изменения» в него же, а не заведёт второе
           // (аудит 26.11.2026, 1.5).
-          onSaved={(dish) => setEditing({ id: dish.id, title: dish.title })}
+          onSaved={(dish) =>
+            // Тот же автор, если сохранили изменения в открытое блюдо: пометка
+            // «рассчитал(а) диетолог» не должна пропасть после первой правки.
+            setEditing((prev) => ({
+              id: dish.id,
+              title: dish.title,
+              calculatedBy: prev?.id === dish.id ? prev.calculatedBy : null,
+            }))
+          }
           onNew={() => {
             setSaveFormKey((key) => key + 1);
             setRows([]);

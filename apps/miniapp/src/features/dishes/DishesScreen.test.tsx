@@ -212,6 +212,40 @@ describe("карточка блюда ребёнка (Б1)", () => {
     ).toBeInTheDocument();
   });
 
+  it("блюдо, рассчитанное диетологом, так и подписано, и удаление об этом говорит (1.6)", async () => {
+    dishes = [
+      {
+        ...DISH,
+        created_by_name: "Иванова А.",
+        created_by_role: "dietitian",
+      },
+    ];
+    const user = userEvent.setup();
+    renderScreen();
+
+    const title = await openCard(user);
+    const card = title.closest("section") as HTMLElement;
+    expect(
+      within(card).getByText("Рассчитал(а): диетолог Иванова А."),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(card).getByRole("button", { name: "Удалить блюдо" }),
+    );
+    expect(
+      await screen.findByText(/Это блюдо рассчитал\(а\) диетолог Иванова А\./),
+    ).toBeInTheDocument();
+  });
+
+  it("своё блюдо семьи — без пометки об авторе", async () => {
+    dishes = [{ ...DISH, created_by_name: "Мама", created_by_role: "parent" }];
+    const user = userEvent.setup();
+    renderScreen();
+
+    await openCard(user);
+    expect(screen.queryByText(/Рассчитал\(а\)/)).toBeNull();
+  });
+
   it("«Назад» Telegram закрывает карточку, а не приложение", async () => {
     const user = userEvent.setup();
     renderScreen();

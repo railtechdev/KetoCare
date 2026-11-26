@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Path, Request, Response
@@ -18,6 +19,7 @@ from core.repositories import custom_dishes as dishes_repo
 from core.repositories import patients as patients_repo
 from core.repositories import products as products_repo
 from core.repositories import recipes as recipes_repo
+from core.repositories import users as users_repo
 
 from ..deps.auth import CurrentUser, PatientAccessDep, SessionDep
 from ..deps.idempotency import IdempotencyKeyDep
@@ -107,7 +109,7 @@ async def list_dishes(
     items, total = await dishes_repo.list_for_patient(
         session, patient_id=patient_id, limit=page.limit, offset=page.offset
     )
-    return Page(items=[CustomDishRead.model_validate(d) for d in items], total=total)
+    return Page(items=await _read_many(session, items), total=total)
 
 
 @router.post("", response_model=CustomDishRead, status_code=201, summary="Сохранить блюдо")
@@ -151,8 +153,9 @@ async def create_dish(
         engine_version=engine_version,
         instructions=instructions,
         source_recipe_id=payload.source_recipe_id,
+        created_by=user.id,
     )
-    created = CustomDishRead.model_validate(dish)
+    created = (await _read_many(session, [dish]))[0]
     if reservation is not None:
         await idempotency.finish(
             session, key_id=reservation, status=201, body=created.model_dump(mode="json")
@@ -200,7 +203,7 @@ async def update_dish(
             else dish.instructions
         ),
     )
-    return CustomDishRead.model_validate(updated)
+    return (await _read_many(session, [updated]))[0]
 
 
 @router.delete("/{dish_id}", status_code=204, summary="Удалить блюдо")
@@ -213,3 +216,23 @@ async def delete_dish(
     dish = await _owned_dish(session, dish_id, patient_id)
     await dishes_repo.soft_delete(session, dish=dish)
     return Response(status_code=204)
+
+
+async def _read_many(session: SessionDep, dishes: Sequence[CustomDish]) -> list[CustomDishRead]:
+    """Блюда с именем и ролью того, кто их сохранил, — одним запросом на всех."""
+
+    authors = await users_repo.get_many(
+        session, user_ids={d.created_by for d in dishes if d.created_by is not None}
+    )
+    result = []
+    for dish in dishes:
+        author = authors.get(dish.created_by) if dish.created_by is not None else None
+        result.append(
+            CustomDishRead.model_validate(dish).model_copy(
+                update={
+                    "created_by_name": None if author is None else author.full_name,
+                    "created_by_role": None if author is None else author.role,
+                }
+            )
+        )
+    return result

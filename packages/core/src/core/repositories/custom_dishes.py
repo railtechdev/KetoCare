@@ -52,6 +52,7 @@ async def create(
     engine_version: str,
     instructions: str | None = None,
     source_recipe_id: uuid.UUID | None = None,
+    created_by: uuid.UUID | None = None,
 ) -> CustomDish:
     dish = CustomDish(
         patient_id=patient_id,
@@ -61,6 +62,7 @@ async def create(
         engine_version=engine_version,
         instructions=instructions,
         source_recipe_id=source_recipe_id,
+        created_by=created_by,
     )
     session.add(dish)
     await session.flush()
