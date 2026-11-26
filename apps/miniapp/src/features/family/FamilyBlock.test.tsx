@@ -167,6 +167,43 @@ describe("близкие в Mini App", () => {
     expect(screen.getByText("BABU5K92")).toBeInTheDocument();
   });
 
+  it("приглашение можно отменить, и названо, какого бота искать (3.11)", async () => {
+    get.mockResolvedValue({ data: MEMBERS });
+    post.mockImplementation((path: string) =>
+      Promise.resolve(
+        path.endsWith("/revoke")
+          ? { response: { ok: true, status: 204 } }
+          : {
+              data: {
+                code: "BABU5K92",
+                expires_at: "2026-10-09T10:00:00Z",
+                deep_link: "https://t.me/ketocare_bot?start=BABU5K92",
+                join_url: "https://app.example/join?code=BABU5K92",
+              },
+              response: { ok: true, status: 201 },
+            },
+      ),
+    );
+    renderBlock();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Пригласить близкого" }),
+    );
+    expect(await screen.findByText(/бота @ketocare_bot/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Приглашение — для одного человека/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Отменить приглашение" }),
+    );
+
+    expect(post).toHaveBeenCalledWith(
+      "/api/v1/patients/{patient_id}/access-codes/{code}/revoke",
+      { params: { path: { patient_id: session.patientId, code: "BABU5K92" } } },
+    );
+  });
+
   it("отказ сервера объясняется его словами, а не пустотой", async () => {
     get.mockResolvedValue({ data: MEMBERS });
     post.mockResolvedValue({

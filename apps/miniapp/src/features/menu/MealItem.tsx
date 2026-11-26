@@ -1,4 +1,10 @@
-import { Checkbox, WarningBanner, formatKcal, formatRatio } from "@ketocare/ui";
+import {
+  Checkbox,
+  WarningBanner,
+  formatKcal,
+  formatNumber,
+  formatRatio,
+} from "@ketocare/ui";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -107,6 +113,24 @@ function DishTitle({ item }: { item: MenuItem }) {
   return (
     <span className="min-w-0 break-words">
       {item.title ?? t("menu.unknownDish")}
+      {/* Порция не 1 — видна в строке: «0,5» вводили при сборке дня, а потом
+          нигде не видели, и два одинаковых блюда с разной порцией выглядели
+          одинаково (аудит 26.11.2026, 3.15). */}
+      {item.portion_factor !== 1 && (
+        <span className="text-muted-foreground tabular-nums">
+          {" "}
+          {t("menu.portion", {
+            value: formatNumber(
+              item.portion_factor,
+              Number.isInteger(item.portion_factor)
+                ? 0
+                : Number.isInteger(item.portion_factor * 10)
+                  ? 1
+                  : 2,
+            ),
+          })}
+        </span>
+      )}
       {/* Калорийность порции — сверить с листом диетолога (аудит 26.11.2026,
           1.13). Считает сервер тем же расчётом, что итоги дня. */}
       {computed !== null && (

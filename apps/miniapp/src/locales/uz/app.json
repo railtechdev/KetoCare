@@ -183,7 +183,8 @@
     "macroLine": "yog‘lar {{fat}} g · oqsillar {{protein}} g · uglevodlar {{carbs}} g",
     "itemKcal": "{{kcal}} kkal",
     "itemKcalRatio": "{{kcal}} kkal · {{ratio}}",
-    "eatenLabel": "Yeyildi"
+    "eatenLabel": "Yeyildi",
+    "portion": "× {{value}} porsiya"
   },
   "shopping": {
     "open": "Nima sotib olish kerak",
@@ -522,7 +523,7 @@
       "meal": "Ovqatlanish",
       "submit": "Menyuga qo‘shish",
       "adding": "Qo‘shilmoqda…",
-      "added": "Menyuga qo‘shildi: {{day}}, {{index}}-ovqatlanish.",
+      "added": "Menyuga qo‘shildi: {{day}}, {{index}}-ovqatlanish, 1 porsiya. Boshqa miqdor — menyudan qo‘shganda.",
       "loading": "Menyu yuklanmoqda…",
       "loadError": "Shu kunning menyusini yuklab bo‘lmadi.",
       "failed": "Menyuga qo‘shib bo‘lmadi",
@@ -716,7 +717,12 @@
     "expires": "Taklif {{date}} gacha amal qiladi.",
     "trust": "Faqat bolaga g‘amxo‘rlik qilishni ishonib topshiradigan odamga yuboring. Uni shu yerda ko‘rasiz va kirishni istalgan vaqtda yopish mumkin.",
     "messageTelegram": "Sizni men bilan birga KetoCare’da bola kundaligini yuritishga taklif qilaman.\n\n1. Yuqoridagi havolani bosing — Telegram ochiladi.\n2. «Запустить» (yoki «Start», «Boshlash») tugmasini bosing.\nVassalom — bot hammasini o‘zi ulaydi.\n\nAgar havola ochilmasa, botga shu kodni yuboring: {{code}}\nTaklif {{date}} gacha amal qiladi.",
-    "messageWeb": "Sizni men bilan birga KetoCare’da bola kundaligini yuritishga taklif qilaman.\n\nYuqoridagi havolani oching va qisqa shaklni to‘ldiring — kod allaqachon kiritilgan: {{code}}\nTaklif {{date}} gacha amal qiladi."
+    "messageWeb": "Sizni men bilan birga KetoCare’da bola kundaligini yuritishga taklif qilaman.\n\nYuqoridagi havolani oching va qisqa shaklni to‘ldiring — kod allaqachon kiritilgan: {{code}}\nTaklif {{date}} gacha amal qiladi.",
+    "nearbyBot": "Agar odam yoningizda bo‘lsa, Telegramda @{{bot}} botini topib, unga shu kodni yuborsin:",
+    "onePerson": "Taklif — bitta odam uchun. Yana kimnidir chaqirish uchun yangisini yarating.",
+    "inviteAnother": "Yana birini taklif qilish",
+    "revoke": "Taklifni bekor qilish",
+    "revokeFailed": "Taklifni bekor qilib bo‘lmadi. Yana urinib ko‘ring."
   },
   "kit": {
     "macros": {

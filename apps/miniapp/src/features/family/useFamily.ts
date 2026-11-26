@@ -91,6 +91,37 @@ export function useInvite(patientId: string) {
   });
 }
 
+/**
+ * Отменить приглашение: ошибся чатом в окне «Переслать» — код живёт неделю, и
+ * закрыть доступ можно было только после того, как чужой человек уже вошёл
+ * (аудит 26.11.2026, 3.11).
+ */
+export function useRevokeInvitation(patientId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (code: string) => {
+      const { error, response } = await api.POST(
+        "/api/v1/patients/{patient_id}/access-codes/{code}/revoke",
+        { params: { path: { patient_id: patientId, code } } },
+      );
+      if (error !== undefined || !response.ok)
+        throw error ?? new Error("Revoke failed");
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: codesKey(patientId) });
+    },
+  });
+}
+
+/** Имя бота из ссылки приглашения `t.me/<бот>?start=…` — или `null`. */
+export function botNameOf(deepLink: string | null): string | null {
+  if (deepLink === null) return null;
+  const match = /^https:\/\/t\.me\/([A-Za-z0-9_]{3,64})(?:[/?]|$)/.exec(
+    deepLink,
+  );
+  return match?.[1] ?? null;
+}
+
 /** Закрыть доступ тому, кого позвал этот родитель. Право считает сервер. */
 export function useRemoveMember(patientId: string) {
   const queryClient = useQueryClient();
