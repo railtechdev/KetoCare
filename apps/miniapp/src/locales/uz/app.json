@@ -822,7 +822,8 @@
         "four_times_daily": "Sutkada 4 marta",
         "every_other_day": "Kunora",
         "as_needed": "Zarurat bo‘lganda"
-      }
+      },
+      "editMarkAria": "«{{mark}}» belgisini tuzatish — {{name}}"
     }
   },
   "clinic": {

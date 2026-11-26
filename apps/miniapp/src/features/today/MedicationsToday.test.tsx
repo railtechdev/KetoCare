@@ -82,6 +82,19 @@ function serve(medications: unknown[], logs: unknown[] = []) {
         data: { items: medications, total: medications.length },
       });
     }
+    if (path.endsWith("/parents")) {
+      return Promise.resolve({
+        data: [
+          {
+            id: ME,
+            full_name: "Мама",
+            is_me: true,
+            can_remove: false,
+            invited_by_name: null,
+          },
+        ],
+      });
+    }
     return Promise.reject(new Error(`unexpected GET ${path}`));
   });
 }
@@ -242,8 +255,19 @@ describe("«Лекарства сегодня» на главной Mini App (Д
     expect(
       screen.getByText("2 раза в сутки — утром и на ночь"),
     ).toBeInTheDocument();
+    // Своя отметка нажимается и открывает правку (аудит 26.11.2026, 3.4).
+    const given = await screen.findByRole("button", {
+      name: "Исправить отметку «дали в 08:10» — Депакин",
+    });
     expect(
-      await screen.findByText("дали в 08:10, пропустили в 14:00"),
+      screen.getByRole("button", {
+        name: "Исправить отметку «пропустили в 14:00» — Депакин",
+      }),
+    ).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(given);
+    expect(
+      await screen.findByRole("button", { name: /^Удалить запись/ }),
     ).toBeInTheDocument();
   });
 
