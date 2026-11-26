@@ -69,6 +69,8 @@ class Answer:
     blocked: bool = False
     #: Почему заменён — для журнала и разбора ложных срабатываний.
     reason: str = ""
+    #: Отказ — «в базе нет материала», а не вопрос к врачу (аудит 3.10).
+    no_material: bool = False
     ai_job_id: uuid.UUID | None = None
 
 
@@ -91,7 +93,7 @@ async def answer(
 
     text = question.strip()
     if not text:
-        return Answer(text=NO_MATERIAL, blocked=True, reason="пустой вопрос")
+        return Answer(text=NO_MATERIAL, blocked=True, reason="пустой вопрос", no_material=True)
 
     asked = check(text)
     if asked.blocked:
@@ -101,7 +103,9 @@ async def answer(
 
     passages = await kb.search(session, q=text, limit=MAX_PASSAGES)
     if not passages:
-        return Answer(text=NO_MATERIAL, blocked=True, reason="в базе знаний нет материала")
+        return Answer(
+            text=NO_MATERIAL, blocked=True, reason="в базе знаний нет материала", no_material=True
+        )
 
     known = {passage.doc_slug for passage in passages}
     payload = {
@@ -209,6 +213,7 @@ async def assistant_reply(
     sources: list[str] = []
     blocked = True
     limited = False
+    no_material = False
     job_id = None
     status = "done"
 
@@ -224,6 +229,7 @@ async def assistant_reply(
         text = result.text
         sources = list(result.sources)
         blocked = result.blocked
+        no_material = result.no_material
         job_id = result.ai_job_id
     except AiLimitExceeded as error:
         text = str(error)
@@ -249,6 +255,7 @@ async def assistant_reply(
                 status=status,  # type: ignore[arg-type]
                 blocked=blocked,
                 limited=limited,
+                no_material=no_material,
                 sources=sources,
                 ai_job_id=job_id,
             ),

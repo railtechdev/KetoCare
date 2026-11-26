@@ -584,6 +584,9 @@ function RefusalStep({
       </Button>
     );
   }
+  if (step === "rephrase") {
+    return <p className="m-0">{t("assistant.rephrase")}</p>;
+  }
   return (
     <>
       <p className="m-0">{t("assistant.askDoctor")}</p>

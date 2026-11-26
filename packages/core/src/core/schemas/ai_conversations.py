@@ -55,6 +55,11 @@ class AssistantMessage(BaseModel):
     #: send an app question to someone who does not answer them. Always comes
     #: with `blocked`.
     limited: bool = False
+    #: The refusal is «no article on this»: a question about the app the
+    #: knowledge base does not cover, not a question for the doctor. Screens
+    #: suggest asking in other words instead of «ask the doctor at the visit»
+    #: (family-channel audit 26.11.2026, 3.10). Always comes with `blocked`.
+    no_material: bool = False
 
     def dump(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
@@ -68,6 +73,7 @@ def new_message(
     status: Status = "done",
     blocked: bool = False,
     limited: bool = False,
+    no_material: bool = False,
     sources: list[str] | None = None,
     ai_job_id: uuid.UUID | None = None,
 ) -> AssistantMessage:
@@ -80,6 +86,7 @@ def new_message(
         status=status,
         blocked=blocked,
         limited=limited,
+        no_material=no_material,
         sources=sources or [],
         ai_job_id=ai_job_id,
     )

@@ -90,6 +90,9 @@ class TestNoMaterialNoModel:
 
         assert result.text == NO_MATERIAL
         assert result.blocked
+        # «Нет статьи» — не вопрос к врачу: экран предложит спросить иначе
+        # (аудит семейного канала 26.11.2026, 3.10).
+        assert result.no_material
         assert messages.calls == []
 
     async def test_empty_question_is_not_asked(
@@ -168,6 +171,7 @@ class TestAnswerIsChecked:
 
         assert result.text == DOCTOR_TEMPLATE
         assert result.blocked
+        assert not result.no_material
         # Обращение состоялось и записано в журнал: оно стоило денег.
         assert result.ai_job_id is not None
 

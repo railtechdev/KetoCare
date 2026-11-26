@@ -27,6 +27,8 @@ export interface AssistantMessageSignals {
   blocked?: boolean;
   /** Отказ — исчерпанный предел или бюджет; приходит вместе с `blocked` */
   limited?: boolean;
+  /** Отказ — «по этому в материалах ничего нет», а не вопрос к врачу */
+  no_material?: boolean;
 }
 
 export function isRefusal(message: AssistantMessageSignals): boolean {
@@ -46,7 +48,7 @@ export function isRefusal(message: AssistantMessageSignals): boolean {
  *
  * `null` — not a refusal, nothing to offer.
  */
-export type RefusalNextStep = "retry" | "doctor" | "none";
+export type RefusalNextStep = "retry" | "doctor" | "rephrase" | "none";
 
 export function refusalNextStep(
   message: AssistantMessageSignals,
@@ -54,5 +56,8 @@ export function refusalNextStep(
   if (!isRefusal(message)) return null;
   if (message.status === "failed") return "retry";
   if (message.limited === true) return "none";
+  // Вопрос о приложении, на который нет статьи, — не к врачу: врач на вопросы
+  // о кнопках не отвечает (аудит семейного канала 26.11.2026, 3.10).
+  if (message.no_material === true) return "rephrase";
   return "doctor";
 }
