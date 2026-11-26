@@ -101,12 +101,14 @@ describe("выбор языка (ADR-0052)", () => {
     post.mockResolvedValue({ error: {}, response: { status: 404 } });
 
     render(<SessionGate>{() => null}</SessionGate>, { wrapper });
-    expect(await screen.findByText(/ещё не привязан/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/пока нет доступа к ребёнку/),
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("radio", { name: "O‘zbekcha" }));
 
     expect(
-      await screen.findByText("Bu Telegram hali ulanmagan"),
+      await screen.findByText("Bu Telegramda hali bolaga kirish yo‘q"),
     ).toBeInTheDocument();
   });
 

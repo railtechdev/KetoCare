@@ -238,6 +238,7 @@ class TestTelegramInit:
 
         assert response.status_code == 404
         assert "привяз" in response.json()["error"]["message"].lower()
+        assert response.json()["error"]["details"]["reason"] == "not_linked"
 
     async def test_revoked_binding_no_longer_opens_the_app(
         self, client, session, make_user, make_patient
@@ -248,6 +249,11 @@ class TestTelegramInit:
         response = await client.post("/api/v1/auth/telegram-init", json={"init_data": init_data()})
 
         assert response.status_code == 404
+        # «Доступ закрыт», а не «ещё не привязан»: для того, кто вчера вёл
+        # дневник, второе — неправда. Потребитель — экран входа Mini App
+        # (аудит семейного канала 26.11.2026, 2.17).
+        assert response.json()["error"]["details"]["reason"] == "access_closed"
+        assert "закрыт" in response.json()["error"]["message"]
 
     async def test_login_is_written_to_the_audit_log(
         self, client, session, make_user, make_patient
