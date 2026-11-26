@@ -112,3 +112,31 @@ export function readLaunchTarget(): LaunchTarget | null {
     webApp()?.initDataUnsafe?.start_param ?? null,
   );
 }
+
+const UUID_SHAPE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Ребёнок, о котором сообщение бота, — `patient` в адресе кнопки.
+ *
+ * У семьи с двумя детьми кнопка под сообщением о ребёнке Б открывала
+ * приложение на ребёнке, выбранном на телефоне в прошлый раз, и отметка уходила
+ * не тому (аудит 26.11.2026, 1.7). Этот ребёнок открывается раньше
+ * запомненного; права на него проверяет сервер, как при любом входе.
+ */
+export function launchPatientOf(location: {
+  search: string;
+  hash: string;
+}): string | null {
+  for (const source of [location.search.slice(1), location.hash.slice(1)]) {
+    const value = new URLSearchParams(source).get("patient")?.trim() ?? "";
+    if (UUID_SHAPE.test(value)) return value;
+  }
+  return null;
+}
+
+/** Ребёнок из адреса этой страницы или `null`. */
+export function readLaunchPatient(): string | null {
+  if (typeof window === "undefined") return null;
+  return launchPatientOf(window.location);
+}
