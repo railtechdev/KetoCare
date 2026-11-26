@@ -66,7 +66,8 @@
     },
     "today": {
       "title": "Bugun",
-      "noMenu": "Bugun uchun menyu tuzilmagan."
+      "noMenu": "Bugun uchun menyu tuzilmagan.",
+      "noPrescriptionUpcoming": "Bugunga tayinlov yo‘q. Menyuni {{date}} dan boshlab kunlarga tuzish mumkin."
     },
     "therapyEnded": {
       "title": "Davolash yakunlandi",
@@ -155,7 +156,7 @@
       "addedTo": "«{{title}}» — {{index}}-ovqatlanishda. Yana qo‘shish mumkin.",
       "portionInvalid": "Porsiyani 0 dan katta son bilan kiriting, masalan 1 yoki 0,5.",
       "kcalPortion": "porsiyasiga {{value}} kkal",
-      "removeBodySpecialist": "Bu menyuni {{name}} tuzgan. Agar taom bolaga to‘g‘ri kelmasa, avval mutaxassisga yozgan ma’qul.",
+      "removeBodySpecialist": "Bu menyuni {{name}} tuzgan. Agar taom bolaga to‘g‘ri kelmasa, avval klinikaga qo‘ng‘iroq qiling.",
       "searching": "Qidiryapmiz…"
     },
     "targets": {
@@ -181,7 +182,8 @@
     "howToCook": "Qanday tayyorlanadi",
     "macroLine": "yog‘lar {{fat}} g · oqsillar {{protein}} g · uglevodlar {{carbs}} g",
     "itemKcal": "{{kcal}} kkal",
-    "itemKcalRatio": "{{kcal}} kkal · {{ratio}}"
+    "itemKcalRatio": "{{kcal}} kkal · {{ratio}}",
+    "eatenLabel": "Yeyildi"
   },
   "shopping": {
     "open": "Nima sotib olish kerak",
@@ -219,7 +221,7 @@
     "bySpecialist": {
       "ratio": "Kunning keto nisbati tayinlovdan farq qiladi",
       "carbs": "Kunlik uglevodlar tayinlov chegarasidan ko‘p",
-      "body": "Bu kun menyusini {{name}} tuzgan — uni o‘zingiz o‘zgartirishingiz shart emas. Savollar bo‘lsa, mutaxassisga yozing."
+      "body": "Bu kun menyusini {{name}} tuzgan — uni o‘zingiz o‘zgartirishingiz shart emas. Savollar bo‘lsa, klinikaga qo‘ng‘iroq qiling."
     }
   },
   "charts": {
@@ -260,7 +262,7 @@
     "loadError": "Yozuvlar yuklanmadi",
     "loadErrorHint": "Aloqani tekshirib, yana urinib ko‘ring.",
     "wroteBy": "Yozdi: {{name}}",
-    "fromMenuHint": "«Yeyildi» belgilari menyuda tuzatiladi.",
+    "fromMenuHint": "Bugungi va kechagi «yeyildi» belgilari menyuda tuzatiladi. Oldingilarini — shifokor yoki dietologdan tuzatishni so‘rang.",
     "editAria": "«{{title}}» yozuvini o‘zgartirish",
     "deleteAria": "«{{title}}» yozuvini o‘chirish",
     "deleting": "O‘chirilmoqda…",
@@ -346,7 +348,7 @@
       "title": "Nimani yozamiz?",
       "formTitle": "Yangi yozuv",
       "mealsTitle": "Ovqat — menyuda",
-      "mealsBody": "Ovqat menyuda belgilanadi: taomni tanlang va «Yeyildi»ni bosing. Shunda shifokor bola aslida qancha yeganini ko‘radi.",
+      "mealsBody": "Ovqat menyuda belgilanadi: kunni oching va taom yonidagi «Yeyildi» belgisini qo‘ying. Bola menyuda yo‘q narsani yegan bo‘lsa — botga yozing: «🍽 Ovqat» → «✍️ So‘z bilan yozish».",
       "openMenu": "Menyuni ochish",
       "noMedications": "Bugun sxemada dorilar yo‘q. Agar bola dori ichayotgan bo‘lsa, shifokorga ayting — ro‘yxatni u yuritadi.",
       "kinds": {
@@ -398,7 +400,8 @@
       "empty": "Ro‘yxatda xuruj turlari yo‘q — shifokorga xabar bering."
     },
     "ownUnknown": "Qaysi yozuvlar sizniki ekanini tekshirib bo‘lmadi",
-    "ownUnknownHint": "O‘z yozuvlaringizni hozircha tuzatib bo‘lmaydi. «Qaytarish»ni bosing."
+    "ownUnknownHint": "O‘z yozuvlaringizni hozircha tuzatib bo‘lmaydi. «Qaytarish»ni bosing.",
+    "addedWhoSees": "Shifokor uni bola kartasini ochganda ko‘radi — unga bildirishnoma bormaydi. Hozir yordam kerak bo‘lsa — klinikaga qo‘ng‘iroq qiling."
   },
   "reminders": {
     "title": "Eslatmalar",
@@ -860,5 +863,6 @@
       "title": "Telefondagi yorliq",
       "action": "Bosh ekranga qo‘shish"
     }
-  }
+  },
+  "openingSlow": "Aloqa sekin — odatdagidan uzoqroq ochilmoqda. Kutishingiz yoki ilovani yopib, chatdan qayta ochishingiz mumkin."
 }

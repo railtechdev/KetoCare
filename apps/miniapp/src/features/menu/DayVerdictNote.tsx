@@ -8,6 +8,8 @@ import {
   type ToleranceGap,
 } from "@ketocare/ui";
 import { useTranslation } from "react-i18next";
+import { ClinicPhone } from "../clinic/ClinicPhone";
+import { useClinicPhone } from "../clinic/useClinicPhone";
 
 /**
  * Что Mini App говорит о соответствии дня назначению.
@@ -90,6 +92,7 @@ export function DayVerdictNote({
         composedBy !== null ? (
           <WarningBanner level="info" title={t("verdict.bySpecialist.ratio")}>
             {t("verdict.bySpecialist.body", { name: composedBy })}
+            <SpecialistPhone />
           </WarningBanner>
         ) : (
           <WarningBanner
@@ -118,6 +121,7 @@ export function DayVerdictNote({
         (composedBy !== null ? (
           <WarningBanner level="info" title={t("verdict.bySpecialist.carbs")}>
             {t("verdict.bySpecialist.body", { name: composedBy })}
+            <SpecialistPhone />
           </WarningBanner>
         ) : (
           <WarningBanner level="warning" title={t("verdict.carbsOver.title")}>
@@ -138,4 +142,14 @@ export function DayVerdictNote({
       )}
     </div>
   );
+}
+
+/**
+ * Телефон клиники под днём специалиста. «Напишите специалисту» вело в никуда:
+ * написать из приложения нечем, и следующий шаг — звонок (аудит 26.11.2026,
+ * 3.2). Своим компонентом: номер запрашивается, только когда он нужен.
+ */
+function SpecialistPhone() {
+  const phone = useClinicPhone();
+  return <ClinicPhone phone={phone} />;
 }

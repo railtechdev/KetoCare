@@ -416,8 +416,10 @@ describe("рецепт базы и блюдо ребёнка из него (26.1
     const user = userEvent.setup();
     renderScreen();
 
+    // Вкладка открывается на блюдах ребёнка (3.17) — рецепты рядом.
+    await user.click(await screen.findByRole("radio", { name: "Рецепты" }));
     // В списке — до нажатия: рецепт и блюдо называются одинаково.
-    const row = await screen.findByRole("button", { name: /Омлет/ });
+    const row = await screen.findByRole("button", { name: /^Омлет/ });
     await waitFor(() => {
       expect(row).toHaveTextContent("У ребёнка своя граммовка");
     });
@@ -453,7 +455,8 @@ describe("рецепт базы и блюдо ребёнка из него (26.1
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(await screen.findByRole("button", { name: /Омлет/ }));
+    await user.click(await screen.findByRole("radio", { name: "Рецепты" }));
+    await user.click(await screen.findByRole("button", { name: /^Омлет/ }));
     await user.click(
       await screen.findByRole("button", { name: "Открыть блюда ребёнка" }),
     );
@@ -471,6 +474,7 @@ describe("рецепт базы и блюдо ребёнка из него (26.1
     const user = userEvent.setup();
     renderScreen();
 
+    await user.click(await screen.findByRole("radio", { name: "Рецепты" }));
     const row = await screen.findByRole("button", { name: /Омлет/ });
     await user.click(row);
     await screen.findByRole("heading", { name: "На порцию" });

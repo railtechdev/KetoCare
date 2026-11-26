@@ -372,7 +372,14 @@ export function EntryEditSheet({
     onSave(
       body,
       () => {
-        toast.success(t(creating ? "diary.added" : "diary.saved"));
+        toast.success(
+          t(creating ? "diary.added" : "diary.saved"),
+          // Приступ и самочувствие — самые тревожные записи, и не сказано
+          // было, кто и когда их увидит (аудит 26.11.2026, 3.8).
+          creating && (kind === "seizures" || kind === "side-effects")
+            ? { description: t("diary.addedWhoSees"), duration: 10_000 }
+            : undefined,
+        );
         onClose();
       },
       attemptKey,

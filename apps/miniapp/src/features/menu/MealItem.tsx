@@ -50,14 +50,25 @@ export function MealItem({
           // Вся строка — цель касания не ниже 44 px, а не квадрат флажка:
           // отмечают на ходу, одной рукой.
           <label className="flex min-h-touch min-w-0 flex-1 cursor-pointer items-center gap-field py-1">
-            <Checkbox
-              checked={item.eaten}
-              disabled={pending}
-              aria-describedby={failed ? markFailedId(item.id) : undefined}
-              onChange={() => {
-                onToggle(item);
-              }}
-            />
+            {/* Галочка подписана: тексты говорят «поставьте „Съедено“», а
+                безымянный квадрат читался как «выбрано» или «приготовлено»
+                (аудит 26.11.2026, 3.6). */}
+            <span className="flex shrink-0 flex-col items-center gap-0.5">
+              <Checkbox
+                checked={item.eaten}
+                disabled={pending}
+                aria-describedby={failed ? markFailedId(item.id) : undefined}
+                onChange={() => {
+                  onToggle(item);
+                }}
+              />
+              <span
+                aria-hidden="true"
+                className="text-xs text-muted-foreground"
+              >
+                {t("menu.eatenLabel")}
+              </span>
+            </span>
             <DishTitle item={item} />
           </label>
         ) : (

@@ -31,7 +31,6 @@ export function SessionGate({
     actions: { switchChild: (patientId: string) => void },
   ) => ReactNode;
 }) {
-  const { t } = useTranslation();
   const open = useOpenSession();
   const { mutate } = open;
   const queryClient = useQueryClient();
@@ -90,11 +89,7 @@ export function SessionGate({
   if (open.isPending || open.isIdle) {
     // `role="status"`: программа чтения с экрана объявляет ожидание, а не
     // молчит до первого экрана.
-    return (
-      <p role="status" className="p-section text-muted-foreground">
-        {t("opening")}
-      </p>
-    );
+    return <Opening />;
   }
 
   if (open.isError) {
@@ -224,5 +219,25 @@ function CloseAppButton() {
     >
       {t("session.close")}
     </Button>
+  );
+}
+
+/**
+ * «Открываем приложение…», а через десять секунд — что связь медленная и что
+ * можно сделать (аудит 26.11.2026, 3.12): на плохой связи строка стояла
+ * минутами без единого слова о том, что происходит.
+ */
+function Opening() {
+  const { t } = useTranslation();
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setSlow(true), 10_000);
+    return () => clearTimeout(id);
+  }, []);
+  return (
+    <div role="status" className="flex flex-col gap-field p-section">
+      <p className="m-0 text-muted-foreground">{t("opening")}</p>
+      {slow && <p className="m-0 text-sm">{t("openingSlow")}</p>}
+    </div>
   );
 }

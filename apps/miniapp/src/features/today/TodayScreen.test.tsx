@@ -542,6 +542,27 @@ describe("«Сегодня» в Mini App", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Составить меню" })).toBeNull();
+    // Но меню открыть можно: другие дни могут быть по новому назначению (3.1).
+    expect(
+      screen.getByRole("button", { name: "Открыть меню" }),
+    ).toBeInTheDocument();
+  });
+
+  it("назначение начнётся позже — сказано, с какого дня можно собирать меню (3.1)", async () => {
+    serve({
+      overview: {
+        ...BASE,
+        upcoming_prescription: {
+          ...PRESCRIPTION,
+          effective_from: "2026-11-30",
+        },
+      },
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText(/Меню можно составить на дни с 30/),
+    ).toBeInTheDocument();
   });
 
   it("«Кетоны» открывает форму кетонов сразу, курсор — в поле значения", async () => {
