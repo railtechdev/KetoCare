@@ -106,6 +106,7 @@ const RECIPE = {
 };
 
 let recipes: unknown[] = [];
+let usage: unknown[] = [];
 
 function serve() {
   (api.GET as Mock).mockImplementation(
@@ -136,6 +137,12 @@ function serve() {
       }
       if (path.endsWith("/menus")) {
         return { response: { status: 404 } };
+      }
+      if (path.endsWith("/menus/dish-usage")) {
+        return {
+          data: { recipes: [], dishes: usage },
+          response: { status: 200 },
+        };
       }
       if (path.endsWith("{recipe_id}")) {
         return { data: recipes[0], response: { status: 200 } };
@@ -173,6 +180,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   dishes = [DISH];
   recipes = [];
+  usage = [];
   serve();
   (api.POST as Mock).mockImplementation(() => new Promise(() => undefined));
   (api.DELETE as Mock).mockResolvedValue({ response: { status: 204 } });
@@ -244,6 +252,13 @@ describe("карточка блюда ребёнка (Б1)", () => {
 
     await openCard(user);
     expect(screen.queryByText(/Рассчитал\(а\)/)).toBeNull();
+  });
+
+  it("у блюда, стоящего в меню, видно, на какой день (3.18)", async () => {
+    usage = [{ id: "d1", last_date: "2026-11-30", days: 1, last_eaten: null }];
+    renderScreen();
+
+    expect(await screen.findByText(/^в меню: 30/)).toBeInTheDocument();
   });
 
   it("«Назад» Telegram закрывает карточку, а не приложение", async () => {
