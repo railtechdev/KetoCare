@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from bot import deps, keyboards, texts
+from bot import card, deps, keyboards, texts
 from bot.api import TRANSPORT_ERROR, BotApiError, LinkRevokedError
 from bot.config import BotSettings
 from bot.handlers import fallback, records, scenarios, start
@@ -76,6 +76,11 @@ class FakeBot:
         self.owner.answers.append((text, reply_markup))
         self.owner.edits += 1
 
+    async def edit_message_reply_markup(
+        self, chat_id: int, message_id: int, reply_markup: Any = None, **_: Any
+    ) -> None:
+        self.owner.retired.append(message_id)
+
 
 @dataclass
 class FakeMessage:
@@ -96,6 +101,8 @@ class FakeMessage:
     keyboard_removed: bool = False
     #: Кнопки после правки одних кнопок (галочка в списке).
     markups: list[Any] = field(default_factory=list)
+    #: Карточки, у которых сняли кнопки: ответ на набранное ушёл ниже.
+    retired: list[int] = field(default_factory=list)
     bot: Any = None
 
     def __post_init__(self) -> None:
@@ -475,13 +482,46 @@ class TestWellbeing:
         assert not api.logs
 
 
+class TestTypedAnswersComeBelow:
+    """Ответ на набранное — под ним, а не правкой сообщения выше (1.11)."""
+
+    @pytest.mark.asyncio
+    async def test_reply_to_typed_value_is_a_new_message(self, store, state):
+        await state.set_state(scenarios.Ketones.value)
+        await state.update_data({"card_message_id": 50})
+        typed = FakeMessage(text="abc", message_id=60)
+
+        await card.show(typed, state, texts.KETONES_NOT_A_NUMBER, keyboards.cancel_only())
+
+        assert typed.sent == 1 and typed.edits == 0
+        assert typed.retired == [50], "у прежней карточки сняты кнопки"
+        assert (await state.get_data())["card_message_id"] == 1001
+
+    @pytest.mark.asyncio
+    async def test_card_below_the_typed_text_is_edited(self, store, state):
+        await state.update_data({"card_message_id": 70})
+        typed = FakeMessage(text="3,2", message_id=60)
+
+        await card.show(typed, state, "шаг", None)
+
+        assert typed.edits == 1 and typed.sent == 0
+
+    @pytest.mark.asyncio
+    async def test_voice_on_a_text_step_is_answered(self):
+        message = FakeMessage(text=None)
+
+        await scenarios.step_wants_text(message)
+
+        assert message.last == texts.TEXT_ONLY
+
+
 class TestCancelAndFailures:
     @pytest.mark.asyncio
-    async def test_cancel_clears_state_in_the_same_card(self, state):
+    async def test_cancel_clears_state_in_the_same_card(self, store, state):
         await state.set_state(scenarios.Ketones.value)
         callback = FakeCallback(data=keyboards.CANCEL_DATA)
 
-        await scenarios.cancel(callback, state)
+        await scenarios.cancel(callback, state, store, SETTINGS)
 
         assert await state.get_state() is None
         assert callback.message.last == texts.CANCELLED
@@ -490,13 +530,13 @@ class TestCancelAndFailures:
         assert callback.answered, "инлайновую кнопку надо погасить, иначе она крутится"
 
     @pytest.mark.asyncio
-    async def test_cancel_after_the_record_is_saved_does_not_claim_a_cancel(self, state):
+    async def test_cancel_after_the_record_is_saved_does_not_claim_a_cancel(self, store, state):
         """«Отмена» под сохранённой записью отвечала «Отменено», а запись
         оставалась в дневнике (аудит 12.11.2026)."""
 
         callback = FakeCallback(data=keyboards.CANCEL_DATA)
 
-        await scenarios.cancel(callback, state)
+        await scenarios.cancel(callback, state, store, SETTINGS)
 
         assert callback.alert == texts.BUTTON_STALE
         assert callback.message.answers == [], "«Отменено» в чат не уходит"
@@ -879,6 +919,31 @@ class TestRecordActions:
         assert not api.deleted
 
     @pytest.mark.asyncio
+    async def test_failed_time_change_keeps_the_saved_echo(self, api, linked_store, state):
+        """Запись сохранена — не прошла только поправка: эхо остаётся, «не
+        удалось сохранить» на его месте не встаёт (аудит 26.11.2026, 1.10)."""
+
+        _, key = await self._saved_weight(api, linked_store, state)
+        api.update_error = BotApiError("internal", "сбой", 500)
+        card_message = FakeMessage()
+
+        await records.quick_time(
+            FakeCallback(
+                data=f"{keyboards.RECORD_QUICK_PREFIX}{keyboards.QUICK_HOUR}:{key}",
+                message=card_message,
+            ),
+            state,
+            api,
+            linked_store,
+            SETTINGS,
+        )
+
+        assert card_message.last.startswith("Записано ✓ ")
+        assert card_message.last.endswith(texts.RECORD_TIME_FAILED)
+        assert texts.API_UNAVAILABLE not in card_message.last
+        assert texts.BTN_OTHER_TIME in labels(card_message.last_markup)
+
+    @pytest.mark.asyncio
     async def test_record_deleted_elsewhere_says_so(self, api, linked_store, state):
         _, key = await self._saved_weight(api, linked_store, state)
         api.update_error = BotApiError("not_found", "нет", 404)
@@ -1113,6 +1178,59 @@ class TestMedication:
         )
 
         assert [log["payload"]["medication_id"] for log in api.logs] == ["med-1", "med-2"]
+
+    @pytest.mark.asyncio
+    async def test_cancel_after_a_partial_save_names_what_is_saved(self, api, linked_store, state):
+        """«Отмена» после частичного сбоя не говорит «Отменено» про то, что
+        уже в дневнике (аудит 26.11.2026, 1.9)."""
+
+        message = await self._started(api, linked_store, state)
+        api.fail_after = 1
+        await scenarios.medication_answer(
+            FakeCallback(data=keyboards.MEDICATION_GIVEN_DATA, message=message),
+            state,
+            api,
+            linked_store,
+            SETTINGS,
+        )
+
+        await scenarios.cancel(
+            FakeCallback(data=keyboards.CANCEL_DATA, message=message),
+            state,
+            linked_store,
+            SETTINGS,
+        )
+
+        assert message.last != texts.CANCELLED
+        assert message.last.startswith("Записано ✓ " + texts.SUMMARY_MEDICATIONS_GIVEN[:5])
+        assert message.last.endswith(texts.CANCEL_REST_NOT_SAVED)
+        # Названо только сохранённое, и у него есть «Удалить запись».
+        assert "Депакин" in message.last and "Топамакс" not in message.last
+        assert texts.BTN_DELETE_RECORD in labels(message.last_markup)
+        assert await state.get_state() is None
+
+    @pytest.mark.asyncio
+    async def test_cancel_after_a_lost_connection_asks_to_check_the_diary(
+        self, api, linked_store, state
+    ):
+        message = await self._started(api, linked_store, state)
+        api.fail_after = 0
+        await scenarios.medication_answer(
+            FakeCallback(data=keyboards.MEDICATION_GIVEN_DATA, message=message),
+            state,
+            api,
+            linked_store,
+            SETTINGS,
+        )
+
+        await scenarios.cancel(
+            FakeCallback(data=keyboards.CANCEL_DATA, message=message),
+            state,
+            linked_store,
+            SETTINGS,
+        )
+
+        assert message.last == texts.CANCELLED_UNSURE
 
     @pytest.mark.asyncio
     async def test_empty_schedule_explains_who_fills_it(self, api, linked_store, state):
@@ -1431,7 +1549,7 @@ class TestBotProfile:
 
 class TestCancelOnOldMessage:
     @pytest.mark.asyncio
-    async def test_cancel_survives_an_inaccessible_message(self, state):
+    async def test_cancel_survives_an_inaccessible_message(self, store, state):
         """«Отмена» на сообщении старше 48 часов: Telegram отдаёт
         InaccessibleMessage без метода answer, и единственный обработчик,
         бравший message без проверки, падал молча для семьи."""
@@ -1445,7 +1563,7 @@ class TestCancelOnOldMessage:
                 chat=Chat(id=CHAT_ID, type="private"), message_id=1, date=0
             ),
         )
-        await scenarios.cancel(callback, state)
+        await scenarios.cancel(callback, state, store, SETTINGS)
 
         assert callback.answered
         assert await state.get_state() is None

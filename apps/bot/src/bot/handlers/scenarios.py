@@ -39,6 +39,7 @@ from ..config import BotSettings
 from ..deps import (
     PENDING,
     begin_scenario,
+    cancel_pending,
     child_label,
     link_revoked,
     named,
@@ -490,18 +491,40 @@ async def reminder_start(
 
 
 @router.callback_query(F.data == keyboards.CANCEL_DATA)
-async def cancel(callback: CallbackQuery, state: FSMContext) -> None:
+async def cancel(
+    callback: CallbackQuery, state: FSMContext, store: BindingStore, settings: BotSettings
+) -> None:
     if await state.get_state() is None:
         # Сценарий уже закончен: запись сохранена или отменена. «Отменено» про
         # сохранённую запись было бы неправдой.
         await retire_keyboard(callback)
         await callback.answer(texts.BUTTON_STALE, show_alert=True)
         return
-    await state.clear()
     message = _answerable(callback)
+    await callback.answer()
+    if message is not None and await cancel_pending(message, state, store=store, settings=settings):
+        return
+    await state.clear()
     if message is not None:
         await card.show(message, state, texts.CANCELLED, None, own=True)
-    await callback.answer()
+
+
+# Шаги, где ждут текст: голосовое, фото, стикер получают ответ, а не тишину
+# (аудит 26.11.2026, 1.11). Стоит раньше обработчиков шагов.
+@router.message(
+    StateFilter(
+        Ketones.value,
+        Weight.value,
+        Wellbeing.symptom,
+        Seizure.count_exact,
+        Seizure.duration_exact,
+        Meal.text,
+        Meal.confirm,
+    ),
+    ~F.text,
+)
+async def step_wants_text(message: Message) -> None:
+    await message.answer(texts.TEXT_ONLY)
 
 
 @router.callback_query(F.data == keyboards.RETRY_DATA)
@@ -839,6 +862,8 @@ async def medication_answer(
         summary=template.format(list=", ".join(item[1] for item in chosen)),
         settings=settings,
         own=True,
+        parts=[item[1] for item in chosen],
+        part_template=template,
     )
 
 

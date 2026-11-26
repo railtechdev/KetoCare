@@ -180,6 +180,13 @@ async def quick_time(
     )
 
 
+@router.message(RecordTime.waiting, ~F.text)
+async def typed_time_not_text(message: Message) -> None:
+    """Голосовое или фото вместо времени — сказать, а не молчать (1.11)."""
+
+    await message.answer(texts.TEXT_ONLY)
+
+
 @router.message(RecordTime.waiting)
 async def typed_time(
     message: Message,
@@ -296,10 +303,17 @@ async def _patch_all(
                 await store.drop_receipt(message.chat.id, key)
                 await card.show(message, state, texts.RECORD_GONE, None, own=own)
                 return False
+            # Запись сохранена — не прошла только поправка. Эхо остаётся, и
+            # сказано, что именно не вышло: прежде подтверждение замера
+            # навсегда превращалось в «Не удалось сохранить», и замер вводили
+            # второй раз (аудит 26.11.2026, 1.10).
+            failed = (
+                texts.RECORD_TIME_FAILED if "occurred_at" in payload else texts.RECORD_METHOD_FAILED
+            )
             await card.show(
                 message,
                 state,
-                texts.API_UNAVAILABLE,
+                echo_text(receipt, tz=settings.tz) + "\n\n" + failed,
                 keyboards.record_actions(key, method=receipt.get("method")),
                 own=own,
             )
