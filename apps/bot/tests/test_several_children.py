@@ -197,7 +197,7 @@ class TestSwitch:
         message = FakeMessage(text=texts.BTN_CHILD.format(name="Амина"))
         await start.child_menu(message, _state(), linked_store, SETTINGS)
 
-        assert "код доступа" in message.last
+        assert "код от врача" in message.last
 
     @pytest.mark.asyncio
     async def test_choice_selects_and_closes_the_open_scenario(self, two_children):

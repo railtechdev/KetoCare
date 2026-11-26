@@ -64,7 +64,8 @@ RU: Final[dict[str, str]] = {
     # --- просьба специалиста (ADR-0046)
     "nudge": (
         "{role} {name} просит отметить в дневнике, как прошли последние дни.\n\n"
-        "Записать можно кнопками в этом чате или в приложении."
+        "Записать можно кнопками в этом чате или в приложении. Если записываете "
+        "прошедший день, после записи нажмите «🕒 Другое время» и укажите его."
     ),
     "role_doctor": "Врач",
     "role_dietitian": "Диетолог",
@@ -72,9 +73,7 @@ RU: Final[dict[str, str]] = {
     # --- меню от специалиста (ADR-0047). Дата числом, а не «на сегодня /
     # на завтра»: задача может уйти позже, чем поставлена, а слово «сегодня»,
     # посчитанное в момент постановки, к утру стало бы неправдой.
-    "menu_composed": (
-        "{name}, {role}, составил(а) меню на {date}. Откройте приложение, вкладка «Меню»."
-    ),
+    "menu_composed": ("{name}, {role}, составил(а) меню на {date}. Откройте его кнопкой ниже."),
     "role_doctor_lower": "врач",
     "role_dietitian_lower": "диетолог",
     "role_other_lower": "специалист",
@@ -86,8 +85,8 @@ RU: Final[dict[str, str]] = {
     ),
     # --- безопасность учётной записи (находки Н2 и Н7 security-прохода)
     "device_linked": (
-        "К вашей учётной записи KetoCare подключён ещё один Telegram — кодом "
-        "«Подключить свой Telegram».\n\n"
+        "К вашей учётной записи KetoCare подключён ещё один Telegram — кодом из "
+        "кабинета («Подключить чат»).\n\n"
         "Если это были не вы, сразу сообщите врачу: он отключит чужое устройство. "
         "Первые сутки с нового устройства нельзя задать вход в кабинет."
     ),
@@ -137,12 +136,13 @@ UZ: Final[dict[str, str]] = {
     "nudge": (
         "{role} {name} so‘nggi kunlar qanday o‘tganini kundalikda belgilab "
         "qo‘yishingizni so‘rayapti.\n\n"
-        "Bu chatdagi tugmalar orqali yoki ilovada yozish mumkin."
+        "Bu chatdagi tugmalar orqali yoki ilovada yozish mumkin. O‘tgan kunni "
+        "yozsangiz, yozuvdan keyin «🕒 Boshqa vaqt»ni bosing va kunni ko‘rsating."
     ),
     "role_doctor": "Shifokor",
     "role_dietitian": "Dietolog",
     "role_other": "Mutaxassis",
-    "menu_composed": "{name} ({role}) {date} uchun menyu tuzdi. Ilovani oching, «Menyu» bo‘limi.",
+    "menu_composed": "{name} ({role}) {date} uchun menyu tuzdi. Uni pastdagi tugma bilan oching.",
     "role_doctor_lower": "shifokor",
     "role_dietitian_lower": "dietolog",
     "role_other_lower": "mutaxassis",
@@ -153,8 +153,8 @@ UZ: Final[dict[str, str]] = {
         "parol beradi."
     ),
     "device_linked": (
-        "KetoCare hisobingizga yana bitta Telegram ulandi — «O‘z Telegramimni "
-        "ulash» kodi orqali.\n\n"
+        "KetoCare hisobingizga yana bitta Telegram ulandi — kabinetdan "
+        "olingan kod orqali.\n\n"
         "Agar buni siz qilmagan bo‘lsangiz, darhol shifokorga xabar bering: u "
         "begona qurilmani o‘chiradi. Yangi qurilmadan birinchi sutka davomida "
         "kabinetga kirishni sozlab bo‘lmaydi."

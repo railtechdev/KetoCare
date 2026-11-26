@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from aiogram.types import (
     DisabledButton,
@@ -131,6 +132,42 @@ def retry() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=texts.BTN_RETRY, callback_data=RETRY_DATA, style=SUCCESS)],
             _cancel_row(),
         ]
+    )
+
+
+#: Повтор шага, который не дошёл до сервера, без потери введённого (аудит
+#: 26.11.2026, 3.19 и 3.20): длительность приступа и разбор еды словами.
+SEIZURE_DURATION_RETRY_DATA = "sdur:retry"
+MEAL_TEXT_RETRY_DATA = "meal:retry"
+
+
+def retry_step(data: str) -> InlineKeyboardMarkup:
+    """«Повторить» этот шаг и «Отмена»."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=texts.BTN_RETRY, callback_data=data, style=SUCCESS)],
+            _cancel_row(),
+        ]
+    )
+
+
+def app_at(settings: BotSettings, target: str, label: str) -> InlineKeyboardMarkup | None:
+    """Кнопка приложения на нужном экране (`?open=`) — или ничего без адреса.
+
+    Тексты бота отправляли «в приложение, в меню дня» словами; кнопка ведёт
+    туда сразу (аудит 26.11.2026, 3.21–3.23).
+    """
+
+    base = settings.miniapp_url.strip()
+    if not settings.has_miniapp or not base.startswith("https://"):
+        return None
+    parts = urlsplit(base)
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "open"]
+    query.append(("open", target))
+    url = urlunsplit(parts._replace(query=urlencode(query)))
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))]]
     )
 
 

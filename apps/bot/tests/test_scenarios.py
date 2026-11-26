@@ -1084,10 +1084,14 @@ class TestMeal:
         )
 
         await scenarios.meal_done(
-            FakeCallback(data=keyboards.DONE_DATA, message=message), state, linked_store
+            FakeCallback(data=keyboards.DONE_DATA, message=message),
+            state,
+            linked_store,
+            SETTINGS,
         )
 
         assert message.last == texts.MEAL_DONE.format(list="Приём 2: Суп со сливками")
+        # Снять отметку — в приложении; без адреса приложения кнопки нет.
         assert message.last_markup is None
         assert await state.get_state() is None
 
@@ -1450,8 +1454,9 @@ class TestHelp:
 
         help_text = texts.HELP.lower()
         assert "исправить" in help_text
-        assert "раздел «дневник»" in help_text
-        assert "блок «напоминания»" in help_text
+        assert "вкладка «дневник»" in help_text
+        # Напоминания и близкие — в «Настройках», а не «на главной» (4.2).
+        assert "«настройки»" in help_text and "напоминания" in help_text
         assert "закрыть доступ" in help_text
         assert "врача" in help_text
         assert "настраиваются в кабинете" not in help_text
@@ -1459,11 +1464,11 @@ class TestHelp:
 
     def test_fix_names_both_ways(self):
         assert texts.BTN_OTHER_TIME.split(" ", 1)[1] in texts.HELP_FIX
-        assert "раздел «Дневник»" in texts.HELP_FIX
+        assert "вкладка «Дневник»" in texts.HELP_FIX
 
     def test_cabinet_is_not_promised_the_menu(self):
         assert "меню, отчёты" not in texts.HELP.lower()
-        assert "отчёты к приёму" in texts.HELP.lower()
+        assert "вход в кабинет" in texts.HELP.lower()
 
     def test_texts_do_not_send_to_the_cabinet_for_everyday_things(self):
         for text in (texts.LINK_REVOKED, texts.MEAL_TEXT_LIMIT, texts.SEIZURE_NO_TYPES):

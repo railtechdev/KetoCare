@@ -1073,6 +1073,25 @@ async def seizure_count_exact(
     await _ask_seizure_duration(message, state, api=api, store=store, settings=settings, own=False)
 
 
+@router.callback_query(F.data == keyboards.SEIZURE_DURATION_RETRY_DATA)
+async def seizure_duration_retry(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    """«Повторить» после того, как варианты длительности не загрузились."""
+
+    message = _answerable(callback)
+    if message is None or "seizure_type_id" not in await state.get_data():
+        await retire_keyboard(callback)
+        await callback.answer(texts.BUTTON_STALE, show_alert=True)
+        return
+    await callback.answer()
+    await _ask_seizure_duration(message, state, api=api, store=store, settings=settings, own=True)
+
+
 async def _ask_seizure_duration(
     message: Message,
     state: FSMContext,
@@ -1094,8 +1113,15 @@ async def _ask_seizure_duration(
         return
     except BotApiError as exc:
         logger.warning("duration_options_failed", status=exc.status, code=exc.code)
-        await state.clear()
-        await card.show(message, state, texts.SEIZURE_LOAD_FAILED, None, own=own)
+        # Тип и число уже выбраны — не стирать их: «Повторить» спросит
+        # длительность снова (аудит 26.11.2026, 3.19).
+        await card.show(
+            message,
+            state,
+            texts.SEIZURE_DURATION_FAILED,
+            keyboards.retry_step(keyboards.SEIZURE_DURATION_RETRY_DATA),
+            own=own,
+        )
         return
 
     buttons = [(str(item["id"]), str(item["name_ru"])) for item in options]
@@ -1114,6 +1140,33 @@ async def _ask_seizure_duration(
 def _seizure_count(data: dict[str, Any]) -> int:
     value = data.get("seizure_count", 1)
     return value if isinstance(value, int) else 1
+
+
+_MIN_SEC = re.compile(r"(\d{1,4}):([0-5]?\d)", re.ASCII)
+_WORDS = re.compile(
+    r"(?:(\d{1,4})\s*(?:мин\w*|daq\w*|m))?\s*(?:(\d{1,5})\s*(?:сек\w*|с|son\w*|s))?",
+    re.IGNORECASE,
+)
+
+
+def parse_duration(raw: str) -> int | None:
+    """Длительность приступа из набранного: «200», «3:20», «3 мин 20 с».
+
+    Секундомер показывает «3:20», а бот принимал только секунды: родитель
+    переводил в уме, и «5», набранное как пять минут, врач читал пятью
+    секундами (аудит 26.11.2026, 3.25).
+    """
+
+    text = raw.strip().lower()
+    if _WHOLE_SECONDS.fullmatch(text):
+        return int(text)
+    match = _MIN_SEC.fullmatch(text)
+    if match is not None:
+        return int(match.group(1)) * 60 + int(match.group(2))
+    match = _WORDS.fullmatch(text)
+    if match is not None and (match.group(1) or match.group(2)):
+        return int(match.group(1) or 0) * 60 + int(match.group(2) or 0)
+    return None
 
 
 def format_seconds(seconds: int) -> str:
@@ -1208,8 +1261,8 @@ async def seizure_duration_exact(
 ) -> None:
     """Точная длительность — целым числом секунд, в пределах суток."""
 
-    raw = (message.text or "").strip()
-    if not _WHOLE_SECONDS.fullmatch(raw) or int(raw) > MAX_DURATION_SEC:
+    seconds_or_none = parse_duration((message.text or "").strip())
+    if seconds_or_none is None or seconds_or_none > MAX_DURATION_SEC:
         await card.show(
             message,
             state,
@@ -1220,7 +1273,7 @@ async def seizure_duration_exact(
     binding = await scenario_binding(message, state, store, settings)
     if binding is None:
         return
-    seconds = int(raw)
+    seconds = seconds_or_none
     data = await state.get_data()
     await submit_log(
         message,
@@ -1449,7 +1502,9 @@ async def meal_whole(
 
 
 @router.callback_query(Meal.choice, F.data == keyboards.DONE_DATA)
-async def meal_done(callback: CallbackQuery, state: FSMContext, store: BindingStore) -> None:
+async def meal_done(
+    callback: CallbackQuery, state: FSMContext, store: BindingStore, settings: BotSettings
+) -> None:
     """«Готово» — карточка становится итогом: что отмечено в этом сообщении."""
 
     await callback.answer()
@@ -1469,8 +1524,14 @@ async def meal_done(callback: CallbackQuery, state: FSMContext, store: BindingSt
         (b for b in await store.all(message.chat.id) if str(b.patient_id) == str(patient)), None
     )
     child = await child_label(store, message.chat.id, binding) if binding else None
+    # Снять ошибочную отметку из чата нельзя — кнопка ведёт туда, где можно
+    # (аудит 26.11.2026, 3.23).
     await card.show(
-        message, state, named(texts.MEAL_DONE.format(list=", ".join(titles)), child), None, own=True
+        message,
+        state,
+        named(texts.MEAL_DONE.format(list=", ".join(titles)), child),
+        keyboards.app_at(settings, "menu", texts.BTN_OPEN_MENU),
+        own=True,
     )
 
 
@@ -1485,6 +1546,26 @@ async def meal_text_start(callback: CallbackQuery, state: FSMContext) -> None:
         return
     await state.set_state(Meal.text)
     await card.show(message, state, texts.MEAL_TEXT_ASK, keyboards.cancel_only(), own=True)
+
+
+@router.callback_query(Meal.text, F.data == keyboards.MEAL_TEXT_RETRY_DATA)
+async def meal_text_retry(
+    callback: CallbackQuery,
+    state: FSMContext,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+) -> None:
+    """«Повторить» разбор — тем же текстом, что родитель уже набрал."""
+
+    message = _answerable(callback)
+    text = (await state.get_data()).get("meal_retry_text")
+    if message is None or not isinstance(text, str) or not text:
+        await retire_keyboard(callback)
+        await callback.answer(texts.BUTTON_STALE, show_alert=True)
+        return
+    await callback.answer()
+    await _parse_meal_text(message, state, api=api, store=store, settings=settings, text=text)
 
 
 @router.message(StateFilter(Meal.text, Meal.confirm))
@@ -1505,7 +1586,18 @@ async def meal_text_parse(
     if not text:
         await card.show(message, state, texts.MEAL_TEXT_EMPTY, keyboards.cancel_only())
         return
+    await _parse_meal_text(message, state, api=api, store=store, settings=settings, text=text)
 
+
+async def _parse_meal_text(
+    message: Message,
+    state: FSMContext,
+    *,
+    api: BotApi,
+    store: BindingStore,
+    settings: BotSettings,
+    text: str,
+) -> None:
     binding = await scenario_binding(message, state, store, settings)
     if binding is None:
         return
@@ -1527,11 +1619,26 @@ async def meal_text_parse(
         return
     except BotApiError as exc:
         logger.warning("meal_parse_failed", status=exc.status, code=exc.code)
-        answer = (
-            texts.MEAL_TEXT_LIMIT if exc.code == "rate_limited" else texts.MEAL_TEXT_UNAVAILABLE
+        if exc.code == "rate_limited":
+            # Не «попробуйте позже» и не круг «меню нет → словами нельзя»:
+            # выход — меню дня в приложении, кнопкой (аудит 26.11.2026, 3.21).
+            await card.show(
+                message,
+                state,
+                texts.MEAL_TEXT_LIMIT,
+                keyboards.app_at(settings, "menu", texts.BTN_OPEN_MENU),
+            )
+            await state.clear()
+            return
+        # Набранное помнится: «Повторить» прочитает его снова, набирать
+        # заново не нужно (аудит 26.11.2026, 3.20).
+        await state.update_data(meal_retry_text=text)
+        await card.show(
+            message,
+            state,
+            texts.MEAL_TEXT_UNAVAILABLE,
+            keyboards.retry_step(keyboards.MEAL_TEXT_RETRY_DATA),
         )
-        await card.show(message, state, answer, None)
-        await state.clear()
         return
 
     items = ((parsed.get("meal") or {}).get("items")) or []
