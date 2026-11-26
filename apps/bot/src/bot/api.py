@@ -83,6 +83,9 @@ class LinkVerified:
 class _Session:
     token: str
     expires_at: datetime
+    #: Привязка и её секрет — чтобы на 401 по токену переспросить сессию.
+    link_id: uuid.UUID | None = None
+    secret: str | None = None
 
 
 class BotApi:
@@ -164,6 +167,8 @@ class BotApi:
             expires_at=datetime.now(UTC)
             + timedelta(seconds=int(payload["expires_in"]))
             - _EXPIRY_MARGIN,
+            link_id=link_id,
+            secret=secret,
         )
         return token
 
@@ -412,6 +417,7 @@ class BotApi:
         headers: dict[str, str],
         json: dict[str, Any] | None = None,
         wait_s: float | None = None,
+        retry_unauthorized: bool = True,
     ) -> dict[str, Any]:
         # Имя не `timeout`: это не ожидание корутины, а параметр httpx для
         # одного запроса. `USE_CLIENT_DEFAULT` — сам httpx: он отличает
@@ -436,8 +442,44 @@ class BotApi:
             body: dict[str, Any] = response.json()
             return body
 
+        if response.status_code == 401 and retry_unauthorized:
+            renewed = await self._renew_after_unauthorized(headers)
+            if renewed is not None:
+                return await self._request(
+                    method,
+                    path,
+                    headers=renewed,
+                    json=json,
+                    wait_s=wait_s,
+                    retry_unauthorized=False,
+                )
+
         code, message, details = _error_of(response)
         raise BotApiError(code, message, response.status_code, details)
+
+    async def _renew_after_unauthorized(self, headers: dict[str, str]) -> dict[str, str] | None:
+        """401 по токену сессии — переспросить сессию той же привязки.
+
+        Закрытый врачом или родителем доступ сервер отвечает 401 на каждый
+        запрос, а бот до конца жизни токена (до 15 минут) говорил «Не удалось
+        сохранить — попробуйте ещё раз через минуту» и давал «Повторить»
+        впустую (аудит 26.11.2026, 2.22). Теперь токен сбрасывается, и обмен
+        секрета скажет правду: отозвана привязка — `LinkRevokedError` и
+        «Доступ закрыт…»; просто истёк токен — запрос повторяется с новым.
+        """
+
+        auth = headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return None
+        token = auth.removeprefix("Bearer ")
+        session = next(
+            (cached for cached in self._sessions.values() if cached.token == token), None
+        )
+        if session is None or session.link_id is None or session.secret is None:
+            return None
+        self._sessions.pop(session.link_id, None)
+        fresh = await self._token(link_id=session.link_id, secret=session.secret)
+        return {**headers, "Authorization": f"Bearer {fresh}"}
 
 
 def _error_of(response: httpx.Response) -> tuple[str | None, str, dict[str, object]]:

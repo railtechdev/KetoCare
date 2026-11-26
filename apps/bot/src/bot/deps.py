@@ -393,7 +393,11 @@ async def _show_receipt(
         "patient_id": str(binding.patient_id),
         "log_ids": log_ids,
         "summary": summary,
-        "occurred_at": pending.get("occurred_at"),
+        # Настоящий момент записи, а не «только что»: эхо «(только что)»
+        # стояло и через шесть часов, а «Час назад» считался от нажатия (аудит
+        # 26.11.2026, 2.24).
+        "occurred_at": pending.get("occurred_at")
+        or (pending.get("bodies") or [{}])[0].get("occurred_at"),
         "child": binding.first_name if several else None,
         "method": method,
         "extra": pending.get("extra") or {},
@@ -486,5 +490,58 @@ async def retire_keyboard(callback: CallbackQuery) -> None:
         return
     try:
         await message.edit_reply_markup(reply_markup=None)
+    except TelegramBadRequest:
+        return
+
+
+#: Шаги, где запись ещё не ушла на сервер: брошенная на них — потеряна.
+#: Список еды сюда не входит — каждая отметка в нём сохраняется сразу; время
+#: под «Записано ✓» — тоже: запись уже в дневнике.
+_UNSAVED_STEPS = frozenset(
+    {
+        "Seizure:type_choice",
+        "Seizure:count",
+        "Seizure:count_exact",
+        "Seizure:duration",
+        "Seizure:duration_exact",
+        "Ketones:value",
+        "Ketones:method",
+        "Weight:value",
+        "Wellbeing:symptom",
+        "Medication:choice",
+        "Meal:text",
+        "Meal:confirm",
+    }
+)
+
+
+async def abandon_unfinished(message: Message, state: FSMContext) -> None:
+    """Пометить брошенную незаконченную запись — до того как начать другое.
+
+    Кнопка меню посреди сценария стирала его молча, а старая карточка с живыми
+    на вид кнопками потом отвечала «эта запись уже сохранена или отменена» —
+    хотя она не сохранена (аудит 26.11.2026, 2.21). Теперь карточка сразу
+    говорит, что запись не сохранена, и кнопок у неё нет.
+    """
+
+    current = await state.get_state()
+    if current not in _UNSAVED_STEPS:
+        return
+    data = await state.get_data()
+    pending = data.get(PENDING)
+    if isinstance(pending, dict) and any(pending.get("done") or []):
+        # Часть уже в дневнике — об этом говорит своя карточка сбоя.
+        return
+    card_id = data.get(card.CARD_KEY)
+    bot: Any = getattr(message, "bot", None)
+    if not isinstance(card_id, int) or bot is None:
+        return
+    try:
+        await bot.edit_message_text(
+            text=texts.RECORD_ABANDONED,
+            chat_id=message.chat.id,
+            message_id=card_id,
+            reply_markup=None,
+        )
     except TelegramBadRequest:
         return

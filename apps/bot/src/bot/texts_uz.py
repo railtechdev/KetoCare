@@ -106,7 +106,7 @@ BTN_APP_MENU = "Ilova"
 
 BTN_CANCEL = "Bekor qilish"
 CANCELLED = "Bekor qilindi."
-BUTTON_STALE = "Bu tugma eskirgan: yozuv allaqachon saqlangan yoki bekor qilingan."
+BUTTON_STALE = "Bu tugma endi ishlamaydi. Agar yozuv tugallanmagan bo‘lsa, u saqlanmagan — pastdagi tugma bilan qaytadan boshlang."
 
 # --- Xuruj (раздел 7.3, вопрос 23) ---
 
@@ -390,3 +390,14 @@ RECORD_METHOD_FAILED = "Usulni o‘zgartirib bo‘lmadi — tugmani yana bosing.
 TEXT_ONLY = (
     "Ovozli xabar, rasm va stikerlarni o‘qimayman. Matn bilan yozing yoki «Bekor qilish»ni bosing."
 )
+
+
+# --- Аудит семейного канала 26.11.2026, этап 2 ---
+RECORD_ABANDONED = "Yozuv tugallanmadi va saqlanmadi. Uni pastdagi tugma bilan qaytadan boshlang."
+LOAD_FAILED = "Ochib bo‘lmadi — bir daqiqadan keyin tugmani yana bosing."
+SEIZURE_LOAD_FAILED = "Xuruj yozuvini ochib bo‘lmadi — bir daqiqadan keyin «⚡ Xuruj»ni yana bosing. Hozircha xuruj vaqti va davomiyligini qog‘ozga yoki telefon eslatmalariga yozib qo‘ying."
+MARK_FAILED = "Belgilab bo‘lmadi — bir daqiqadan keyin yana bosing."
+DELETE_FAILED = "O‘chirib bo‘lmadi — bir daqiqadan keyin yana bosing."
+CODE_CHECK_FAILED = "Kodni tekshirib bo‘lmadi — bir daqiqadan keyin uni yana yuboring."
+BTN_TIME_AT = "Soat {time} da"
+BTN_TIME_ON = "{date}, soat {time} da"
