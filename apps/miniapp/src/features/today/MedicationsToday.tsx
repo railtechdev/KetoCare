@@ -3,6 +3,8 @@ import {
   AsyncSection,
   Button,
   Section,
+  StatusNote,
+  WarningBanner,
   describeMedicationFrequency,
   formatTime,
   medicationBody,
@@ -151,6 +153,10 @@ export function MedicationsToday({
   };
 
   const all = medications.data ?? [];
+  // Сегодняшние отметки — отдельный запрос. Пока его ответа нет, «отметок
+  // нет» — незнание, а не факт: лекарство, которое уже дал другой взрослый,
+  // выглядело бы неданным, и его дали бы второй раз (аудит 26.11.2026, 1.2).
+  const marksUnknown = logs.data === undefined;
   const collapsed = !expanded && all.length > VISIBLE_MEDICATIONS + 1;
   const shown = collapsed ? all.slice(0, VISIBLE_MEDICATIONS) : all;
 
@@ -173,6 +179,34 @@ export function MedicationsToday({
         isEmpty={false}
         empty={null}
       >
+        {marksUnknown && all.length > 0 && (
+          <div className="mb-field flex flex-col gap-field">
+            {logs.isError ? (
+              <>
+                <WarningBanner
+                  level="warning"
+                  title={t("today.medications.marksFailed")}
+                >
+                  {t("today.medications.marksFailedHint")}
+                </WarningBanner>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-touch w-full"
+                  onClick={() => void logs.refetch()}
+                >
+                  {t("actions.retry")}
+                </Button>
+              </>
+            ) : (
+              <StatusNote>
+                {logs.fetchStatus === "paused"
+                  ? t("errors.waitingForNetwork")
+                  : t("today.medications.marksLoading")}
+              </StatusNote>
+            )}
+          </div>
+        )}
         <ul className="m-0 flex list-none flex-col gap-section p-0">
           {shown.map((medication) => {
             const frequency = frequencyOf(medication);
@@ -181,7 +215,7 @@ export function MedicationsToday({
               .sort(
                 (a, b) => Date.parse(a.occurred_at) - Date.parse(b.occurred_at),
               );
-            const busy = marking.has(medication.id);
+            const busy = marking.has(medication.id) || marksUnknown;
             const asNeeded = medication.frequency_code === AS_NEEDED_FREQUENCY;
             return (
               <li key={medication.id} className="flex flex-col gap-1">

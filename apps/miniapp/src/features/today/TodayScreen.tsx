@@ -29,7 +29,9 @@ import { DayTotals } from "../menu/DayTotals";
 import { mealNumbers, nextMeal } from "../menu/dayPlan";
 import { ItemDetails } from "../menu/ItemDetails";
 import { MealItem } from "../menu/MealItem";
+import { MenuProductWarnings } from "../menu/MenuProductWarnings";
 import { MenuScreen } from "../menu/MenuScreen";
+import { StaleItemNote } from "../menu/StaleItemNote";
 import { dayAt, isPlanChanged, useMarkEaten, useMenu } from "../menu/useMenu";
 import { MedicationScheme } from "../medications/MedicationScheme";
 import { RecipeCard } from "../recipes/RecipesScreen";
@@ -556,6 +558,8 @@ function NextMealBlock({
       >
         {next !== null && (
           <div className="flex flex-col gap-field">
+            {/* Над граммами, по которым сейчас взвешивают (аудит 26.11.2026). */}
+            {menu.data != null && <MenuProductWarnings menu={menu.data} />}
             {next.kind === "allEaten" ? (
               <p role="status" className="m-0 text-success">
                 {t("today.menu.allEaten")}
@@ -589,6 +593,11 @@ function NextMealBlock({
                           })
                         }
                       >
+                        <StaleItemNote
+                          item={item}
+                          patientId={session.patientId}
+                          day={day}
+                        />
                         <ItemDetails
                           item={item}
                           weighOpen

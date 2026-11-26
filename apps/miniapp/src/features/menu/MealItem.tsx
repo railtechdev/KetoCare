@@ -86,19 +86,15 @@ export function MealItem({
   );
 }
 
-/** Название позиции и пометка о правке рецепта после сохранения дня. */
+/**
+ * Название позиции. Пометка о правке состава после сохранения дня — с
+ * действием, в `StaleItemNote` под строкой, а не серой строкой здесь.
+ */
 function DishTitle({ item }: { item: MenuItem }) {
   const { t } = useTranslation();
   return (
     <span className="min-w-0 break-words">
       {item.title ?? t("menu.unknownDish")}
-      {item.changed_since_saved && (
-        // День от правки рецепта не меняется — в том и смысл снимка, — но
-        // семье решать, пересобрать его или нет.
-        <span className="block text-sm text-muted-foreground">
-          {t("menu.changedSinceSaved")}
-        </span>
-      )}
     </span>
   );
 }

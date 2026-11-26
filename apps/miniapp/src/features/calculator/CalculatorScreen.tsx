@@ -115,8 +115,13 @@ export function CalculatorScreen({
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(
     null,
   );
+  // Форма сохранения начинается заново, только когда в расчёт пришло другое
+  // блюдо или начато новое, — не когда только что сохранённое стало открытым:
+  // иначе строка «Блюдо сохранено» пропадала бы в момент появления.
+  const [saveFormKey, setSaveFormKey] = useState(0);
   const applySeed = () => {
     if (!seedReady) return;
+    setSaveFormKey((key) => key + 1);
     setAppliedSeed(pendingSeed.key);
     setRows(seeded.rows);
     setSeedNotice(
@@ -926,12 +931,17 @@ export function CalculatorScreen({
           посчитанное было некуда унести: у семьи из Telegram кабинета нет. */}
       {saveOffered && (
         <SaveDish
-          key={editing?.id ?? "new"}
+          key={saveFormKey}
           patientId={session.patientId}
           rows={rows}
           editing={editing}
           blockedBy={saveBlockedBy}
+          // Сохранённое блюдо становится открытым: следующая правка граммов
+          // предложит «Сохранить изменения» в него же, а не заведёт второе
+          // (аудит 26.11.2026, 1.5).
+          onSaved={(dish) => setEditing({ id: dish.id, title: dish.title })}
           onNew={() => {
+            setSaveFormKey((key) => key + 1);
             setRows([]);
             setSeedNotice(null);
             setEditing(null);

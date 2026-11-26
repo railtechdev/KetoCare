@@ -656,7 +656,11 @@ function EntryFields({
             onChange={set("medicationId")}
             options={[
               ...choose,
-              ...withCurrent(medications, text("medicationId"), t),
+              ...withCurrent(
+                medicationChoices(medications, text("occurredAt")),
+                text("medicationId"),
+                t,
+              ),
             ]}
             error={errors.medicationId && t("diary.form.medicationRequired")}
           />
@@ -838,6 +842,37 @@ function SeizureTypeRow({
  * знает: иначе селект молча подставил бы первый вариант, и сохранение
  * переписало бы лекарство или тип приступа, которого человек не трогал.
  */
+/**
+ * Лекарства, которые можно отметить в записи на эту дату: только действующие
+ * по схеме врача в тот день, подписанные «Название, доза».
+ *
+ * Прежде список был всей историей схемы без доз: отменённый «Депакин» и
+ * действующий выглядели одинаково, и отметка «дали» у отменённого показала бы
+ * врачу приём того, что он сам отменил (аудит 26.11.2026, 1.4). Уже выбранное
+ * в старой записи остаётся в списке через `withCurrent`.
+ */
+function medicationChoices(
+  medications: MedicationOption[],
+  occurredAt: string,
+): NamedOption[] {
+  const day = occurredAt.slice(0, 10);
+  const known = /^\d{4}-\d{2}-\d{2}$/.test(day);
+  return medications
+    .filter(
+      (medication) =>
+        !known ||
+        (medication.startedAt <= day &&
+          (medication.stoppedAt === null || medication.stoppedAt >= day)),
+    )
+    .map((medication) => ({
+      id: medication.id,
+      name:
+        medication.dose === ""
+          ? medication.name
+          : `${medication.name}, ${medication.dose}`,
+    }));
+}
+
 function withCurrent(
   options: NamedOption[],
   current: string,

@@ -62,6 +62,7 @@ export function SaveDish({
   rows,
   blockedBy,
   editing = null,
+  onSaved: onDishSaved,
   onNew,
 }: {
   patientId: string;
@@ -70,7 +71,9 @@ export function SaveDish({
   editing?: { id: string; title: string } | null;
   /** Почему сохранить нельзя сейчас; `null` — состав проверен и готов. */
   blockedBy: string | null;
-  /** Начать новое блюдо с пустого состава — следующий шаг после «Добавлено». */
+  /** Блюдо записано: экран считает его открытым. */
+  onSaved?: (dish: SavedDish) => void;
+  /** Начать новое блюдо с пустого состава. */
   onNew?: () => void;
 }) {
   const { t } = useTranslation();
@@ -100,19 +103,19 @@ export function SaveDish({
         <AddToPlan
           patientId={patientId}
           dish={{ kind: "custom", id: saved.dish.id }}
-          afterAdded={
-            onNew !== undefined && (
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-touch w-full"
-                onClick={onNew}
-              >
-                {t("calculator.save.another")}
-              </Button>
-            )
-          }
         />
+        {/* Сразу, а не только после «Добавить в меню»: блюдо сохраняют и без
+            меню, и следующее начинали, убирая продукты по одному (3.14). */}
+        {onNew !== undefined && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-touch w-full"
+            onClick={onNew}
+          >
+            {t("calculator.save.another")}
+          </Button>
+        )}
       </Section>
     );
   }
@@ -130,6 +133,7 @@ export function SaveDish({
   const onSaved = (dish: SavedDish) => {
     setSaved({ dish, composition });
     setTyped(null);
+    onDishSaved?.(dish);
     void queryClient.invalidateQueries({
       queryKey: ["patient", patientId, "custom-dishes"],
     });

@@ -104,7 +104,12 @@ export function SessionGate({
     return (
       <div className="flex flex-col gap-section p-section">
         <LanguageSwitch persist={false} />
-        <Problem problem={open.error} onRetry={() => open.mutate()} />
+        <Problem
+          problem={open.error}
+          // Повтор — та же попытка: после неудачной смены ребёнка пустой
+          // повтор молча открывал прежнего (аудит 26.11.2026, 1.8).
+          onRetry={() => open.mutate(open.variables)}
+        />
       </div>
     );
   }
