@@ -5,7 +5,12 @@ import { useTranslation } from "react-i18next";
 
 import { BreakableUrl, ExternalLink } from "../../components/ExternalLink";
 import { api, errorMessageOf } from "../../lib/api";
-import { launchData } from "../../lib/telegram";
+import {
+  canCloseApp,
+  closeApp,
+  launchAgeSeconds,
+  launchData,
+} from "../../lib/telegram";
 import { useTelegramBack, useUnsavedGuard } from "../../lib/useTelegram";
 import { type Session, useUpdateSession } from "./useSession";
 
@@ -154,6 +159,7 @@ export function WebAccessPanel({ session }: { session: Session }) {
 function WebPasswordReset({ session }: { session: Session }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [stale, setStale] = useState(false);
   const [password, setPassword] = useState("");
 
   const reset = useMutation({
@@ -199,12 +205,35 @@ function WebPasswordReset({ session }: { session: Session }) {
         </ExternalLink>
       </p>
 
-      {!open ? (
+      {stale ? (
+        // Сервер примет новый пароль только при свежем запуске (десять
+        // минут). Сказать это до формы, а не после набранного пароля (аудит
+        // 26.11.2026, 3.13).
+        <div className="flex flex-col gap-field">
+          <p role="status" className="m-0 text-sm">
+            {t("webAccess.reset.relaunch")}
+          </p>
+          {canCloseApp() && (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch self-start"
+              onClick={closeApp}
+            >
+              {t("session.close")}
+            </Button>
+          )}
+        </div>
+      ) : !open ? (
         <Button
           type="button"
           variant="outline"
           className="min-h-touch self-start"
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            const age = launchAgeSeconds();
+            if (age !== null && age > FRESH_LAUNCH_SECONDS) setStale(true);
+            else setOpen(true);
+          }}
         >
           {t("webAccess.reset.open")}
         </Button>
@@ -256,3 +285,9 @@ function WebPasswordReset({ session }: { session: Session }) {
     </Section>
   );
 }
+
+/**
+ * Сервер меняет пароль только при запуске моложе десяти минут
+ * (`staff._FRESH_LAUNCH`); здесь — с запасом в минуту на набор пароля.
+ */
+const FRESH_LAUNCH_SECONDS = 9 * 60;

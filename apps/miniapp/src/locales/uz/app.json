@@ -706,7 +706,8 @@
       "intro": "Yangi parol eskisining o‘rnini oladi; pochta o‘sha-o‘sha qoladi. Bot bilan barcha chatlaringizga parol o‘zgargani haqida xabar keladi.",
       "password": "Yangi parol",
       "submit": "Yangi parolni saqlash",
-      "done": "Parol o‘zgartirildi. Ilova hozir qaytadan ochiladi."
+      "done": "Parol o‘zgartirildi. Ilova hozir qaytadan ochiladi.",
+      "relaunch": "Parolni faqat hozirgina ochilgan ilovada o‘zgartirish mumkin — shunday qilib telefon sizda ekaniga ishonch hosil qilamiz. Ilovani yoping, bot bilan chatdan oching va darhol «Parolni unutdingizmi? Yangisini belgilash»ni bosing."
     }
   },
   "family": {
