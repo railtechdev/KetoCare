@@ -84,14 +84,15 @@ export function diaryRange(now: Date = new Date()): {
 /** Верхняя граница страницы на сервере (`MAX_PAGE_SIZE`). */
 const PAGE_LIMIT = 200;
 
-export async function fetchKind(
+async function fetchKindPage(
   patientId: string,
   kind: DiaryEntryKind,
   range: { from: string; to: string },
-): Promise<DiaryLog[]> {
+  offset: number,
+): Promise<{ items: DiaryLog[]; total: number }> {
   const params = {
     path: { patient_id: patientId },
-    query: { from: range.from, to: range.to, limit: PAGE_LIMIT, offset: 0 },
+    query: { from: range.from, to: range.to, limit: PAGE_LIMIT, offset },
   };
   // Отдельная ветка на вид, а не путь из строки: у каждого вида свой точный
   // тип ответа, и приведение типов убрало бы единственную проверку формы.
@@ -102,7 +103,10 @@ export async function fetchKind(
         { params },
       );
       if (error || !data) throw error ?? new Error("Empty seizures response");
-      return data.items.map((item) => ({ kind, ...item }));
+      return {
+        items: data.items.map((item) => ({ kind, ...item })),
+        total: data.total,
+      };
     }
     case "ketones": {
       const { data, error } = await api.GET(
@@ -110,7 +114,10 @@ export async function fetchKind(
         { params },
       );
       if (error || !data) throw error ?? new Error("Empty ketones response");
-      return data.items.map((item) => ({ kind, ...item }));
+      return {
+        items: data.items.map((item) => ({ kind, ...item })),
+        total: data.total,
+      };
     }
     case "weight": {
       const { data, error } = await api.GET(
@@ -118,7 +125,10 @@ export async function fetchKind(
         { params },
       );
       if (error || !data) throw error ?? new Error("Empty weight response");
-      return data.items.map((item) => ({ kind, ...item }));
+      return {
+        items: data.items.map((item) => ({ kind, ...item })),
+        total: data.total,
+      };
     }
     case "medications": {
       const { data, error } = await api.GET(
@@ -127,7 +137,10 @@ export async function fetchKind(
       );
       if (error || !data)
         throw error ?? new Error("Empty medications response");
-      return data.items.map((item) => ({ kind, ...item }));
+      return {
+        items: data.items.map((item) => ({ kind, ...item })),
+        total: data.total,
+      };
     }
     case "meals": {
       const { data, error } = await api.GET(
@@ -135,7 +148,10 @@ export async function fetchKind(
         { params },
       );
       if (error || !data) throw error ?? new Error("Empty meals response");
-      return data.items.map((item) => ({ kind, ...item }));
+      return {
+        items: data.items.map((item) => ({ kind, ...item })),
+        total: data.total,
+      };
     }
     case "side-effects": {
       const { data, error } = await api.GET(
@@ -144,7 +160,36 @@ export async function fetchKind(
       );
       if (error || !data)
         throw error ?? new Error("Empty side effects response");
-      return data.items.map((item) => ({ kind, ...item }));
+      return {
+        items: data.items.map((item) => ({ kind, ...item })),
+        total: data.total,
+      };
+    }
+  }
+}
+
+/**
+ * Все записи вида за период — страницами до конца.
+ *
+ * Прежде бралась одна страница в 200 записей: у ребёнка с частыми приступами
+ * ранние дни ленты и графика пропадали молча, а график рисовал их нулями
+ * (аудит 26.11.2026, 2.15).
+ */
+export async function fetchKind(
+  patientId: string,
+  kind: DiaryEntryKind,
+  range: { from: string; to: string },
+): Promise<DiaryLog[]> {
+  const all: DiaryLog[] = [];
+  for (;;) {
+    const page = await fetchKindPage(patientId, kind, range, all.length);
+    all.push(...page.items);
+    if (
+      page.items.length === 0 ||
+      typeof page.total !== "number" ||
+      all.length >= page.total
+    ) {
+      return all;
     }
   }
 }

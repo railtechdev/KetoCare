@@ -1331,6 +1331,18 @@ function ProductPicker({
           )}
         </ul>
       )}
+      {/* Выдача обрезана — так и сказано: не найдя продукт в первых двадцати,
+          семья решала, что его нет, и брала похожий с другими числами (аудит
+          26.11.2026, 2.11). */}
+      {searched &&
+        !failed &&
+        (found.data?.total ?? 0) > (found.data?.length ?? 0) && (
+          <p className="m-0 text-sm text-muted-foreground">
+            {t("calculator.searchTruncated", {
+              count: found.data?.length ?? 0,
+            })}
+          </p>
+        )}
 
       {/* Без сети запрос не уходит и не отказывает: он ждёт связи (ADR-0036).
           Здесь не `AsyncSection`, и список просто оставался пустым — как будто

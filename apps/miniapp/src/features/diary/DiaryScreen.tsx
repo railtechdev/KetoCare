@@ -185,11 +185,27 @@ function Trends({
         isEmpty={trend.data === undefined}
         empty={null}
       >
+        {(trend.data?.otherMethodCount ?? 0) > 0 && (
+          <p className="m-0 text-sm text-muted-foreground">
+            {t(
+              trend.data?.ketoneMethod === "urine"
+                ? "charts.ketones.bloodHidden"
+                : "charts.ketones.urineHidden",
+              { count: trend.data?.otherMethodCount ?? 0 },
+            )}
+          </p>
+        )}
         <TrendChart
-          points={trend.data ?? []}
+          points={trend.data?.points ?? []}
           markers={markers.data ?? []}
           unit={t(`charts.${kind}.unit`)}
-          caption={t(`charts.${kind}.caption`, { days: TREND_DAYS })}
+          caption={
+            kind === "ketones" && trend.data?.ketoneMethod != null
+              ? t(`charts.ketones.caption_${trend.data.ketoneMethod}`, {
+                  days: TREND_DAYS,
+                })
+              : t(`charts.${kind}.caption`, { days: TREND_DAYS })
+          }
           emptyState={
             kind === "seizures"
               ? t("charts.seizures.empty", { days: TREND_DAYS })

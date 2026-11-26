@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { TrendPoint, PrescriptionMarker } from "@ketocare/ui";
 
 import { api } from "../../lib/api";
+import { type DiaryLog, fetchKind } from "../diary/useDiary";
 
 /** Глубина графика. Тридцать дней — это то, о чём врач спрашивает на приёме. */
 export const TREND_DAYS = 30;
@@ -72,52 +73,78 @@ function endOfDay(value: Date): Date {
   );
 }
 
+/** Точки графика и, для кетонов, какой способ замера на нём показан. */
+export interface TrendData {
+  points: TrendPoint[];
+  /** Способ замера кетонов на графике; `null` — не кетоны или замеров нет. */
+  ketoneMethod: "blood" | "urine" | null;
+  /** Замеры другим способом за период — на графике их нет. */
+  otherMethodCount: number;
+}
+
 export function useTrend(patientId: string, kind: TrendKind) {
   const range = trendRange();
 
   return useQuery({
     queryKey: ["patient", patientId, "trend", kind, range.from, range.to],
-    queryFn: async (): Promise<TrendPoint[]> => {
-      const params = {
-        path: { patient_id: patientId },
-        query: { from: range.from, to: range.to, limit: 200, offset: 0 },
-      };
+    // Все записи периода страницами (`fetchKind`): одна страница в 200
+    // записей молча теряла ранние дни, и график рисовал их нулями (аудит
+    // 26.11.2026, 2.15).
+    queryFn: async (): Promise<TrendData> => {
+      const entries = await fetchKind(patientId, kind, range);
 
       if (kind === "seizures") {
-        const { data, error } = await api.GET(
-          "/api/v1/patients/{patient_id}/logs/seizures",
-          { params },
-        );
-        if (error || !data) throw error ?? new Error("Empty seizures response");
-        return seizuresPerDay(data.items);
+        return {
+          points: seizuresPerDay(
+            entries.filter(
+              (entry): entry is Extract<DiaryLog, { kind: "seizures" }> =>
+                entry.kind === "seizures",
+            ),
+          ),
+          ketoneMethod: null,
+          otherMethodCount: 0,
+        };
       }
 
       if (kind === "ketones") {
-        const { data, error } = await api.GET(
-          "/api/v1/patients/{patient_id}/logs/ketones",
-          { params },
+        const ketones = entries.filter(
+          (entry): entry is Extract<DiaryLog, { kind: "ketones" }> =>
+            entry.kind === "ketones",
         );
-        if (error || !data) throw error ?? new Error("Empty ketones response");
-        return data.items.map((item) => ({
-          id: item.id,
-          at: new Date(item.occurred_at),
-          value: item.value,
-        }));
+        // По крови и по моче — разные величины: одной линией смена способа
+        // рисовала скачок, которого не было (аудит 26.11.2026, 2.8). На
+        // графике — способ последнего замера, о других сказано словами.
+        const latest = [...ketones].sort(
+          (x, y) => Date.parse(y.occurred_at) - Date.parse(x.occurred_at),
+        )[0];
+        const method = latest?.method ?? null;
+        const shown = ketones.filter((item) => item.method === method);
+        return {
+          points: shown.map((item) => ({
+            id: item.id,
+            at: new Date(item.occurred_at),
+            value: item.value,
+          })),
+          ketoneMethod: method,
+          otherMethodCount: ketones.length - shown.length,
+        };
       }
 
-      const { data, error } = await api.GET(
-        "/api/v1/patients/{patient_id}/logs/weight",
-        {
-          params,
-        },
-      );
-      if (error || !data) throw error ?? new Error("Empty weight response");
-      return data.items.map((item) => ({
-        id: item.id,
-        at: new Date(item.occurred_at),
-        // weight:raw — точка графика: подпись оси форматирует сама ось.
-        value: item.weight_kg,
-      }));
+      return {
+        points: entries
+          .filter(
+            (entry): entry is Extract<DiaryLog, { kind: "weight" }> =>
+              entry.kind === "weight",
+          )
+          .map((item) => ({
+            id: item.id,
+            at: new Date(item.occurred_at),
+            // weight:raw — точка графика: подпись оси форматирует сама ось.
+            value: item.weight_kg,
+          })),
+        ketoneMethod: null,
+        otherMethodCount: 0,
+      };
     },
   });
 }

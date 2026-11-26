@@ -8,6 +8,7 @@ import {
   type DiaryEntryKind,
   type DiaryEntryNames,
   Section,
+  WarningBanner,
   cn,
   formatLongDate,
   formatNumber,
@@ -136,6 +137,25 @@ export function DiaryEntries({
         }))}
         className="w-full min-w-0 flex-nowrap overflow-x-auto [&>label]:shrink-0"
       />
+
+      {/* «Чья запись» узнаётся по списку близких. Не пришёл он — у записей
+          нет «Исправить», и без этой строки родитель не понимал почему
+          (аудит 26.11.2026, 2.10). */}
+      {family.isError && (
+        <WarningBanner level="warning" title={t("diary.ownUnknown")}>
+          <span className="flex flex-col gap-field">
+            <span>{t("diary.ownUnknownHint")}</span>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-touch self-start"
+              onClick={() => void family.refetch()}
+            >
+              {t("actions.retry")}
+            </Button>
+          </span>
+        </WarningBanner>
+      )}
 
       {/* Один раз над лентой, а не под каждой отметкой: подсказка под каждой
           строкой «съедено» повторялась десятки раз (аудит 12.11.2026). */}

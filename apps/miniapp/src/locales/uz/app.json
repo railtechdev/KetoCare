@@ -230,7 +230,11 @@
     "ketones": {
       "title": "Ketonlar",
       "unit": "mmol/l",
-      "caption": "Oxirgi {{days}} kundagi ketonlar grafigi"
+      "caption": "Oxirgi {{days}} kundagi ketonlar grafigi",
+      "caption_blood": "Oxirgi {{days}} kundagi qondagi ketonlar grafigi",
+      "caption_urine": "Oxirgi {{days}} kundagi siydikdagi ketonlar grafigi",
+      "urineHidden": "Grafikda — qon bo‘yicha o‘lchovlar. Siydik bo‘yicha o‘lchovlar ({{count}}) — boshqa kattalik, ular yozuvlarda.",
+      "bloodHidden": "Grafikda — siydik bo‘yicha o‘lchovlar. Qon bo‘yicha o‘lchovlar ({{count}}) — boshqa kattalik, ular yozuvlarda."
     },
     "weight": {
       "title": "Vazn",
@@ -392,7 +396,9 @@
       "change": "Turini o‘zgartirish",
       "loadFailed": "Xuruj turlari ro‘yxatini yuklab bo‘lmadi",
       "empty": "Ro‘yxatda xuruj turlari yo‘q — shifokorga xabar bering."
-    }
+    },
+    "ownUnknown": "Qaysi yozuvlar sizniki ekanini tekshirib bo‘lmadi",
+    "ownUnknownHint": "O‘z yozuvlaringizni hozircha tuzatib bo‘lmaydi. «Qaytarish»ni bosing."
   },
   "reminders": {
     "title": "Eslatmalar",
@@ -540,7 +546,8 @@
       "changed": "Grammlar tanlandi — ularni tarkibda tekshiring.",
       "unchanged": "Grammlar allaqachon mos — o‘zgartirish kerak emas.",
       "reshaped": "Sizning grammlaringiz bilan maqsadga erishilmadi, shuning uchun miqdorlar sezilarli o‘zgardi — ularni tarkibda tekshiring."
-    }
+    },
+    "searchTruncated": "Birinchi {{count}} tasi ko‘rsatildi. Keraklisi yo‘q bo‘lsa — nomini aniqlashtiring."
   },
   "recipes": {
     "category": "Bo‘lim",

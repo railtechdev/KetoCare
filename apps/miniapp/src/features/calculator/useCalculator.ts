@@ -48,6 +48,9 @@ export function parseAmount(raw: string): number {
 /** Ниже двух символов выдача бесполезна, а индекс нагружается зря. */
 export const MIN_QUERY = 2;
 
+/** Сколько продуктов показывает поиск за раз. */
+export const PRODUCT_SEARCH_LIMIT = 20;
+
 export function useProductSearch(query: string) {
   const trimmed = query.trim();
 
@@ -57,21 +60,27 @@ export function useProductSearch(query: string) {
     // Прошлая выдача держится на экране, пока грузится новая: иначе список
     // мигает пустотой на каждой набранной букве.
     placeholderData: keepPreviousData,
-    queryFn: async (): Promise<ProductOption[]> => {
+    queryFn: async (): Promise<ProductOption[] & { total?: number }> => {
       const { data, error } = await api.GET("/api/v1/products", {
-        params: { query: { q: trimmed, limit: 20, offset: 0 } },
+        params: {
+          query: { q: trimmed, limit: PRODUCT_SEARCH_LIMIT, offset: 0 },
+        },
       });
       if (error || !data) throw error ?? new Error("Empty products response");
 
-      return data.items.map((item) => ({
-        id: item.id,
-        name: item.name_ru,
-        kcal: item.kcal_100g,
-        fat: item.fat_100g,
-        protein: item.protein_100g,
-        carbs: item.carbs_100g,
-        fiber: item.fiber_100g,
-      }));
+      const options: ProductOption[] & { total?: number } = data.items.map(
+        (item) => ({
+          id: item.id,
+          name: item.name_ru,
+          kcal: item.kcal_100g,
+          fat: item.fat_100g,
+          protein: item.protein_100g,
+          carbs: item.carbs_100g,
+          fiber: item.fiber_100g,
+        }),
+      );
+      options.total = data.total;
+      return options;
     },
   });
 }
