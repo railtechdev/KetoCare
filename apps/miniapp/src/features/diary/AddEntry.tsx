@@ -3,6 +3,7 @@ import { useContext, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { NavigateContext } from "../../lib/tabs";
+import { usePatientOverview } from "../home/useOverview";
 import { useTelegramBack } from "../../lib/useTelegram";
 import type { Session } from "../session/useSession";
 import { EntryEditSheet } from "./EntryEditSheet";
@@ -59,6 +60,7 @@ export function AddEntry({
   const recentSeizureTypes = useRecentSeizureTypes(session.patientId);
   const durationOptions = useDurationOptions();
   const medications = useMedications(session.patientId);
+  const overview = usePatientOverview(session.patientId);
   const { create } = useEntryMutations(session.patientId);
 
   if (step.at === "form") {
@@ -72,6 +74,7 @@ export function AddEntry({
         recentSeizureTypes={recentSeizureTypesOf(recentSeizureTypes)}
         durationOptions={durationOptions.data ?? []}
         medications={medications.data ?? []}
+        lastKetoneMethod={overview.data?.last_ketone?.method ?? null}
         pending={create.isPending}
         error={create.error}
         onSave={(body, onSaved, attemptKey) => {

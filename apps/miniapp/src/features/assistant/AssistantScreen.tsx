@@ -47,6 +47,7 @@ import { useClinicPhone } from "../clinic/useClinicPhone";
 import type { Session } from "../session/useSession";
 import {
   type AssistantMessage,
+  answerExpired,
   useArticle,
   useAskAssistant,
   useCareTeam,
@@ -110,7 +111,17 @@ export function AssistantScreen({ session }: { session: Session }) {
   );
   const phone = useClinicPhone();
 
-  const messages = conversation.data ?? [];
+  // Ожидание старше трёх минут показывается отказом с «Спросить ещё раз»,
+  // а не вечным «Помощник отвечает…» (аудит 26.11.2026, 2.18). Часы тикают,
+  // только пока есть чего ждать.
+  const now = useNow(
+    (conversation.data ?? []).some((message) => message.status === "pending"),
+  );
+  const messages = (conversation.data ?? []).map((message) =>
+    answerExpired(message, now)
+      ? { ...message, status: "failed" as const, text: t("assistant.timedOut") }
+      : message,
+  );
   // Свежайший разговор не прочитан, а свой разговор человек не выбирал —
   // показывать «пусто» значит утверждать то, чего мы не знаем.
   const latestFailed = latest.isError && chosenId === undefined;
@@ -644,4 +655,15 @@ function ArticleSheet({
       )}
     </FormSheet>
   );
+}
+
+/** Текущее время, обновляемое раз в 15 секунд, пока `ticking`. */
+function useNow(ticking: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!ticking) return;
+    const id = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, [ticking]);
+  return now;
 }

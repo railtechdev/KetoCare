@@ -197,7 +197,7 @@ describe("«Сегодня» в Mini App", () => {
       await screen.findByText("Кетосоотношение дня соответствует назначению."),
     ).toBeInTheDocument();
     const totals = screen
-      .getByRole("heading", { name: "Итоги дня" })
+      .getByRole("heading", { name: "По меню на день" })
       .closest<HTMLElement>('[data-slot="card"]');
     expect(totals).not.toBeNull();
     // «600 из 1 200 ккал» и «добавьте ещё 600 ккал» — и всё.
@@ -205,7 +205,7 @@ describe("«Сегодня» в Mini App", () => {
       within(totals as HTMLElement).getByText("600 из 1 200 ккал"),
     ).toBeVisible();
     expect(
-      within(totals as HTMLElement).getAllByText(/добавьте ещё 600 ккал/),
+      within(totals as HTMLElement).getAllByText(/не хватает 600 ккал/),
     ).toHaveLength(1);
     expect(within(totals as HTMLElement).queryByText(/^Набрано/)).toBeNull();
   });
@@ -363,7 +363,7 @@ describe("«Сегодня» в Mini App", () => {
     renderScreen();
 
     expect(
-      await screen.findByRole("heading", { name: "Сейчас — приём 2" }),
+      await screen.findByRole("heading", { name: "Не отмечено: приём 2" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Суп")).toBeInTheDocument();
     expect(screen.getByText("Салат")).toBeInTheDocument();
@@ -481,6 +481,27 @@ describe("«Сегодня» в Mini App", () => {
     serve({
       overview: { ...BASE, prescription: PRESCRIPTION },
       menu: menuOf([item("a", 1, true, "Омлет")]),
+    });
+    renderScreen();
+
+    // Блюдо стоит в одном приёме из четырёх: «всё съедено» было бы
+    // неправдой о дне (аудит 26.11.2026, 2.2).
+    expect(
+      await screen.findByText(
+        "Отмеченное съедено. В приёмах 2, 3, 4 блюд ещё нет.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("всё съедено во всех приёмах — так и сказано", async () => {
+    serve({
+      overview: { ...BASE, prescription: PRESCRIPTION },
+      menu: menuOf([
+        item("a", 1, true, "Омлет"),
+        item("b", 2, true, "Суп"),
+        item("c", 3, true, "Котлета"),
+        item("d", 4, true, "Десерт"),
+      ]),
     });
     renderScreen();
 

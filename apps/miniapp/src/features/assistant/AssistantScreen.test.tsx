@@ -38,7 +38,12 @@ function message(overrides: Record<string, unknown> = {}) {
     id: crypto.randomUUID(),
     role: "assistant",
     text: "Кетоны записываются кнопкой «Кетоны».",
-    created_at: "2026-09-04T10:00:00Z",
+    // Ожидание — только что: ожидание старше трёх минут экран честно считает
+    // несостоявшимся (аудит 26.11.2026, 2.18).
+    created_at:
+      overrides.status === "pending"
+        ? new Date().toISOString()
+        : "2026-09-04T10:00:00Z",
     status: "done",
     sources: ["how-to-record-ketones"],
     source_articles: [
@@ -624,6 +629,30 @@ describe("переписка на телефоне (аудит Mini App 2026-11)
     const strong = await screen.findByText("Важно:");
     expect(strong.tagName).toBe("STRONG");
     expect(screen.queryByText(/\*\*/)).toBeNull();
+  });
+
+  it("ожидание дольше трёх минут — отказ с «Спросить ещё раз», а не вечное «отвечает» (2.18)", async () => {
+    serve({
+      messages: [
+        QUESTION,
+        message({
+          seq: 1,
+          text: "",
+          status: "pending",
+          source_articles: [],
+          created_at: new Date(Date.now() - 4 * 60_000).toISOString(),
+        }),
+      ],
+    });
+    renderScreen();
+
+    expect(
+      await screen.findByText("Ответ не пришёл. Спросите ещё раз."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Спросить ещё раз" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Помощник отвечает…")).toBeNull();
   });
 
   it("ожидание ответа — словами «Помощник отвечает…» (П6)", async () => {

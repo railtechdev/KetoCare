@@ -66,9 +66,11 @@ export function FamilyBlock({ session }: { session: Session }) {
               }
             : null
         }
-        // Без сети об этом уже говорит сводка выше: вторая такая же строка
-        // на одном экране — шум, а не объяснение.
-        waiting={null}
+        // Блок живёт на экране настроек, где сводки нет: без сети он
+        // говорит об этом сам, а не стоит пустым (аудит 26.11.2026, 2.7).
+        waiting={
+          family.fetchStatus === "paused" ? t("errors.waitingForNetwork") : null
+        }
         retryLabel={t("actions.retry")}
         onRetry={() => void family.refetch()}
         isEmpty={false}

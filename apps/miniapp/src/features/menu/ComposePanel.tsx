@@ -6,6 +6,7 @@ import {
   Input,
   NativeSelect,
   RatioBadge,
+  StatusNote,
   formatKcal,
   useDebouncedValue,
 } from "@ketocare/ui";
@@ -232,13 +233,21 @@ export function ComposePanel({
         waiting={dishes.isPaused ? t("errors.waitingForNetwork") : null}
         retryLabel={t("actions.retry")}
         onRetry={dishes.refetch}
-        isEmpty={dishes.options.length === 0}
+        isEmpty={dishes.options.length === 0 && !dishes.searching}
         empty={
           <p className="m-0 text-muted-foreground">
             {t("menu.compose.nothingFound")}
           </p>
         }
       >
+        {/* Над прежней выдачей: она относится к прошлому слову. */}
+        {(dishes.searching || (dishes.isPaused && !dishes.isPending)) && (
+          <StatusNote>
+            {dishes.isPaused
+              ? t("errors.waitingForNetwork")
+              : t("menu.compose.searching")}
+          </StatusNote>
+        )}
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {dishes.options.map((option) => (
             <li key={option.key}>

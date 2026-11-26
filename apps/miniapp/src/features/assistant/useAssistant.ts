@@ -28,6 +28,25 @@ export interface AssistantMessage {
 const POLL_MS = 2500;
 
 /**
+ * Сколько ждать ответа, прежде чем честно сказать, что он не пришёл.
+ *
+ * Обычный ответ — секунды; при упавшей задаче «Помощник отвечает…» висело
+ * вечно, а опрос шёл каждые 2,5 секунды и назавтра (аудит 26.11.2026, 2.18).
+ */
+export const ANSWER_GIVE_UP_MS = 3 * 60_000;
+
+/** Ожидание ответа, которое пора считать несостоявшимся. */
+export function answerExpired(
+  message: { status: string; created_at: string },
+  now: number = Date.now(),
+): boolean {
+  return (
+    message.status === "pending" &&
+    now - Date.parse(message.created_at) > ANSWER_GIVE_UP_MS
+  );
+}
+
+/**
  * Последняя переписка семьи с помощником.
  *
  * В Mini App это не удобство, а необходимость: каждый запуск из чата — новая
@@ -67,7 +86,9 @@ export function useConversation(
     enabled: conversationId !== null,
     refetchInterval: (query) => {
       const messages = (query.state.data ?? []) as AssistantMessage[];
-      return messages.some((message) => message.status === "pending")
+      return messages.some(
+        (message) => message.status === "pending" && !answerExpired(message),
+      )
         ? POLL_MS
         : false;
     },

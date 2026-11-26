@@ -108,6 +108,12 @@ export function fakeGet(
         ],
       });
     }
+    // Сводка: способ последнего замера кетонов — умолчание новой записи.
+    if (path.endsWith("/overview")) {
+      return Promise.resolve({
+        data: { last_ketone: { value: 2.1, method: "blood" } },
+      });
+    }
     if (path.endsWith("/seizure-types")) {
       return Promise.resolve({
         data: {

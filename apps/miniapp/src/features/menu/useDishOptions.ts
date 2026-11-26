@@ -175,6 +175,9 @@ export function useDishOptions(patientId: string, query: string) {
     isError: recipes.isError || dishes.isError,
     isPaused:
       recipes.fetchStatus === "paused" || dishes.fetchStatus === "paused",
+    // Выдача прежнего слова держится, пока идёт запрос нового: «ничего не
+    // нашлось» в эту паузу — ответ не о том, что набрано (аудит 26.11.2026, 2.6).
+    searching: recipes.isFetching && recipes.isPlaceholderData,
     hasMore: recipes.hasNextPage,
     loadingMore: recipes.isFetchingNextPage,
     loadMore: () => {

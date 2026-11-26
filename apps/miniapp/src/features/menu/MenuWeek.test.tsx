@@ -319,7 +319,7 @@ describe("день ещё собирается", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("Итоги дня расходятся с назначением"),
+      screen.queryByText("Меню дня расходится с назначением"),
     ).not.toBeInTheDocument();
   });
 
@@ -336,7 +336,7 @@ describe("день ещё собирается", () => {
     await user.click(await screen.findByRole("button", { name: /^Вчера/ }));
 
     expect(
-      await screen.findByText("Итоги дня расходятся с назначением"),
+      await screen.findByText("Меню дня расходится с назначением"),
     ).toBeInTheDocument();
   });
 });

@@ -102,7 +102,7 @@ describe("напоминания в Mini App", () => {
     ).toBeInTheDocument();
   });
 
-  it("«Выключить» убирает время — вид напоминаний выключен", async () => {
+  it("«Выключить» убирает время и записывается сразу, без «Сохранить» (2.5)", async () => {
     const user = userEvent.setup();
     renderBlock();
 
@@ -111,7 +111,6 @@ describe("напоминания в Mini App", () => {
         name: "Выключить напоминание «Если за день нет записей»",
       }),
     );
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(api.PUT).toHaveBeenCalledTimes(1));
     expect(api.PUT).toHaveBeenCalledWith(
@@ -126,9 +125,10 @@ describe("напоминания в Mini App", () => {
     const user = userEvent.setup();
     renderBlock();
 
+    // Выключатель записывается сразу: «Назад» без «Сохранить» прежде молча
+    // оставлял напоминания включёнными (аудит 26.11.2026, 2.5).
     await user.click(await screen.findByLabelText("Присылать напоминания"));
     expect(screen.getByLabelText("Если за день нет записей")).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() =>
       expect(api.PUT).toHaveBeenCalledWith(
