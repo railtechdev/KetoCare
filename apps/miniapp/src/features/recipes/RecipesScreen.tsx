@@ -246,12 +246,19 @@ export function RecipeCard({
   backLabel,
   embedded = false,
   onOpenChildDish,
+  fromMenu = false,
 }: {
   recipeId: string;
   patientId: string;
   onBack: () => void;
   /** Перейти к блюду ребёнка из этого рецепта. Нет — кнопки перехода нет. */
   onOpenChildDish?: (dishId: string | null) => void;
+  /**
+   * Открыта из меню дня («Как готовить»): граммы шаблона здесь не показаны —
+   * взвешивают по «Что взвесить» позиции, а состав рецепта на весь выход
+   * рядом давал два разных списка граммов одного блюда (аудит Т8).
+   */
+  fromMenu?: boolean;
   /** Куда ведёт «Назад» — словами того места, откуда открыли. */
   backLabel?: string;
   embedded?: boolean;
@@ -308,6 +315,7 @@ export function RecipeCard({
             patientId={patientId}
             level={embedded ? 2 : 1}
             onOpenChildDish={onOpenChildDish}
+            fromMenu={fromMenu}
           />
         )}
       </AsyncSection>
@@ -320,11 +328,13 @@ function RecipeBody({
   patientId,
   level,
   onOpenChildDish,
+  fromMenu,
 }: {
   recipe: Recipe;
   patientId: string;
   level: 1 | 2;
   onOpenChildDish?: (dishId: string | null) => void;
+  fromMenu: boolean;
 }) {
   const { t } = useTranslation();
   const portion = recipe.per_portion;
@@ -389,12 +399,18 @@ function RecipeBody({
           инструкция без рецепта. Масштаб назван в заголовке: рядом стоят
           показатели ОДНОЙ порции, а граммовка — ВСЕГО выхода, и перепутать
           их значит ошибиться в разы (находка М2 аудита). */}
-      <Section
-        title={t("recipes.composition", { count: recipe.servings })}
-        density="compact"
-      >
-        <Ingredients recipe={recipe} />
-      </Section>
+      {fromMenu ? (
+        <p className="m-0 text-sm text-muted-foreground">
+          {t("recipes.gramsInMenu")}
+        </p>
+      ) : (
+        <Section
+          title={t("recipes.composition", { count: recipe.servings })}
+          density="compact"
+        >
+          <Ingredients recipe={recipe} />
+        </Section>
+      )}
 
       {/* Текст приготовления у рецепта необязателен: без него блока нет. */}
       {recipe.instructions.trim() !== "" && (

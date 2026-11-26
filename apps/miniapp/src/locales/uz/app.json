@@ -615,7 +615,8 @@
       "open": "Bola taomini ochish",
       "openList": "Bola taomlarini ochish"
     },
-    "toMenu": "Menyuga qo‘shish"
+    "toMenu": "Menyuga qo‘shish",
+    "gramsInMenu": "Bu kun uchun qancha tortish kerakligi — menyuda, taom yonidagi «Nimani tortish kerak»da: u yerda aynan shu porsiya grammlari."
   },
   "assistant": {
     "title": "Yordamchi",
