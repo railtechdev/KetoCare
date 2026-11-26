@@ -16,10 +16,12 @@ import { shareToTelegram } from "../../lib/telegram";
 import type { Session } from "../session/useSession";
 import {
   type Invitation,
+  botNameOf,
   useActiveInvitation,
   useFamily,
   useInvite,
   useRemoveMember,
+  useRevokeInvitation,
 } from "./useFamily";
 
 /**
@@ -46,7 +48,13 @@ export function FamilyBlock({ session }: { session: Session }) {
   // прочитан, кнопки нет: выпустить второй код поверх живого значит открыть
   // ещё одну дверь к данным ребёнка. Журнал не прочитался — кнопка есть:
   // без неё семья не позвала бы никого вовсе.
-  const invitation = invite.data ?? active.data ?? null;
+  const revoke = useRevokeInvitation(session.patientId);
+  const invitation =
+    (revoke.isSuccess && revoke.variables === invite.data?.code
+      ? null
+      : invite.data) ??
+    active.data ??
+    null;
 
   const members = family.data ?? [];
 
@@ -128,7 +136,14 @@ export function FamilyBlock({ session }: { session: Session }) {
       </AsyncSection>
 
       {invitation !== null ? (
-        <InvitationReady invitation={invitation} />
+        <InvitationReady
+          invitation={invitation}
+          revoking={revoke.isPending || invite.isPending}
+          onRevoke={() =>
+            revoke.mutate(invitation.code, { onSuccess: () => invite.reset() })
+          }
+          onAnother={() => invite.mutate()}
+        />
       ) : active.isPending ? null : (
         <Button
           type="button"
@@ -142,6 +157,11 @@ export function FamilyBlock({ session }: { session: Session }) {
         </Button>
       )}
 
+      {revoke.isError && (
+        <p role="alert" className="m-0 text-destructive">
+          {errorMessageOf(revoke.error) ?? t("family.revokeFailed")}
+        </p>
+      )}
       {invite.isError && (
         <p role="alert" className="m-0 text-destructive">
           {errorMessageOf(invite.error) ?? t("family.inviteFailed")}
@@ -158,8 +178,19 @@ export function FamilyBlock({ session }: { session: Session }) {
  * Шаги для получателя лежат в самом сообщении, а не здесь: читать их будет
  * бабушка, а не тот, кто нажал «Отправить».
  */
-function InvitationReady({ invitation }: { invitation: Invitation }) {
+function InvitationReady({
+  invitation,
+  revoking,
+  onRevoke,
+  onAnother,
+}: {
+  invitation: Invitation;
+  revoking: boolean;
+  onRevoke: () => void;
+  onAnother: () => void;
+}) {
   const { t } = useTranslation();
+  const bot = botNameOf(invitation.deep_link ?? null);
   const date = formatOccurredAt(new Date(invitation.expires_at));
   const link = invitation.deep_link ?? invitation.join_url;
   const text =
@@ -178,7 +209,9 @@ function InvitationReady({ invitation }: { invitation: Invitation }) {
         <Send aria-hidden="true" />
         {t("family.send")}
       </Button>
-      <p className="m-0 text-sm text-muted-foreground">{t("family.nearby")}</p>
+      <p className="m-0 text-sm text-muted-foreground">
+        {bot === null ? t("family.nearby") : t("family.nearbyBot", { bot })}
+      </p>
       <output className="self-start rounded-md bg-muted px-4 py-2 font-mono text-page-title tracking-widest">
         {invitation.code}
       </output>
@@ -186,6 +219,32 @@ function InvitationReady({ invitation }: { invitation: Invitation }) {
         {t("family.expires", { date })}
       </p>
       <p className="m-0 text-sm text-muted-foreground">{t("family.trust")}</p>
+      {/* Код одноразовый: второму человеку тот же код не подойдёт. И
+          отправленное не туда можно отменить, не дожидаясь входа чужого. */}
+      <p className="m-0 text-sm text-muted-foreground">
+        {t("family.onePerson")}
+      </p>
+      <div className="flex flex-wrap gap-field">
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-touch"
+          disabled={revoking}
+          onClick={onAnother}
+        >
+          <UserPlus aria-hidden="true" />
+          {t("family.inviteAnother")}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="min-h-touch"
+          disabled={revoking}
+          onClick={onRevoke}
+        >
+          {t("family.revoke")}
+        </Button>
+      </div>
     </div>
   );
 }

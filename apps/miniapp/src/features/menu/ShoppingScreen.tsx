@@ -41,10 +41,15 @@ export function ShoppingScreen({
   const { t } = useTranslation();
   useTelegramBack(onBack);
   const week = useMenuWeek(patientId, dayAt(WEEK_START_OFFSET));
-  const [bought, setBought] = useState<ReadonlySet<string>>(new Set());
-
   const from = dayAt(PLAN_DAYS[0]);
   const to = dayAt(LAST_PLAN_OFFSET);
+  // Отметки «куплено» переживают переход в меню и обратно: в магазине
+  // заглядывали в блюдо, возвращались — и все галочки были сняты (аудит
+  // 26.11.2026, 3.16). Хранятся на этом устройстве, на эти дни меню.
+  const storageKey = `ketocare:shopping:${patientId}:${from}:${to}`;
+  const [bought, setBought] = useState<ReadonlySet<string>>(() =>
+    readBought(storageKey),
+  );
   const days = (week.data?.days ?? []).filter(
     (day) => day.date >= from && day.date <= to,
   );
@@ -58,6 +63,7 @@ export function ShoppingScreen({
       const next = new Set(current);
       if (next.has(productId)) next.delete(productId);
       else next.add(productId);
+      writeBought(storageKey, next);
       return next;
     });
   };
@@ -162,4 +168,26 @@ export function ShoppingScreen({
       </AsyncSection>
     </main>
   );
+}
+
+function readBought(key: string): ReadonlySet<string> {
+  try {
+    const raw = globalThis.sessionStorage?.getItem(key);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === "string")
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writeBought(key: string, ids: ReadonlySet<string>): void {
+  try {
+    globalThis.sessionStorage?.setItem(key, JSON.stringify([...ids]));
+  } catch {
+    // Не сохранилось — отметки живут, пока экран открыт, как прежде.
+  }
 }
