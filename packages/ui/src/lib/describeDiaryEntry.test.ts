@@ -31,13 +31,22 @@ const SEIZURE = {
 };
 
 describe("запись дневника словами (общая для кабинета и Mini App)", () => {
-  it("измеренная длительность — секундами", () => {
+  it("измеренная длительность до минуты — секундами", () => {
     const { lines } = describeDiaryEntry(
-      { ...SEIZURE, duration_sec: 90 },
+      { ...SEIZURE, duration_sec: 45 },
       NAMES,
       echo,
     );
-    expect(lines).toEqual(['entry.durationSec {"value":"90"}']);
+    expect(lines).toEqual(['entry.durationSec {"value":"45"}']);
+  });
+
+  it("от минуты — минутами и секундами, как на секундомере", () => {
+    expect(
+      describeDiaryEntry({ ...SEIZURE, duration_sec: 150 }, NAMES, echo).lines,
+    ).toEqual(['entry.durationMinSec {"minutes":"2","seconds":"30"}']);
+    expect(
+      describeDiaryEntry({ ...SEIZURE, duration_sec: 120 }, NAMES, echo).lines,
+    ).toEqual(['entry.durationMin {"minutes":"2"}']);
   });
 
   it("интервал со слов не превращается в секунды (ADR-0020)", () => {

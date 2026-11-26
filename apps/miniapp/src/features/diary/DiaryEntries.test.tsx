@@ -176,11 +176,13 @@ describe("записи дневника в Mini App", () => {
     );
     // Запись со слов: открыт интервал, поля секунд нет вовсе.
     expect(await screen.findByLabelText(/^Примерно/)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Сколько длился, секунды/)).toBeNull();
+    expect(screen.queryByLabelText("Секунды")).toBeNull();
 
     await user.click(screen.getByLabelText("Засекали по часам"));
     expect(screen.queryByLabelText(/^Примерно/)).toBeNull();
-    await user.type(screen.getByLabelText(/Сколько длился, секунды/), "90");
+    // Минуты и секунды — как на секундомере (4.9): 1:30 → 90 с.
+    await user.type(screen.getByLabelText("Минуты"), "1");
+    await user.type(screen.getByLabelText("Секунды"), "30");
     await user.click(screen.getByRole("button", { name: "Далее" }));
     await user.click(await screen.findByRole("button", { name: "Сохранить" }));
 

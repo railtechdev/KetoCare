@@ -478,7 +478,7 @@ describe("калькулятор в Mini App", () => {
 
     expect(await screen.findByText("Цель не достигнута")).toBeInTheDocument();
     // 224 ккал против цели в 300 — разницу иначе считают в уме.
-    expect(screen.getByText("−76 ккал до цели")).toBeInTheDocument();
+    expect(screen.getByText("на 76 ккал меньше цели")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -1260,7 +1260,7 @@ describe("калькулятор в Mini App", () => {
     await addProduct(user);
 
     expect(
-      await screen.findByText(/продукт удалён из справочника/),
+      await screen.findByText(/этого продукта больше нет в списке продуктов/),
     ).toBeInTheDocument();
     // И сказано, что с этим делать, а не только что случилось.
     expect(screen.getByText(/согласуйте его с врачом/)).toBeInTheDocument();
@@ -2130,12 +2130,14 @@ describe("блюдо ребёнка в расчёте (Б1) и заголово�
       await screen.findByText("Не весь состав встал в расчёт"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/В архиве: Сливки старые — в расчёт не встали/),
+      screen.getByText(
+        /Убраны из списка продуктов: Сливки старые — в расчёт не встали/,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/Масло сливочное, граммы/)).toHaveValue("10");
     expect(screen.queryByLabelText(/Сливки старые, граммы/)).toBeNull();
     // Удалённых из справочника нет — строки о них нет.
-    expect(screen.queryByText(/больше нет в справочнике/)).toBeNull();
+    expect(screen.queryByText(/больше нет в списке продуктов/)).toBeNull();
   });
 
   it("строка «не весь состав» уходит, когда состав поменяли", async () => {

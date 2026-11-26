@@ -202,7 +202,7 @@ describe("карточка блюда ребёнка (Б1)", () => {
     expect(grams.closest("li")).not.toHaveClass("flex-wrap");
     expect(grams).toHaveClass("shrink-0", "text-foreground");
     // Продуктов из архива нет — и пометки нет.
-    expect(within(card).queryByText("в архиве")).toBeNull();
+    expect(within(card).queryByText("убран из списка")).toBeNull();
     expect(
       within(card).getByRole("heading", { name: "Как готовить" }),
     ).toBeInTheDocument();
@@ -329,12 +329,16 @@ describe("карточка блюда ребёнка (Б1)", () => {
       const card = (await openCard(user)).closest("section") as HTMLElement;
 
       expect(
-        await within(card).findByText("В составе есть продукт из архива"),
+        await within(card).findByText(
+          "В составе есть продукт, который убрали из списка продуктов",
+        ),
       ).toBeInTheDocument();
-      expect(card).toHaveTextContent("В архиве: Сливки старые.");
+      expect(card).toHaveTextContent(
+        "Убраны: Сливки старые — их данные могли быть неверными.",
+      );
       expect(
         within(card).getByText("Сливки старые").closest("li"),
-      ).toHaveTextContent("в архиве");
+      ).toHaveTextContent("убран из списка");
     } finally {
       delete PRODUCTS.p9;
     }

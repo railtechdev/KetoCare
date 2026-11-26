@@ -267,7 +267,7 @@ describe("неделя в Mini App", () => {
     await user.click(rows[0]!);
     expect(rows[0]).toBeChecked();
 
-    await user.click(screen.getByRole("button", { name: "Меню" }));
+    await user.click(screen.getByRole("button", { name: "К меню" }));
     expect(
       await screen.findByRole("group", { name: "День" }),
     ).toBeInTheDocument();

@@ -35,7 +35,7 @@ import {
   weightSchema,
   type DiaryEntryBody,
 } from "@ketocare/ui";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { RemoveButton } from "../../components/RemoveButton";
@@ -774,11 +774,10 @@ function DurationField({
         className="w-full [&>label]:flex-1 [&>label]:whitespace-normal"
       />
       {mode === "measured" ? (
-        <TextField
-          label={t("diary.form.durationSec")}
-          optional
-          type="number"
-          inputMode="numeric"
+        // Минуты и секунды — как на секундомере: одно поле секунд заставляло
+        // переводить «2:30» в уме, а «5» врач читал пятью секундами (аудит
+        // 26.11.2026, 4.9). На сервер уходит та же сумма секунд.
+        <MinutesSeconds
           value={text("durationSec")}
           onChange={set("durationSec")}
           hint={t("diary.form.durationHint")}
@@ -1024,5 +1023,92 @@ function SelectField({
         </NativeSelect>
       )}
     </FieldShell>
+  );
+}
+
+/** Длительность двумя полями — минуты и секунды; значение формы — секунды. */
+function MinutesSeconds({
+  value,
+  onChange,
+  hint,
+  error,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  hint: string;
+  error?: string | false;
+}) {
+  const { t } = useTranslation();
+  const ids = useId();
+  const total = value === "" ? null : Number(value);
+  const known = total !== null && Number.isFinite(total) && total >= 0;
+  const [minutes, setMinutes] = useState(() =>
+    known ? String(Math.floor(total / 60)) : "",
+  );
+  const [seconds, setSeconds] = useState(() =>
+    known ? String(Math.round(total % 60)) : "",
+  );
+  const emit = (nextMinutes: string, nextSeconds: string) => {
+    if (nextMinutes.trim() === "" && nextSeconds.trim() === "") {
+      onChange("");
+      return;
+    }
+    const m = nextMinutes.trim() === "" ? 0 : Number(nextMinutes);
+    const sec = nextSeconds.trim() === "" ? 0 : Number(nextSeconds);
+    // Нецелое или отрицательное — отдаётся как есть: проверка формы скажет.
+    onChange(
+      Number.isFinite(m) && Number.isFinite(sec) ? String(m * 60 + sec) : "x",
+    );
+  };
+  return (
+    <fieldset className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
+      <legend className="mb-1">
+        {t("diary.form.durationMeasuredLabel")}{" "}
+        <span className="text-sm text-muted-foreground">
+          {t("diary.optional")}
+        </span>
+      </legend>
+      <div className="flex items-end gap-field">
+        <label className="flex flex-1 flex-col gap-1" htmlFor={`${ids}-m`}>
+          <span className="text-sm">{t("diary.form.minutes")}</span>
+          <Input
+            id={`${ids}-m`}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            className="min-h-touch tabular-nums"
+            value={minutes}
+            aria-invalid={error ? true : undefined}
+            onChange={(event) => {
+              setMinutes(event.target.value);
+              emit(event.target.value, seconds);
+            }}
+          />
+        </label>
+        <label className="flex flex-1 flex-col gap-1" htmlFor={`${ids}-s`}>
+          <span className="text-sm">{t("diary.form.seconds")}</span>
+          <Input
+            id={`${ids}-s`}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={59}
+            className="min-h-touch tabular-nums"
+            value={seconds}
+            aria-invalid={error ? true : undefined}
+            onChange={(event) => {
+              setSeconds(event.target.value);
+              emit(minutes, event.target.value);
+            }}
+          />
+        </label>
+      </div>
+      <span className="text-sm text-muted-foreground">{hint}</span>
+      {error && (
+        <span role="alert" className="text-sm text-destructive">
+          {error}
+        </span>
+      )}
+    </fieldset>
   );
 }
