@@ -134,6 +134,19 @@ function seizureDuration(
   t: DiaryEntryTranslate,
 ): string | null {
   if (entry.duration_sec !== null) {
+    // Минутами и секундами, как на секундомере: «150 с» перечитывали в уме,
+    // а «5» легко принять за пять минут (аудит семейного канала 26.11.2026).
+    const total = Math.round(entry.duration_sec);
+    if (total >= 60) {
+      const minutes = Math.floor(total / 60);
+      const seconds = total % 60;
+      return seconds === 0
+        ? t("entry.durationMin", { minutes: String(minutes) })
+        : t("entry.durationMinSec", {
+            minutes: String(minutes),
+            seconds: String(seconds),
+          });
+    }
     return t("entry.durationSec", {
       value: formatMeasured(entry.duration_sec),
     });
@@ -159,6 +172,8 @@ export const DIARY_ENTRY_KEYS = [
   "entry.seizure",
   "entry.seizureTyped",
   "entry.durationSec",
+  "entry.durationMin",
+  "entry.durationMinSec",
   "entry.durationInterval",
   "entry.durationUnnamed",
   "entry.count",

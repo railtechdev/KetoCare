@@ -245,7 +245,9 @@ describe("динамика в Mini App", () => {
     await openChart();
 
     expect(
-      await screen.findByText("История назначений не загрузилась."),
+      await screen.findByText(
+        "История назначений не загрузилась — график без этих отметок.",
+      ),
     ).toBeInTheDocument();
   });
 

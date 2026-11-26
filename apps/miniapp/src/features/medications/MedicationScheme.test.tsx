@@ -138,7 +138,7 @@ describe("схема препаратов", () => {
     renderScheme();
 
     expect(
-      await screen.findByText("Препаратов в схеме нет."),
+      await screen.findByText("Лекарств в схеме нет."),
     ).toBeInTheDocument();
   });
 

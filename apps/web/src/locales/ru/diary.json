@@ -157,6 +157,8 @@
     "seizure": "Приступ",
     "seizureTyped": "{{type}}",
     "durationSec": "Длительность: {{value}} с",
+    "durationMin": "Длительность: {{minutes}} мин",
+    "durationMinSec": "Длительность: {{minutes}} мин {{seconds}} с",
     "durationInterval": "Длительность: {{value}}",
     "durationUnnamed": "указана словами",
     "count": "Приступов: {{value}}",

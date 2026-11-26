@@ -725,17 +725,19 @@ describe("семья без кабинета (Р4)", () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(await screen.findByRole("button", { name: "Вся схема" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Все лекарства и дозы" }),
+    );
 
     expect(
-      await screen.findByRole("heading", { name: "Схема препаратов" }),
+      await screen.findByRole("heading", { name: "Лекарства и дозы" }),
     ).toBeInTheDocument();
     expect(await screen.findByText("Вальпроат")).toBeInTheDocument();
     expect(screen.getByText("принимается")).toBeInTheDocument();
     // Править нечего: ни «Дали», ни «Пропустили» на схеме нет.
     expect(screen.queryByRole("button", { name: /Дали/ })).toBeNull();
 
-    await user.click(screen.getByRole("button", { name: "Сегодня" }));
+    await user.click(screen.getByRole("button", { name: "К «Сегодня»" }));
     expect(
       await screen.findByRole("heading", { name: "Сегодня", level: 1 }),
     ).toBeInTheDocument();
