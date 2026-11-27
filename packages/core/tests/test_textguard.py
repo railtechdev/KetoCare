@@ -110,18 +110,20 @@ class TestFailClosed:
         assert Kind.INTERNAL in HARD_KINDS
 
 
-# The sentence split was rewritten to stop backtracking quadratically on long
-# runs of «!» (CodeQL py/polynomial-redos). The split must stay the same: the
-# guard pairs signals within a sentence, and a different cut changes verdicts.
+# The sentence split was rewritten as a loop to stop backtracking quadratically
+# on long runs of «!» (CodeQL py/polynomial-redos). The split must stay the
+# same: the guard pairs signals within a sentence, and a different cut changes
+# verdicts. The alphabet includes a non-ASCII digit and a non-breaking space:
+# the regex classes `\d` and `\s` are Unicode-aware, and so must the loop be.
 _PREVIOUS_SPLIT = re.compile(r"(?<![\d])[.!?]+(?=\s|$)|\n+")
 
 
-@given(st.text(alphabet="аб1 9.!?\n\t", max_size=40))
+@given(st.text(alphabet="аб1 9٣.!?\n\t ", max_size=40))
 @settings(max_examples=3000, deadline=None)
 def test_sentence_split_matches_the_previous_rule(text: str) -> None:
-    from core.textguard.textscan import _SENTENCE_SPLIT
+    from core.textguard.textscan import _split_sentences
 
-    assert _SENTENCE_SPLIT.split(text) == _PREVIOUS_SPLIT.split(text)
+    assert _split_sentences(text) == _PREVIOUS_SPLIT.split(text)
 
 
 def test_sentence_split_is_linear_on_a_long_run() -> None:

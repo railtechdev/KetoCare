@@ -10,18 +10,51 @@ from __future__ import annotations
 
 import re
 
-#: Границы предложения: точка, восклицательный или вопросительный знак,
-#: перевод строки. Порядковые сокращения и десятичные дроби сюда не попадают —
-#: точка внутри числа не считается концом (см. `_SENTENCE_SPLIT`).
-#:
-#: Серия знаков начинается в одном месте, а не в каждом: прежнее
-#: `(?<![\d])[.!?]+(?=\s|$)` пробовало каждую позицию серии и на строке из
-#: тысяч «!» без пробела после работало квадратично (CodeQL py/polynomial-redos;
-#: текст присылает семья). Разбиение то же самое: после буквы серия режется с
-#: первого знака; после цифры первый знак остаётся числу («10.»), режется со
-#: второго — ровно там, где начинало прежнее выражение. Равенство держит
-#: тест `test_sentence_split_matches_the_previous_rule`.
-_SENTENCE_SPLIT = re.compile(r"(?<![\d.!?])[.!?]+(?=\s|$)|(?<=\d[.!?])[.!?]+(?=\s|$)|\n+")
+_SENTENCE_END = frozenset(".!?")
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Режет текст по концам предложений — так же, как прежнее выражение.
+
+    Конец предложения — серия «.», «!», «?», за которой пробел или конец
+    текста, либо серия переводов строки. После цифры первый знак серии
+    остаётся числу: «10. мая» не режется, «10.! » режется со второго знака.
+
+    Раньше это было `re.split(r"(?<![\\d])[.!?]+(?=\\s|$)|\\n+", text)`. Оно
+    пробовало каждую позицию серии заново и на строке из тысяч «!» без пробела
+    после работало квадратично (CodeQL py/polynomial-redos; текст присылает
+    семья). Здесь серия проходится один раз. Разбиение то же самое — его держит
+    `test_sentence_split_matches_the_previous_rule`: фильтр сводит признаки
+    внутри предложения, и другой разрез поменял бы вердикты.
+    """
+
+    parts: list[str] = []
+    start = 0
+    i = 0
+    n = len(text)
+    while i < n:
+        char = text[i]
+        if char == "\n":
+            end = i
+            while end < n and text[end] == "\n":
+                end += 1
+            parts.append(text[start:i])
+            start = i = end
+            continue
+        if char in _SENTENCE_END:
+            end = i
+            while end < n and text[end] in _SENTENCE_END:
+                end += 1
+            # `\d` и `\s` выражения — это `isdecimal` и `isspace` строки.
+            cut = i + 1 if i > 0 and text[i - 1].isdecimal() else i
+            if cut < end and (end == n or text[end].isspace()):
+                parts.append(text[start:cut])
+                start = end
+            i = end
+            continue
+        i += 1
+    parts.append(text[start:])
+    return parts
 
 
 def normalize(text: str) -> str:
@@ -60,5 +93,5 @@ def sentences(text: str) -> list[str]:
     склеятся ещё до разбиения.
     """
 
-    parts = (normalize(part) for part in _SENTENCE_SPLIT.split(text) if part)
+    parts = (normalize(part) for part in _split_sentences(text) if part)
     return [part for part in (part.strip() for part in parts) if part]
