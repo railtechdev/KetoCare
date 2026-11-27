@@ -25,40 +25,47 @@ export function DayNavigator({ date, onChange }: Props) {
       aria-label={t("day.label")}
       className="flex flex-wrap items-end gap-field [&_[data-slot=field]]:mb-0"
     >
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="min-h-touch min-w-touch"
-        onClick={() => onChange(shiftIsoDate(date, -1))}
-        aria-label={t("day.previous")}
-      >
-        <ChevronLeft aria-hidden="true" />
-      </Button>
+      {/* Стрелки и дата — одной строкой при любой ширине. На телефоне поле
+          даты занимало строку целиком, и «назад», дата и «вперёд» вставали
+          тремя строками выше самого меню (аудит адаптации, А10). */}
+      <div className="flex min-w-0 flex-[1_1_16rem] items-end gap-field sm:flex-none">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="min-h-touch min-w-touch"
+          onClick={() => onChange(shiftIsoDate(date, -1))}
+          aria-label={t("day.previous")}
+        >
+          <ChevronLeft aria-hidden="true" />
+        </Button>
 
-      <Field
-        id={inputId}
-        width="date"
-        type="date"
-        label={t("day.label")}
-        value={date}
-        onChange={(event) => {
-          // Поле даты можно очистить или оставить неполной датой — тогда
-          // выбранный день не меняется, иначе запрос ушёл бы с пустой датой.
-          if (isIsoDate(event.target.value)) onChange(event.target.value);
-        }}
-      />
+        <div className="min-w-0 flex-1 sm:flex-none">
+          <Field
+            id={inputId}
+            width="date"
+            type="date"
+            label={t("day.label")}
+            value={date}
+            onChange={(event) => {
+              // Поле даты можно очистить или оставить неполной датой — тогда
+              // выбранный день не меняется, иначе запрос ушёл бы с пустой датой.
+              if (isIsoDate(event.target.value)) onChange(event.target.value);
+            }}
+          />
+        </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="min-h-touch min-w-touch"
-        onClick={() => onChange(shiftIsoDate(date, 1))}
-        aria-label={t("day.next")}
-      >
-        <ChevronRight aria-hidden="true" />
-      </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="min-h-touch min-w-touch"
+          onClick={() => onChange(shiftIsoDate(date, 1))}
+          aria-label={t("day.next")}
+        >
+          <ChevronRight aria-hidden="true" />
+        </Button>
+      </div>
 
       <Button
         type="button"

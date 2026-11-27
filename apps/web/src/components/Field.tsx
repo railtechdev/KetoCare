@@ -47,7 +47,8 @@ const WIDTH_CLASS: Record<FieldWidth, string> = {
   date: "sm:max-w-field-date",
   medium: "sm:max-w-field-medium",
   wide: "sm:max-w-field-wide",
-  full: "",
+  // Не «без предела», а самая длинная строка, которую читают целиком.
+  full: "sm:max-w-field-full",
 };
 
 interface FieldBaseProps {

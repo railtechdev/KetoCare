@@ -3,52 +3,77 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
 /**
- * С какой ширины окна колонки расходятся.
+ * Когда колонки расходятся — по ширине места, которое досталось самим
+ * колонкам, а не окна (правило П33 для композиции экрана).
+ *
+ * Прежде порог был экранным (`lg:`, `xl:`). В карте пациента у колонок отнята
+ * навигация карты, и на окне 1024 px основному блоку оставалось около 300 px:
+ * окно было «широким», а место — нет (аудит адаптации 27.11.2026, находка А8).
+ * Теперь `Columns` — контейнер, и порог — наименьшая ширина основной колонки
+ * плюс приставная и промежуток:
+ *
+ * | `from` | основная не уже | обычная (20rem) | широкая (26rem) |
+ * | ------ | --------------- | --------------- | --------------- |
+ * | `md`   | 24rem           | 45rem           | 51rem           |
+ * | `lg`   | 30rem           | 51rem           | 57rem           |
+ * | `xl`   | 34rem           | 55rem           | 61rem           |
+ *
+ * На обычной странице это те же окна, что и прежде: рабочая область окна
+ * 1024 px — около 55rem, 1280 px — около 70rem.
  *
  * Классы записаны целиком, а не собираются из кусков: Tailwind ищет их в
  * исходниках по тексту, и `` `${from}:grid-cols-2` `` не попадает в сборку
  * молча — раскладка просто не применяется, ошибки при этом нет нигде.
  */
 const SPLIT_AT = {
-  md: "md:grid-cols-[minmax(0,1fr)_var(--container-aside)]",
-  lg: "lg:grid-cols-[minmax(0,1fr)_var(--container-aside)]",
-  xl: "xl:grid-cols-[minmax(0,1fr)_var(--container-aside)]",
+  md: "@min-[45rem]:grid-cols-[minmax(0,1fr)_var(--container-aside)]",
+  lg: "@min-[51rem]:grid-cols-[minmax(0,1fr)_var(--container-aside)]",
+  xl: "@min-[55rem]:grid-cols-[minmax(0,1fr)_var(--container-aside)]",
 } as const;
 
 const SPLIT_WIDE_AT = {
-  md: "md:grid-cols-[minmax(0,1fr)_26rem]",
-  lg: "lg:grid-cols-[minmax(0,1fr)_26rem]",
-  xl: "xl:grid-cols-[minmax(0,1fr)_26rem]",
+  md: "@min-[51rem]:grid-cols-[minmax(0,1fr)_26rem]",
+  lg: "@min-[57rem]:grid-cols-[minmax(0,1fr)_26rem]",
+  xl: "@min-[61rem]:grid-cols-[minmax(0,1fr)_26rem]",
 } as const;
 
-/**
- * Приставная колонка стоит в разметке первой, а визуально всё равно справа.
- *
- * Нужно там, где приставное содержимое — итог, к которому идёт основное: на
- * телефоне колонки складываются в одну, и итоги дня уезжали под шесть приёмов
- * пищи, хотя до этого стояли над ними. Телефон у семьи — основной сценарий, и
- * разворот приоритета на нём дороже, чем выигрыш на широком экране.
- *
- * Порядок чтения при этом остаётся честным: он одинаков на обеих ширинах —
- * сначала итог, потом состав. Перестановка задаётся размещением в сетке, а не
- * `order`, поэтому и клавиатура, и скринридер идут в том же порядке, что глаз.
- */
 const ASIDE_FIRST_AT = {
-  md: "md:col-start-2 md:row-start-1",
-  lg: "lg:col-start-2 lg:row-start-1",
-  xl: "xl:col-start-2 xl:row-start-1",
+  default: {
+    md: "@min-[45rem]:col-start-2 @min-[45rem]:row-start-1",
+    lg: "@min-[51rem]:col-start-2 @min-[51rem]:row-start-1",
+    xl: "@min-[55rem]:col-start-2 @min-[55rem]:row-start-1",
+  },
+  wide: {
+    md: "@min-[51rem]:col-start-2 @min-[51rem]:row-start-1",
+    lg: "@min-[57rem]:col-start-2 @min-[57rem]:row-start-1",
+    xl: "@min-[61rem]:col-start-2 @min-[61rem]:row-start-1",
+  },
 } as const;
 
 const MAIN_SECOND_AT = {
-  md: "md:col-start-1 md:row-start-1",
-  lg: "lg:col-start-1 lg:row-start-1",
-  xl: "xl:col-start-1 xl:row-start-1",
+  default: {
+    md: "@min-[45rem]:col-start-1 @min-[45rem]:row-start-1",
+    lg: "@min-[51rem]:col-start-1 @min-[51rem]:row-start-1",
+    xl: "@min-[55rem]:col-start-1 @min-[55rem]:row-start-1",
+  },
+  wide: {
+    md: "@min-[51rem]:col-start-1 @min-[51rem]:row-start-1",
+    lg: "@min-[57rem]:col-start-1 @min-[57rem]:row-start-1",
+    xl: "@min-[61rem]:col-start-1 @min-[61rem]:row-start-1",
+  },
 } as const;
 
 const STICKY_AT = {
-  md: "md:sticky md:top-20 md:self-start",
-  lg: "lg:sticky lg:top-20 lg:self-start",
-  xl: "xl:sticky xl:top-20 xl:self-start",
+  default: {
+    md: "@min-[45rem]:sticky @min-[45rem]:top-20 @min-[45rem]:self-start",
+    lg: "@min-[51rem]:sticky @min-[51rem]:top-20 @min-[51rem]:self-start",
+    xl: "@min-[55rem]:sticky @min-[55rem]:top-20 @min-[55rem]:self-start",
+  },
+  wide: {
+    md: "@min-[51rem]:sticky @min-[51rem]:top-20 @min-[51rem]:self-start",
+    lg: "@min-[57rem]:sticky @min-[57rem]:top-20 @min-[57rem]:self-start",
+    xl: "@min-[61rem]:sticky @min-[61rem]:top-20 @min-[61rem]:self-start",
+  },
 } as const;
 
 export interface ColumnsProps {
@@ -59,7 +84,7 @@ export interface ColumnsProps {
    * `null` — справки сейчас нет, и колонка не занимает места.
    */
   aside: ReactNode;
-  /** С какой ширины колонки расходятся; уже — одна колонка */
+  /** Наименьшая ширина основной колонки, при которой колонки расходятся (таблица выше) */
   from?: keyof typeof SPLIT_AT;
   /** Ширина приставной колонки: обычная (20rem) или широкая (26rem, для расчёта) */
   asideWidth?: "default" | "wide";
@@ -123,7 +148,7 @@ export function Columns({
       key="main"
       className={cn(
         "flex min-w-0 flex-col gap-section",
-        asideFirst && MAIN_SECOND_AT[from],
+        asideFirst && MAIN_SECOND_AT[asideWidth][from],
       )}
     >
       {main}
@@ -136,8 +161,8 @@ export function Columns({
       aria-label={asideLabel}
       className={cn(
         "flex min-w-0 flex-col gap-section",
-        asideFirst && ASIDE_FIRST_AT[from],
-        asideSticky && STICKY_AT[from],
+        asideFirst && ASIDE_FIRST_AT[asideWidth][from],
+        asideSticky && STICKY_AT[asideWidth][from],
       )}
     >
       {aside}
@@ -147,9 +172,13 @@ export function Columns({
   const splitClass =
     asideWidth === "wide" ? SPLIT_WIDE_AT[from] : SPLIT_AT[from];
 
+  // Внешний блок — контейнер, внутренний — сетка: элемент не может спрашивать
+  // ширину у самого себя.
   return (
-    <div className={cn("grid items-start gap-section", splitClass, className)}>
-      {asideFirst ? [asideColumn, mainColumn] : [mainColumn, asideColumn]}
+    <div className={cn("@container", className)}>
+      <div className={cn("grid items-start gap-section", splitClass)}>
+        {asideFirst ? [asideColumn, mainColumn] : [mainColumn, asideColumn]}
+      </div>
     </div>
   );
 }
