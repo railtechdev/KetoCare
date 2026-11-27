@@ -308,16 +308,16 @@ async def _store_trace(
 
     from core.repositories import ai_traces as traces_repo
 
-    steps = dict(trace.steps)
-    worker_ms = trace.elapsed_ms()
-    total_ms = worker_ms
-    if isinstance(enqueued, datetime):
-        # ARQ stamps the moment the API put the task in; the difference to now,
-        # minus what the worker spent, is the wait in the queue.
-        since_enqueue = round((datetime.now(UTC) - enqueued).total_seconds() * 1000)
-        steps["queue"] = max(since_enqueue - worker_ms, 0)
-        total_ms = max(since_enqueue, worker_ms)
     try:
+        steps = dict(trace.steps)
+        worker_ms = trace.elapsed_ms()
+        total_ms = worker_ms
+        if isinstance(enqueued, datetime):
+            # ARQ stamps the moment the API put the task in; the difference to now,
+            # minus what the worker spent, is the wait in the queue.
+            since_enqueue = round((datetime.now(UTC) - enqueued).total_seconds() * 1000)
+            steps["queue"] = max(since_enqueue - worker_ms, 0)
+            total_ms = max(since_enqueue, worker_ms)
         async with sessionmaker() as session:
             await traces_repo.add(
                 session,
