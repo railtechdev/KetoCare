@@ -15,17 +15,17 @@
     "test": "node scripts/check-constants.mjs && vitest run"
   },
   "dependencies": {
-    "@astrojs/sitemap": "^3.7.4",
-    "@fontsource-variable/source-serif-4": "^5.2.6",
+    "@astrojs/sitemap": "^3.7.6",
+    "@fontsource-variable/source-serif-4": "^5.3.1",
     "@fontsource/inter": "^5.2.6",
-    "astro": "^7.3.6"
+    "astro": "^7.4.13"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.10",
+    "@astrojs/check": "^0.9.12",
     "prettier-plugin-astro": "^0.14.1",
     "sharp": "^0.35.5",
     "typescript": "^5.7.2",
-    "vite": "^6.4.5",
+    "vite": "^6.4.6",
     "vitest": "^4.1.12"
   }
 }
