@@ -1,0 +1,24 @@
+# Reviewed gitleaks findings: every one is a deliberate fake, not a secret.
+# Test fixtures (keys, password hashes, Idempotency-Key), the temporary-password
+# alphabet in api/services/admin.py, and the e2e doctor's TOTP secret — a fixed
+# value for the local and CI database only (seed_e2e.py refuses a production
+# database). Reviewed 2026-11-27 over the full history (900 commits).
+#
+# A new finding is not added here by default: first make sure the value is
+# fake, and prefer not to commit anything that looks like a credential.
+00fad6f60e04efda89b00e2f60c937d23861c27f:apps/api/src/api/services/admin.py:generic-api-key:202
+0f8e14fec1766bce28a473a6f2ff8854ac398613:packages/core/tests/test_repositories.py:generic-api-key:23
+16f87326105222ec871b151c6710c195ee95f8dd:apps/api/tests/test_assistant_api.py:generic-api-key:120
+16f87326105222ec871b151c6710c195ee95f8dd:apps/api/tests/test_assistant_api.py:generic-api-key:149
+16f87326105222ec871b151c6710c195ee95f8dd:apps/api/tests/test_assistant_api.py:generic-api-key:198
+16f87326105222ec871b151c6710c195ee95f8dd:apps/api/tests/test_assistant_api.py:generic-api-key:63
+16f87326105222ec871b151c6710c195ee95f8dd:apps/api/tests/test_assistant_api.py:generic-api-key:82
+3b83f4e876317bebdee76f353d59d1a823474ea5:apps/web/src/e2eTotpContract.test.ts:generic-api-key:14
+616fb1c8aebaa932450be6bf3428e92b2338d0de:infra/tests/test_seed_e2e_guard.py:generic-api-key:449
+692ea02f624d7687722bd0f2217dbc4116593bc1:apps/api/tests/test_miniapp_auth.py:generic-api-key:465
+aa2831f185effb5a29525e34dde10d32204f3b3e:packages/core/tests/test_reminders_repo.py:generic-api-key:36
+be50cd2d9f8933e36917e241e9b551ead83df7eb:apps/api/tests/test_miniapp_auth.py:generic-api-key:599
+d1eb5db729cdf47963007f7628a133ea113105c5:infra/tests/test_seed_e2e_guard.py:generic-api-key:270
+f5eb3baa3d4b31e300d174af1a2df42fcbc55690:apps/e2e/src/env.ts:generic-api-key:104
+f5eb3baa3d4b31e300d174af1a2df42fcbc55690:.env.example:generic-api-key:103
+f5eb3baa3d4b31e300d174af1a2df42fcbc55690:infra/scripts/seed_e2e.py:generic-api-key:63
