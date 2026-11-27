@@ -75,7 +75,7 @@ export function ImportNames({ draft }: { draft: ImportDraft }) {
       )}
 
       {waiting.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[44rem] border-collapse text-sm">
             <caption className="pb-2 text-left text-card-title">
               {t("importDraft.names.todo", { count: waiting.length })}

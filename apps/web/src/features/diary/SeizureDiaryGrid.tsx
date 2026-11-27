@@ -110,7 +110,7 @@ export function SeizureDiaryGrid({
         <>
           {/* Широкая таблица прокручивается внутри своего блока, а не тянет
               страницу вбок (правило П17 канона). */}
-          <div className="-mx-2 overflow-x-auto px-2">
+          <div className="relative -mx-2 overflow-x-auto px-2">
             <table className="w-full border-collapse text-sm">
               <caption className="sr-only">{t("grid.caption")}</caption>
               <thead>

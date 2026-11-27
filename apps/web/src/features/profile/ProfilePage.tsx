@@ -4,6 +4,7 @@ import {
   FormFooter,
   Section,
   Skeleton,
+  Tiles,
   toast,
 } from "@ketocare/ui";
 import { useEffect } from "react";
@@ -70,7 +71,9 @@ export function ProfilePage() {
   return (
     <PageLayout
       title={t("title")}
-      width="form"
+      // Блоки профиля независимы, поэтому на широком экране встают в два
+      // столбца (`Tiles`), а не тянутся одной узкой колонкой с прокруткой.
+      width="content"
       intro={
         profile === undefined
           ? undefined
@@ -80,114 +83,116 @@ export function ProfilePage() {
             })
       }
     >
-      {/* Четыре состояния — в AsyncSection: неудачное обновление профиля не
-          должно прятать форму вместе с тем, что пользователь в неё уже ввёл. */}
-      <AsyncSection
-        {...queryState(me)}
-        skeleton={
-          <div
-            className="flex flex-col gap-section"
-            role="status"
-            aria-busy="true"
-          >
-            <Skeleton className="h-14 w-56" />
-            <Skeleton className="h-72 w-full rounded-xl" />
-          </div>
-        }
-        error={
-          me.isError
-            ? {
-                title: t("loadError"),
-                description:
-                  errorMessageOf(me.error) ?? t("common:errors.unexpected"),
-              }
-            : null
-        }
-        retryLabel={t("common:actions.retry")}
-        onRetry={() => void me.refetch()}
-        isEmpty={profile === undefined}
-        empty={null}
-      >
-        {profile !== undefined && (
-          <Section title={t("card.title")} description={t("card.intro")}>
-            <form
-              onSubmit={handleSubmit((values) => {
-                update.mutate(
-                  {
-                    full_name: values.fullName,
-                    phone:
-                      values.phone.trim() === "" ? null : values.phone.trim(),
-                  },
-                  { onSuccess: () => toast.success(t("saved")) },
-                );
-              })}
-              noValidate
+      <Tiles min="lg">
+        {/* Четыре состояния — в AsyncSection: неудачное обновление профиля не
+            должно прятать форму вместе с тем, что пользователь в неё уже ввёл. */}
+        <AsyncSection
+          {...queryState(me)}
+          skeleton={
+            <div
               className="flex flex-col gap-section"
+              role="status"
+              aria-busy="true"
             >
-              <FormErrorSummary
-                items={errorSummaryItems(submitCount, [
-                  ["profile-name", nameError],
-                ])}
-                focusKey={submitCount}
-              />
+              <Skeleton className="h-14 w-56" />
+              <Skeleton className="h-72 w-full rounded-xl" />
+            </div>
+          }
+          error={
+            me.isError
+              ? {
+                  title: t("loadError"),
+                  description:
+                    errorMessageOf(me.error) ?? t("common:errors.unexpected"),
+                }
+              : null
+          }
+          retryLabel={t("common:actions.retry")}
+          onRetry={() => void me.refetch()}
+          isEmpty={profile === undefined}
+          empty={null}
+        >
+          {profile !== undefined && (
+            <Section title={t("card.title")} description={t("card.intro")}>
+              <form
+                onSubmit={handleSubmit((values) => {
+                  update.mutate(
+                    {
+                      full_name: values.fullName,
+                      phone:
+                        values.phone.trim() === "" ? null : values.phone.trim(),
+                    },
+                    { onSuccess: () => toast.success(t("saved")) },
+                  );
+                })}
+                noValidate
+                className="flex flex-col gap-section"
+              >
+                <FormErrorSummary
+                  items={errorSummaryItems(submitCount, [
+                    ["profile-name", nameError],
+                  ])}
+                  focusKey={submitCount}
+                />
 
-              <Field
-                id="profile-name"
-                width="wide"
-                autoComplete="name"
-                label={t("fields.fullName")}
-                error={nameError}
-                {...register("fullName")}
-              />
+                <Field
+                  id="profile-name"
+                  width="wide"
+                  autoComplete="name"
+                  label={t("fields.fullName")}
+                  error={nameError}
+                  {...register("fullName")}
+                />
 
-              <Field
-                id="profile-phone"
-                width="medium"
-                type="tel"
-                autoComplete="tel"
-                optional
-                label={t("fields.phone")}
-                {...register("phone")}
-              />
+                <Field
+                  id="profile-phone"
+                  width="medium"
+                  type="tel"
+                  autoComplete="tel"
+                  optional
+                  label={t("fields.phone")}
+                  {...register("phone")}
+                />
 
-              <Field
-                width="wide"
-                id="profile-email"
-                type="email"
-                label={t("fields.email")}
-                hint={t("emailHint")}
-                // Пусто не бывает: в кабинет входят почтой, а у родителя из
-                // Telegram её нет — он сюда и не попадает (ADR-0040). Схема
-                // допускает `null`, и поле обязано что-то показать.
-                value={profile.email ?? ""}
-                readOnly
-                disabled
-              />
+                <Field
+                  width="wide"
+                  id="profile-email"
+                  type="email"
+                  label={t("fields.email")}
+                  hint={t("emailHint")}
+                  // Пусто не бывает: в кабинет входят почтой, а у родителя из
+                  // Telegram её нет — он сюда и не попадает (ADR-0040). Схема
+                  // допускает `null`, и поле обязано что-то показать.
+                  value={profile.email ?? ""}
+                  readOnly
+                  disabled
+                />
 
-              {update.error !== null && (
-                <FormError>
-                  {errorMessageOf(update.error) ??
-                    t("common:errors.unexpected")}
-                </FormError>
-              )}
+                {update.error !== null && (
+                  <FormError>
+                    {errorMessageOf(update.error) ??
+                      t("common:errors.unexpected")}
+                  </FormError>
+                )}
 
-              <FormFooter
-                submitLabel={t("common:actions.save")}
-                pendingLabel={t("common:actions.saving")}
-                pending={update.isPending}
-              />
-            </form>
-          </Section>
-        )}
-      </AsyncSection>
-      {/* Смена пароля — отдельным блоком и вне AsyncSection: она не зависит от
-          того, загрузился ли профиль, и должна быть доступна даже если чтение
-          профиля отказало. */}
-      <PasswordSection />
+                <FormFooter
+                  submitLabel={t("common:actions.save")}
+                  pendingLabel={t("common:actions.saving")}
+                  pending={update.isPending}
+                />
+              </form>
+            </Section>
+          )}
+        </AsyncSection>
+        {/* Смена пароля — отдельным блоком и вне AsyncSection: она не зависит от
+            того, загрузился ли профиль, и должна быть доступна даже если чтение
+            профиля отказало. */}
+        <PasswordSection />
 
-      <BackupCodesSection />
+        <BackupCodesSection />
 
-      <TrustedDevicesSection />
+        <TrustedDevicesSection />
+      </Tiles>
     </PageLayout>
   );
 }

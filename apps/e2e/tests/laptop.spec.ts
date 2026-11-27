@@ -180,3 +180,103 @@ for (const { width, height, strict } of WIDTHS) {
     });
   });
 }
+
+/**
+ * Правило П59 канона: страница занимает рабочую область или стоит в ней по
+ * центру, и вбок не прокручивается ни на одной ширине.
+ *
+ * Замер 27.11.2026 (`docs/AUDIT_ADAPTIVE_2026-11.md`): узкая колонка была
+ * прижата влево и оставляла пустыми 70 % монитора 2560 px, а на телефоне
+ * действия шапки и таблицы «Моделей и расхода» уводили страницу вбок.
+ */
+async function sideGaps(page: Page): Promise<{ left: number; right: number }> {
+  return page.evaluate(() => {
+    const column = document.querySelector("[data-page-width]") as HTMLElement;
+    const main = document.querySelector("main") as HTMLElement;
+    const style = getComputedStyle(main);
+    const area = main.getBoundingClientRect();
+    const box = column.getBoundingClientRect();
+    return {
+      left: box.left - area.left - parseFloat(style.paddingLeft),
+      right: area.right - parseFloat(style.paddingRight) - box.right,
+    };
+  });
+}
+
+async function checkBalance(page: Page, path: string): Promise<void> {
+  await page.goto(path);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const gaps = await sideGaps(page);
+  expect
+    .soft(
+      Math.abs(gaps.left - gaps.right),
+      `${path}: слева ${Math.round(gaps.left)} px, справа ${Math.round(gaps.right)} px`,
+    )
+    .toBeLessThanOrEqual(2);
+}
+
+async function checkNoSideScroll(page: Page, path: string): Promise<void> {
+  await page.goto(path);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  const overflow = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  );
+  expect
+    .soft(overflow, `${path}: страница уезжает вбок`)
+    .toBeLessThanOrEqual(1);
+}
+
+test.describe("2560 px", () => {
+  test.use({ viewport: { width: 2560, height: 1440 } });
+
+  test("страницы стоят по центру рабочей области", async ({ page }) => {
+    test.setTimeout(180_000);
+    await loginAsDoctor(page);
+    for (const section of [...SECTIONS, "articles"]) {
+      await checkBalance(page, `/app/${section}`);
+    }
+    await loginAsAdmin(page);
+    for (const section of [
+      ...ADMIN_SECTIONS,
+      "ai",
+      "productArticles",
+      "letterhead",
+    ]) {
+      await checkBalance(page, `/app/${section}`);
+    }
+    await loginAsParent(page);
+    for (const section of ["home", "assistant", "child?tab=add", "profile"]) {
+      await checkBalance(page, `/app/${section}`);
+    }
+  });
+});
+
+test.describe("360 px", () => {
+  test.use({ viewport: { width: 360, height: 740 } });
+
+  test("экраны специалиста и администратора не уезжают вбок", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const patient = await childOfParent(page);
+    await loginAsDoctor(page);
+    for (const section of [...SECTIONS, "articles"]) {
+      await checkNoSideScroll(page, `/app/${section}`);
+    }
+    for (const view of PATIENT_VIEWS) {
+      await checkNoSideScroll(page, `/app/patients/${patient}/${view}`);
+    }
+    await loginAsAdmin(page);
+    for (const section of [
+      ...ADMIN_SECTIONS,
+      "ai",
+      "productArticles",
+      "letterhead",
+    ]) {
+      await checkNoSideScroll(page, `/app/${section}`);
+    }
+  });
+});

@@ -325,7 +325,36 @@ describe("ход терапии (вопросы 17, 18, 34)", () => {
     );
   });
 
-  it("график строится кнопкой, когда дата начала известна", async () => {
+  it("пустой график: кнопка стоит в пустом блоке и называет дату начала", async () => {
+    (api.POST as Mock).mockResolvedValue({ data: [{ id: "v1" }] });
+    const user = userEvent.setup();
+    render(<TherapyCourseView patientId={PATIENT_ID} editable />, {
+      wrapper: wrapper(),
+    });
+
+    // Одна кнопка построения, и она говорит, от какой даты: вторая, в шапке,
+    // оставляла вопрос, какую из двух нажимать.
+    const build = await screen.findByRole("button", {
+      name: "Построить график от 31.01.2026",
+    });
+    expect(
+      screen.queryByRole("button", { name: doctorRu.course.visits.build }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/визиты встанут сами.*от 31\.01\.2026/),
+    ).toBeInTheDocument();
+
+    await user.click(build);
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/patients/{patient_id}/control-visits/schedule",
+        { params: { path: { patient_id: PATIENT_ID } } },
+      ),
+    );
+  });
+
+  it("при заведённых визитах график дополняется кнопкой в шапке", async () => {
+    visits = [OPEN_VISIT];
     (api.POST as Mock).mockResolvedValue({ data: [{ id: "v1" }] });
     const user = userEvent.setup();
     render(<TherapyCourseView patientId={PATIENT_ID} editable />, {

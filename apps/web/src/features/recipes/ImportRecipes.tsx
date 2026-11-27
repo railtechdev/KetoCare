@@ -398,7 +398,7 @@ function LinesTable({
   );
 
   return (
-    <div className="flex flex-col gap-2 overflow-x-auto">
+    <div className="relative flex flex-col gap-2 overflow-x-auto">
       {/* Массы, которые не удалось сверить со строкой файла (таблица без
           единиц, две массы в строке), подтверждаются разом — но только здесь,
           под открытым составом, где они перед глазами. */}

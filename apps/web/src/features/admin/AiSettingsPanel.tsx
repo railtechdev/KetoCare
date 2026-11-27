@@ -273,7 +273,7 @@ function ProvidersSection({
         </Button>
       }
     >
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[44rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-muted-foreground">
@@ -518,7 +518,7 @@ function ModelsSection({
         </Button>
       }
     >
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[44rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-muted-foreground">
@@ -709,7 +709,7 @@ function GroupsSection({
       <p className="m-0 text-sm text-muted-foreground">
         {t("ai.groups.intro")}
       </p>
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[48rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
