@@ -1,0 +1,59 @@
+# Обновления зависимостей — раз в месяц, одним PR на экосистему.
+#
+# Только минорные и патч-версии: смена major — это работа с ADR и прогоном
+# эталонов, а не автоматический PR. Каждый PR проходит обычный путь: CI,
+# сквозной прогон на ветке, слияние человеком; main уезжает на стенд.
+#
+# numpy и scipy закреплены ADR-0014 (процессор стенда без x86-64-v2) и не
+# обновляются вовсе: новая версия падает на импорте у пациента, а не в CI.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      python:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: numpy
+      - dependency-name: scipy
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      javascript:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore(ci)
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /infra/docker
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore(infra)
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

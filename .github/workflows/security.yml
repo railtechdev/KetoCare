@@ -1,0 +1,82 @@
+name: Безопасность кода
+
+# Две проверки, которых не было до 27.11.2026:
+#
+# - секреты: gitleaks по коммитам PR и по тому, что пришло в main, раз в
+#   неделю — по всей истории. Репозиторий публичный, и ключ, попавший в
+#   коммит, становится известен сразу, а не после слияния. Разобранные
+#   заглушки (тестовые ключи, фиктивный секрет e2e) — в `.gitleaksignore`;
+# - анализ кода: CodeQL по Python, TypeScript и самим workflow. Находки
+#   уходят во вкладку Security, PR они не роняют.
+#
+# Выкат ждёт только workflow «CI» (deploy.yml), поэтому здесь ничего не
+# останавливает выкат. Красная проверка секретов в PR — это повод не
+# сливать его, а не сбой инфраструктуры.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Секреты в коммитах
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        # Образ, а не gitleaks-action: действию для репозитория организации
+        # нужна платная лицензия, сам gitleaks — MIT. Версия закреплена.
+        run: |
+          case "$EVENT" in
+            pull_request) range="$PR_BASE..$PR_HEAD" ;;
+            push)
+              if [ "$PUSH_BEFORE" = "0000000000000000000000000000000000000000" ]; then
+                range="--all"
+              else
+                range="$PUSH_BEFORE..$PUSH_AFTER"
+              fi ;;
+            *) range="--all" ;;
+          esac
+          echo "Проверяются коммиты: $range"
+          docker run --rm -v "$PWD":/repo:ro ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --log-opts="$range" --redact --no-banner --exit-code 1
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          # Python и TypeScript разбираются без сборки.
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
