@@ -11,6 +11,7 @@ from sqlalchemy import select
 from api.services import ai_settings as service
 from core.models import AiJob, AuditLog
 from core.models.enums import AiJobKind, AiJobStatus, UserRole
+from core.repositories import ai_traces as ai_traces_repo
 
 URL = "/api/v1/admin/ai"
 KEY = "sk-ant-api03-cabinet-secret-value-7788"
@@ -856,3 +857,72 @@ class TestBudgetAlerts:
         entry = page["items"][0]
         assert entry["payload_hidden"] is False
         assert entry["after"]["enabled"] is False
+
+
+# --- assistant speed (ADR-0094) ---------------------------------------------------
+
+
+class TestAssistantSpeed:
+    async def test_only_the_administrator(self, client, make_user, auth_headers) -> None:
+        doctor = await make_user(UserRole.DOCTOR)
+        response = await client.get(f"{URL}/assistant-speed", headers=auth_headers(doctor))
+        assert response.status_code == 403
+
+    async def test_unknown_period_is_refused(self, client, admin, auth_headers) -> None:
+        response = await client.get(
+            f"{URL}/assistant-speed?period=year", headers=auth_headers(admin)
+        )
+        assert response.status_code == 422
+
+    async def test_steps_in_order_and_by_model(self, client, session, admin, auth_headers) -> None:
+        """Consumer: the «Скорость помощника» block of the spend tab."""
+
+        for model_ms in (2000, 4000, 6000):
+            await ai_traces_repo.add(
+                session,
+                kind=AiJobKind.ASSISTANT,
+                outcome="answered",
+                steps={"save": 5, "model": model_ms, "search": 20, "queue": 100},
+                total_ms=model_ms + 200,
+                model="anthropic/claude-opus-5",
+            )
+        await ai_traces_repo.add(
+            session,
+            kind=AiJobKind.ASSISTANT,
+            outcome="no_material",
+            steps={"search": 30, "save": 4},
+            total_ms=60,
+            model=None,
+        )
+
+        response = await client.get(
+            f"{URL}/assistant-speed?period=day", headers=auth_headers(admin)
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["period"] == "day"
+        assert body["total"]["count"] == 4
+        assert [line["step"] for line in body["steps"]] == ["queue", "search", "model", "save"]
+        model = {line["step"]: line for line in body["steps"]}["model"]
+        assert (model["count"], model["median_ms"], model["max_ms"]) == (3, 4000, 6000)
+        assert body["by_model"] == [
+            {
+                "model": "anthropic/claude-opus-5",
+                "count": 3,
+                "median_ms": 4000,
+                "p90_ms": model["p90_ms"],
+                "max_ms": 6000,
+            }
+        ]
+        assert body["outcomes"] == [
+            {"outcome": "answered", "count": 3},
+            {"outcome": "no_material", "count": 1},
+        ]
+
+    async def test_no_answers(self, client, admin, auth_headers) -> None:
+        response = await client.get(f"{URL}/assistant-speed", headers=auth_headers(admin))
+        assert response.status_code == 200
+        body = response.json()
+        assert body["period"] == "week"
+        assert (body["total"], body["steps"], body["outcomes"]) == (None, [], [])

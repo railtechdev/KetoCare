@@ -14,6 +14,8 @@
   `AI_MODEL_FAST` / `AI_MODEL_SMART`), но не из кода;
 - ретраи и таймаут — у провода (`transport`), он же единственный импортирует
   LiteLLM.
+- длительность шагов — подготовка, модель, запись расхода — в трейс задачи,
+  если она его ведёт (`core.ai_trace`, ADR-0094).
 
 Чего здесь нет намеренно: промптов и разбора ответа. Промпты живут файлами в
 `prompts/` и меняются отдельным PR (раздел 10.4 ТЗ), разбор — дело задачи,
@@ -31,7 +33,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from core import app_settings
+from core import ai_trace, app_settings
 from core.ai_catalog import ResolvedModel, model_ref
 from core.app_settings import AI_TASKS, AiConfig
 from core.config import Settings
@@ -169,56 +171,59 @@ class AiClient:
         # не оговорка к запрету контактов в промптах (ADR-0019).
         safe_text = scrub_free_text(user_text)
 
-        async with self._sessionmaker() as session:
-            config = await app_settings.ai_config(session, self._settings)
-            if not config.group_of(kind).enabled:
-                raise AiDisabled("Эта функция ИИ выключена администратором.")
-            resolved = self.model_for(kind, config)
-            # В журнал — ссылка каталога: по ней расход сводится по моделям,
-            # и по ней же видно, через какое подключение шёл вызов.
-            model = model_ref(resolved.provider.id, resolved.model)
+        with ai_trace.step("prepare"):
+            async with self._sessionmaker() as session:
+                config = await app_settings.ai_config(session, self._settings)
+                if not config.group_of(kind).enabled:
+                    raise AiDisabled("Эта функция ИИ выключена администратором.")
+                resolved = self.model_for(kind, config)
+                # В журнал — ссылка каталога: по ней расход сводится по моделям,
+                # и по ней же видно, через какое подключение шёл вызов.
+                model = model_ref(resolved.provider.id, resolved.model)
 
-            # Бронь — верхняя оценка стоимости, списывается в бюджет ДО вызова:
-            # пока строка `RUNNING`, настоящей цены никто не знает, а без брони
-            # одновременные задачи проходили бы предохранитель все разом.
-            reserved = resolved.entry.cost(
-                tokens_in=_prompt_tokens_guess(safe_payload), tokens_out=max_tokens
-            )
+                # Бронь — верхняя оценка стоимости, списывается в бюджет ДО вызова:
+                # пока строка `RUNNING`, настоящей цены никто не знает, а без брони
+                # одновременные задачи проходили бы предохранитель все разом.
+                reserved = resolved.entry.cost(
+                    tokens_in=_prompt_tokens_guess(safe_payload), tokens_out=max_tokens
+                )
 
-            # Проверка и запись — под одной блокировкой: иначе одновременные
-            # задачи читают одинаковый расход и проходят предохранитель разом.
-            await jobs_repo.lock_budget(session)
-            await self._assert_within_limits(
-                session, config=config, requested_by=requested_by, kind=kind
-            )
-            job = await jobs_repo.create(
-                session,
-                kind=kind,
-                requested_by=requested_by,
-                patient_id=patient_id,
-                payload={"payload": safe_payload, "user_text": safe_text},
-                model=model,
-                reserved_cost_usd=reserved,
-            )
-            job_id = job.id
-            await session.commit()
+                # Проверка и запись — под одной блокировкой: иначе одновременные
+                # задачи читают одинаковый расход и проходят предохранитель разом.
+                await jobs_repo.lock_budget(session)
+                await self._assert_within_limits(
+                    session, config=config, requested_by=requested_by, kind=kind
+                )
+                job = await jobs_repo.create(
+                    session,
+                    kind=kind,
+                    requested_by=requested_by,
+                    patient_id=patient_id,
+                    payload={"payload": safe_payload, "user_text": safe_text},
+                    model=model,
+                    reserved_cost_usd=reserved,
+                )
+                job_id = job.id
+                await session.commit()
+        ai_trace.note_model(model)
 
         parts = [json.dumps(safe_payload, ensure_ascii=False, sort_keys=True)]
         if safe_text:
             parts.append(safe_text)
 
         try:
-            completion = await self._transport.complete(
-                ModelCall(
-                    route=resolved.route,
-                    api_key=resolved.provider.api_key,
-                    base_url=resolved.provider.base_url,
-                    system=system,
-                    parts=tuple(parts),
-                    max_tokens=max_tokens,
-                    timeout_s=timeout_s,
+            with ai_trace.step("model"):
+                completion = await self._transport.complete(
+                    ModelCall(
+                        route=resolved.route,
+                        api_key=resolved.provider.api_key,
+                        base_url=resolved.provider.base_url,
+                        system=system,
+                        parts=tuple(parts),
+                        max_tokens=max_tokens,
+                        timeout_s=timeout_s,
+                    )
                 )
-            )
         except Exception as error:  # noqa: BLE001 — наружу идёт один понятный тип
             await self._finish_failed(
                 job_id, error=_describe_failure(error, secret=resolved.provider.api_key)
@@ -247,18 +252,19 @@ class AiClient:
             )
             raise AiUnavailable("Модель не вернула ответ.")
 
-        async with self._sessionmaker() as session:
-            stored = await jobs_repo.get(session, job_id)
-            if stored is not None:
-                await jobs_repo.mark_done(
-                    session,
-                    job=stored,
-                    output={"text": text},
-                    tokens_in=tokens_in,
-                    tokens_out=tokens_out,
-                    cost_usd=cost,
-                )
-                await session.commit()
+        with ai_trace.step("record"):
+            async with self._sessionmaker() as session:
+                stored = await jobs_repo.get(session, job_id)
+                if stored is not None:
+                    await jobs_repo.mark_done(
+                        session,
+                        job=stored,
+                        output={"text": text},
+                        tokens_in=tokens_in,
+                        tokens_out=tokens_out,
+                        cost_usd=cost,
+                    )
+                    await session.commit()
 
         return AiAnswer(
             job_id=job_id,
@@ -348,18 +354,19 @@ class AiClient:
         tokens_out: int | None = None,
         cost: Decimal | None = None,
     ) -> None:
-        async with self._sessionmaker() as session:
-            job = await jobs_repo.get(session, job_id)
-            if job is not None:
-                await jobs_repo.mark_failed(
-                    session,
-                    job=job,
-                    error=error,
-                    tokens_in=tokens_in,
-                    tokens_out=tokens_out,
-                    cost_usd=cost,
-                )
-                await session.commit()
+        with ai_trace.step("record"):
+            async with self._sessionmaker() as session:
+                job = await jobs_repo.get(session, job_id)
+                if job is not None:
+                    await jobs_repo.mark_failed(
+                        session,
+                        job=job,
+                        error=error,
+                        tokens_in=tokens_in,
+                        tokens_out=tokens_out,
+                        cost_usd=cost,
+                    )
+                    await session.commit()
 
 
 #: Грубая оценка «символов на токен» для брони.

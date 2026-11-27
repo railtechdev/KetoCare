@@ -27,6 +27,7 @@ from ..schemas_ai_settings import (
     AiPriceSuggestion,
     AiSettingsView,
     AiSpendReport,
+    AssistantSpeedReport,
     SpendPeriod,
 )
 from ..services import ai_settings as service
@@ -56,6 +57,20 @@ async def read_spend(
     never what they asked."""
 
     return await service.spend_report(session, get_settings(), period)
+
+
+@router.get(
+    "/assistant-speed",
+    response_model=AssistantSpeedReport,
+    summary="Сколько идёт ответ помощника по шагам",
+)
+async def read_assistant_speed(
+    session: SessionDep, period: Annotated[SpendPeriod, Query()] = "week"
+) -> AssistantSpeedReport:
+    """Step timings of assistant answers (ADR-0094): durations only, no text,
+    no person, no child."""
+
+    return await service.assistant_speed(session, get_settings(), period)
 
 
 @router.put("/project", response_model=AiSettingsView, summary="Бюджет проекта")

@@ -1,12 +1,14 @@
 import {
   AsyncSection,
   EmptyState,
+  formatNumber,
   Metric,
   MetricRow,
   Section,
   SegmentedControl,
 } from "@ketocare/ui";
-import { Receipt } from "lucide-react";
+import type { TFunction } from "i18next";
+import { Receipt, Timer } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -14,12 +16,15 @@ import { SectionLink } from "../../components/SectionLink";
 import { errorMessageOf } from "../../lib/api";
 import { queryState } from "../../lib/queryState";
 import { useSectionTab } from "../../routes/useSectionTab";
+import { POLL_MS } from "../assistant/useAssistant";
 import { formatCount, formatUsd } from "./format";
 import { TableSkeleton } from "./TableSkeleton";
 import {
   useAiSpend,
+  useAssistantSpeed,
   type AiSpendPeriod,
   type AiSpendReport,
+  type AssistantSpeedReport,
 } from "./useAiSettings";
 
 const PERIODS = [
@@ -91,6 +96,8 @@ export function AiSpendPanel() {
       >
         {report && <SpendReport report={report} />}
       </AsyncSection>
+
+      <AssistantSpeedSection period={period} />
     </div>
   );
 }
@@ -329,5 +336,183 @@ function PeopleSection({ report }: { report: AiSpendReport }) {
         </p>
       )}
     </Section>
+  );
+}
+
+/**
+ * «850 мс», «4,2 с» или «30 с»: доли секунды, секунды и десятки секунд
+ * читаются по-разному — десятая доля у полуминуты уже шум.
+ */
+function duration(t: TFunction<"admin">, ms: number): string {
+  return ms < 1000
+    ? t("ai.speed.ms", { value: formatCount(ms) })
+    : t("ai.speed.seconds", {
+        value: formatNumber(ms / 1000, ms < 10_000 ? 1 : 0),
+      });
+}
+
+/**
+ * Куда уходит время ответа помощника (ADR-0094) — по шагам, за тот же период,
+ * что и расход. Обычный случай (медиана) и плохой (каждый десятый ответ):
+ * один ответ, застрявший на минуту в повторах, среднее увёл бы далеко от того,
+ * сколько семья обычно ждёт, а медиана его спрятала бы.
+ *
+ * Только длительности: ни вопроса, ни ответа, ни человека.
+ */
+function AssistantSpeedSection({ period }: { period: AiSpendPeriod }) {
+  const { t } = useTranslation("admin");
+  const speed = useAssistantSpeed(period);
+  const report = speed.data;
+
+  return (
+    <Section title={t("ai.speed.title")} description={t("ai.speed.intro")}>
+      <AsyncSection
+        {...queryState(speed)}
+        skeleton={<TableSkeleton label={t("ai.speed.loading")} columns={4} />}
+        error={
+          speed.isError
+            ? {
+                title: t("ai.speed.loadError"),
+                description:
+                  errorMessageOf(speed.error) ?? t("common:errors.unexpected"),
+              }
+            : null
+        }
+        retryLabel={t("common:actions.retry")}
+        onRetry={() => void speed.refetch()}
+        isEmpty={report !== undefined && report.total === null}
+        empty={
+          <EmptyState
+            icon={Timer}
+            title={t("ai.speed.empty")}
+            description={t(`ai.spend.emptyHint.${period}`)}
+          />
+        }
+      >
+        {report?.total && <SpeedReport report={report} total={report.total} />}
+      </AsyncSection>
+    </Section>
+  );
+}
+
+function SpeedReport({
+  report,
+  total,
+}: {
+  report: AssistantSpeedReport;
+  total: NonNullable<AssistantSpeedReport["total"]>;
+}) {
+  const { t } = useTranslation("admin");
+
+  return (
+    <div className="flex flex-col gap-section">
+      <MetricRow label={t("ai.speed.totalsLabel")}>
+        <Metric
+          label={t("ai.speed.usual")}
+          value={duration(t, total.median_ms)}
+        />
+        <Metric label={t("ai.speed.slow")} value={duration(t, total.p90_ms)} />
+        <Metric label={t("ai.speed.worst")} value={duration(t, total.max_ms)} />
+        <Metric
+          label={t("ai.speed.answers")}
+          value={formatCount(total.count)}
+        />
+      </MetricRow>
+
+      <div className="relative overflow-x-auto">
+        <table className="w-full min-w-[36rem] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground">
+              <Th>{t("ai.speed.columns.step")}</Th>
+              <Th end>{t("ai.speed.columns.usual")}</Th>
+              <Th end>{t("ai.speed.columns.slow")}</Th>
+              <Th end>{t("ai.speed.columns.worst")}</Th>
+              <Th end>{t("ai.speed.columns.count")}</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.steps.map((line) => (
+              <tr
+                key={line.step}
+                className="border-b border-border align-top last:border-b-0"
+              >
+                <th scope="row" className="py-2 pr-3 text-left font-normal">
+                  <span className="block">
+                    {t(`ai.speed.steps.${line.step}.title`)}
+                  </span>
+                  <span className="block text-muted-foreground">
+                    {t(`ai.speed.steps.${line.step}.hint`)}
+                  </span>
+                </th>
+                <Td end>
+                  <span className="font-medium">
+                    {duration(t, line.median_ms)}
+                  </span>
+                </Td>
+                <Td end>{duration(t, line.p90_ms)}</Td>
+                <Td end>{duration(t, line.max_ms)}</Td>
+                <Td end>{formatCount(line.count)}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* Последний шаг сервер не видит: экран сам спрашивает, готов ли
+          ответ. Без этой строки сумма шагов казалась бы всем ожиданием. */}
+      <p className="m-0 text-sm text-muted-foreground">
+        {t("ai.speed.poll", { value: duration(t, POLL_MS) })}
+      </p>
+
+      {report.by_model.length > 0 && (
+        <div className="relative overflow-x-auto">
+          <table className="w-full min-w-[36rem] border-collapse text-sm">
+            <caption className="pb-2 text-left font-medium">
+              {t("ai.speed.byModel")}
+            </caption>
+            <thead>
+              <tr className="border-b border-border text-muted-foreground">
+                <Th>{t("ai.spend.columns.model")}</Th>
+                <Th end>{t("ai.speed.columns.usual")}</Th>
+                <Th end>{t("ai.speed.columns.slow")}</Th>
+                <Th end>{t("ai.speed.columns.worst")}</Th>
+                <Th end>{t("ai.speed.columns.count")}</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.by_model.map((line) => (
+                <tr
+                  key={line.model}
+                  className="border-b border-border align-top last:border-b-0"
+                >
+                  <th scope="row" className="py-2 pr-3 text-left font-normal">
+                    {line.model}
+                  </th>
+                  <Td end>
+                    <span className="font-medium">
+                      {duration(t, line.median_ms)}
+                    </span>
+                  </Td>
+                  <Td end>{duration(t, line.p90_ms)}</Td>
+                  <Td end>{duration(t, line.max_ms)}</Td>
+                  <Td end>{formatCount(line.count)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="m-0 text-sm text-muted-foreground">
+        {t("ai.speed.outcomesLabel")}{" "}
+        {report.outcomes
+          .map((line) =>
+            t("ai.speed.outcomeValue", {
+              outcome: t(`ai.speed.outcomes.${line.outcome}`),
+              value: formatCount(line.count),
+            }),
+          )
+          .join(", ")}
+      </p>
+    </div>
   );
 }

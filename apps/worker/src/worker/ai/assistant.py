@@ -23,14 +23,18 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core import ai_trace
 from core.models.enums import AiJobKind
 from core.repositories import knowledge_base as kb
 from core.textguard.assistant_guard import Kind, check, check_answer
@@ -95,13 +99,15 @@ async def answer(
     if not text:
         return Answer(text=NO_MATERIAL, blocked=True, reason="пустой вопрос", no_material=True)
 
-    asked = check(text)
+    with ai_trace.step("question_check"):
+        asked = check(text)
     if asked.blocked:
         # Вопрос сам просит запрещённого. К модели не идём: ответ известен, а
         # обращение стоило бы денег и всё равно было бы заменено шаблоном.
         return Answer(text=DOCTOR_TEMPLATE, blocked=True, reason=f"вопрос: {asked.rule}")
 
-    passages = await kb.search(session, q=text, limit=MAX_PASSAGES)
+    with ai_trace.step("search"):
+        passages = await kb.search(session, q=text, limit=MAX_PASSAGES)
     if not passages:
         return Answer(
             text=NO_MATERIAL, blocked=True, reason="в базе знаний нет материала", no_material=True
@@ -137,7 +143,9 @@ async def answer(
     except AiError:
         raise
 
-    verdict = check_answer(reply.text)
+    with ai_trace.step("answer_check"):
+        verdict = check_answer(reply.text)
+        cited = tuple(dict.fromkeys(_CITATION.findall(reply.text)))
     if verdict.blocked:
         return Answer(
             text=DOCTOR_TEMPLATE,
@@ -146,7 +154,6 @@ async def answer(
             ai_job_id=reply.job_id,
         )
 
-    cited = tuple(dict.fromkeys(_CITATION.findall(reply.text)))
     invented = [source for source in cited if source not in known]
     if invented:
         # Выдуманная ссылка выглядит как настоящая: семья пойдёт искать статью,
@@ -217,49 +224,109 @@ async def assistant_reply(
     job_id = None
     status = "done"
 
-    try:
+    with ai_trace.tracing() as trace:
+        try:
+            async with sessionmaker() as session:
+                result = await answer(
+                    build_ai_client(),
+                    session,
+                    requested_by=uuid.UUID(requested_by),
+                    patient_id=uuid.UUID(patient_id),
+                    question=question,
+                )
+            text = result.text
+            sources = list(result.sources)
+            blocked = result.blocked
+            no_material = result.no_material
+            job_id = result.ai_job_id
+        except AiLimitExceeded as error:
+            text = str(error)
+            limited = True
+        except AiError:
+            text = ASSISTANT_UNAVAILABLE
+            status = "failed"
+
         async with sessionmaker() as session:
-            result = await answer(
-                build_ai_client(),
-                session,
-                requested_by=uuid.UUID(requested_by),
-                patient_id=uuid.UUID(patient_id),
-                question=question,
-            )
-        text = result.text
-        sources = list(result.sources)
-        blocked = result.blocked
-        no_material = result.no_material
-        job_id = result.ai_job_id
-    except AiLimitExceeded as error:
-        text = str(error)
-        limited = True
-    except AiError:
-        text = ASSISTANT_UNAVAILABLE
-        status = "failed"
+            with trace.step("save"):
+                conversation = await conversations_repo.get_for_update(
+                    session, uuid.UUID(conversation_id)
+                )
+                if conversation is None:
+                    # Разговор мог исчезнуть вместе с пациентом (`erase_patient`):
+                    # дописывать некуда, и это не ошибка.
+                    return {"status": "gone"}
 
-    async with sessionmaker() as session:
-        conversation = await conversations_repo.get_for_update(session, uuid.UUID(conversation_id))
-        if conversation is None:
-            # Разговор мог исчезнуть вместе с пациентом (`erase_patient`):
-            # дописывать некуда, и это не ошибка.
-            return {"status": "gone"}
+                await conversations_repo.replace_message(
+                    session,
+                    conversation=conversation,
+                    message=new_message(
+                        seq=reply_seq,
+                        role="assistant",
+                        text=text,
+                        status=status,  # type: ignore[arg-type]
+                        blocked=blocked,
+                        limited=limited,
+                        no_material=no_material,
+                        sources=sources,
+                        ai_job_id=job_id,
+                    ),
+                )
+                await session.commit()
 
-        await conversations_repo.replace_message(
-            session,
-            conversation=conversation,
-            message=new_message(
-                seq=reply_seq,
-                role="assistant",
-                text=text,
-                status=status,  # type: ignore[arg-type]
-                blocked=blocked,
-                limited=limited,
-                no_material=no_material,
-                sources=sources,
-                ai_job_id=job_id,
-            ),
-        )
-        await session.commit()
+    outcome: ai_trace.AssistantOutcome
+    if limited:
+        outcome = "limited"
+    elif status == "failed":
+        outcome = "failed"
+    elif no_material:
+        outcome = "no_material"
+    elif blocked:
+        # The model was called only if a job was opened.
+        outcome = "refused_answer" if job_id is not None else "refused_question"
+    else:
+        outcome = "answered"
+    await _store_trace(sessionmaker, trace, outcome=outcome, enqueued=ctx.get("enqueue_time"))
 
     return {"status": status, "blocked": blocked}
+
+
+_log = logging.getLogger(__name__)
+
+
+async def _store_trace(
+    sessionmaker: Any,
+    trace: ai_trace.Trace,
+    *,
+    outcome: ai_trace.AssistantOutcome,
+    enqueued: object,
+) -> None:
+    """Write how long each step took (ADR-0094) — after the answer is saved.
+
+    The family already has the answer; a failed write of a timing must not
+    turn it into an error, so it is logged and dropped.
+    """
+
+    from core.repositories import ai_traces as traces_repo
+
+    steps = dict(trace.steps)
+    worker_ms = trace.elapsed_ms()
+    total_ms = worker_ms
+    if isinstance(enqueued, datetime):
+        # ARQ stamps the moment the API put the task in; the difference to now,
+        # minus what the worker spent, is the wait in the queue.
+        since_enqueue = round((datetime.now(UTC) - enqueued).total_seconds() * 1000)
+        steps["queue"] = max(since_enqueue - worker_ms, 0)
+        total_ms = max(since_enqueue, worker_ms)
+    try:
+        async with sessionmaker() as session:
+            await traces_repo.add(
+                session,
+                kind=AiJobKind.ASSISTANT,
+                outcome=outcome,
+                steps=steps,
+                total_ms=total_ms,
+                model=trace.model,
+            )
+            await session.commit()
+    except Exception:  # noqa: BLE001 — a timing is never worth a failed answer
+        _log.warning("assistant trace was not stored", exc_info=True)
