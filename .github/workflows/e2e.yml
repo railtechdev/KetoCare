@@ -30,6 +30,11 @@ env:
   # значит однажды разойтись молча.
   MINIAPP_PORT: "5174"
 
+# Токен по умолчанию — только чтение (CodeQL actions/missing-workflow-permissions).
+# Задаче отчёта о сбое права на issues выдаются в ней самой.
+permissions:
+  contents: read
+
 jobs:
   e2e:
     name: Сквозной сценарий (Playwright)

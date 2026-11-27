@@ -155,6 +155,7 @@ def make_stand(tmp_path: Path) -> Iterator[MakeStand]:
         cert, key = _certificate(tmp_path, cert_days)
         https = ThreadingHTTPServer(("127.0.0.1", 0), _handler(stand))
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(cert, key)
         https.socket = context.wrap_socket(https.socket, server_side=True)
         telegram = ThreadingHTTPServer(("127.0.0.1", 0), _handler(stand))

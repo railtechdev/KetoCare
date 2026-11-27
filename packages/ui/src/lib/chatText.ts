@@ -33,7 +33,11 @@ const HEADING = /^\s{0,3}#{1,6}\s+(.*)$/;
 const ORDERED = /^\s*(\d{1,3})[.)]\s+(.*)$/;
 const BULLET = /^\s*[-•*]\s+(.*)$/;
 const RULE = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
-const LINK = /\[([^\]\n]*)\]\([^)\n]*\)/g;
+// Neither part may contain «[»: otherwise every «[» of a long «[[[[…» or
+// «[](»-run scans to the end of the line, and the reply renders in quadratic
+// time (CodeQL js/polynomial-redos). A link's label and address never hold a
+// raw «[» in practice; if one does, the text stays and only the link goes.
+const LINK = /\[([^[\]\n]*)\]\([^)[\n]*\)/g;
 const STRONG = /\*\*([^\n]+?)\*\*|__([^\n]+?)__/g;
 const WORD = /[\p{L}\p{N}]/u;
 
