@@ -22,7 +22,7 @@ dependencies = [
 
 [dependency-groups]
 test = [
-    "pyyaml>=6.0",
+    "pyyaml>=6.0.4",
 ]
 
 [build-system]
