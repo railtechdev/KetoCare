@@ -52,6 +52,25 @@ describe("DataTable", () => {
     expect(screen.getByText("Вес")).toBeInTheDocument();
   });
 
+  it("в узком месте строка — карточка с подписями, семантика таблицы на месте", () => {
+    // Аудит адаптации 27.11.2026, А9: на телефоне таблица специалиста
+    // читалась только прокруткой вбок. Раскладку решает контейнерный запрос;
+    // здесь проверяется то, на чём он стоит.
+    const { container } = renderTable([{ name: "Кетоны", value: 3 }]);
+
+    const table = screen.getByRole("table", { name: "Тестовая таблица" });
+    expect(table.parentElement?.className).toContain("@container");
+    expect(screen.getAllByRole("columnheader")).toHaveLength(2);
+    expect(screen.getAllByRole("cell")).toHaveLength(2);
+
+    // Подпись карточки — у второй ячейки, не у первой (она заголовок
+    // карточки), и скрыта от скринридера: он слышит заголовок столбца.
+    const labels = container.querySelectorAll("td > span[aria-hidden]");
+    expect(Array.from(labels, (label) => label.textContent)).toEqual([
+      "Значение",
+    ]);
+  });
+
   it("сортирует по клику и объявляет направление через aria-sort", async () => {
     const user = userEvent.setup();
     renderTable([

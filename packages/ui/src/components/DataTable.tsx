@@ -125,13 +125,25 @@ export function DataTable<TData>({
           ячейке за краем иначе позиционировалась от страницы, и вбок уезжала
           вся страница, а не только таблица (справочник продуктов на 1024 px:
           полное имя источника в колонке «Источник»). */}
-      <div className="relative overflow-x-auto">
-        <table className="w-full border-collapse text-left text-sm">
+      {/* Узкое место — карточки, а не таблица (аудит адаптации 27.11.2026, А9).
+          На телефоне таблица специалиста читалась только прокруткой вбок: имя
+          пациента в одном конце, пометки в другом. Ниже 40rem строка становится
+          карточкой «подпись — значение», первая колонка — её заголовком. Порог
+          — по ширине самой таблицы (`@container`), а не окна: та же таблица
+          стоит и во всю ширину, и в карте пациента рядом с её навигацией.
+          Роли проставлены явно: смена `display` у элементов таблицы снимает с
+          них табличную семантику в части браузеров. */}
+      <div className="relative @container overflow-x-auto">
+        <table
+          role="table"
+          className="w-full border-collapse text-left text-sm @max-[40rem]:block"
+        >
           <caption className="sr-only">{caption}</caption>
-          <thead>
+          <thead role="rowgroup" className="@max-[40rem]:sr-only">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr
                 key={headerGroup.id}
+                role="row"
                 className="border-b border-border bg-muted/45"
               >
                 {headerGroup.headers.map((header) => {
@@ -143,6 +155,7 @@ export function DataTable<TData>({
                     <th
                       key={header.id}
                       scope="col"
+                      role="columnheader"
                       // aria-sort объявляет направление сортировки скринридеру:
                       // стрелка в заголовке видна только зрячим.
                       aria-sort={
@@ -155,7 +168,7 @@ export function DataTable<TData>({
                       className={cn(
                         "px-3.5 py-2.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase",
                         isStickyRight &&
-                          "sticky right-0 z-10 border-l border-border/60 bg-muted/95 backdrop-blur-xs",
+                          "@min-[40rem]:sticky right-0 z-10 border-l border-border/60 bg-muted/95 backdrop-blur-xs",
                       )}
                     >
                       {sortable ? (
@@ -193,27 +206,62 @@ export function DataTable<TData>({
             ))}
           </thead>
 
-          <tbody className="divide-y divide-border bg-card">
+          <tbody
+            role="rowgroup"
+            className="divide-y divide-border bg-card @max-[40rem]:block"
+          >
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="group bg-card transition-colors hover:bg-muted/35"
+                role="row"
+                // Карточка — одна сетка на все строки: колонка подписей шириной
+                // с самую длинную подпись, общая для всей карточки (`subgrid`).
+                // С долей ширины на каждую строку «Кетосоотношение» на 360 px
+                // не помещалось в свою колонку.
+                className="group bg-card transition-colors hover:bg-muted/35 @max-[40rem]:grid @max-[40rem]:grid-cols-[minmax(min-content,max-content)_minmax(0,1fr)] @max-[40rem]:gap-x-3 @max-[40rem]:gap-y-1.5 @max-[40rem]:px-3.5 @max-[40rem]:py-3"
               >
-                {row.getVisibleCells().map((cell) => {
+                {row.getVisibleCells().map((cell, index) => {
                   const isStickyRight = cell.column.id === "actions";
+                  const header = cell.column.columnDef.header;
+                  // Подпись карточки — заголовок столбца, если это строка.
+                  // Первая ячейка — заголовок самой карточки, у действий
+                  // подписи нет: кнопки говорят сами за себя.
+                  const label =
+                    index > 0 && !isStickyRight && typeof header === "string"
+                      ? header
+                      : "";
                   return (
                     <td
                       key={cell.id}
+                      role="cell"
                       className={cn(
-                        "px-3.5 py-2.5 align-middle",
+                        "px-3.5 py-2.5 align-middle @max-[40rem]:col-span-2 @max-[40rem]:p-0",
+                        index === 0 && "@max-[40rem]:font-medium",
+                        label !== "" &&
+                          "@max-[40rem]:grid @max-[40rem]:grid-cols-subgrid",
                         isStickyRight &&
-                          "sticky right-0 z-10 border-l border-border/60 bg-card/95 backdrop-blur-xs group-hover:bg-muted/85",
+                          "border-border/60 @min-[40rem]:sticky @min-[40rem]:right-0 @min-[40rem]:z-10 @min-[40rem]:border-l @min-[40rem]:bg-card/95 @min-[40rem]:backdrop-blur-xs @min-[40rem]:group-hover:bg-muted/85 @max-[40rem]:pt-1",
                       )}
                     >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
+                      {label !== "" && (
+                        // Подпись видна только в карточке; скринридер берёт
+                        // заголовок столбца из таблицы и второй раз её не слышит.
+                        <span
+                          aria-hidden="true"
+                          className="hidden text-muted-foreground @max-[40rem]:block"
+                        >
+                          {label}
+                        </span>
                       )}
+                      {/* В карточке значение переносится: пометка «Назначения ещё
+                          нет» и кнопка «Напомнить семье» в строке без переноса
+                          уходили за край карточки на 360 px. */}
+                      <div className="min-w-0 @max-[40rem]:break-words @max-[40rem]:[&_*]:whitespace-normal">
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </div>
                     </td>
                   );
                 })}

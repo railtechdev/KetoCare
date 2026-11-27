@@ -7,10 +7,18 @@ import {
   type ReactNode,
 } from "react";
 
-import { api, onSessionExpired, setAccessToken } from "../../lib/api";
+import {
+  api,
+  isTransient,
+  onSessionExpired,
+  setAccessToken,
+} from "../../lib/api";
 import { readTokenClaims, type Session } from "./claims";
 import { SessionContext, type SessionState } from "./sessionContext";
 import { clearTabStorage } from "../../lib/tabStorage";
+
+/** Паузы перед повторами восстановления сессии: в сумме около минуты. */
+const RESTORE_DELAYS_MS = [2_000, 4_000, 8_000, 16_000, 30_000] as const;
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -79,12 +87,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // недоступном сервере навсегда застревал на «восстанавливаем сессию»,
       // не пуская даже на страницу входа.
       try {
-        const { data } = await api.POST("/api/v1/auth/refresh", { body: {} });
-        if (cancelled) return;
+        // «Слишком часто» и сбой сервера о сессии ничего не говорят: прежде
+        // после них кабинет показывал экран входа человеку, который из него не
+        // выходил (аудит адаптации 27.11.2026, А11). Повтор с нарастающей
+        // паузой укладывается в минуту — окно лимита обновления на сервере.
+        for (let attempt = 0; ; attempt++) {
+          const { data, response } = await api.POST("/api/v1/auth/refresh", {
+            body: {},
+          });
+          if (cancelled) return;
 
-        if (data?.access_token) {
-          setAccessToken(data.access_token);
-          setSession(readTokenClaims(data.access_token));
+          if (data?.access_token) {
+            setAccessToken(data.access_token);
+            setSession(readTokenClaims(data.access_token));
+            break;
+          }
+          if (
+            response === undefined ||
+            !isTransient(response.status) ||
+            attempt >= RESTORE_DELAYS_MS.length
+          ) {
+            break;
+          }
+          await new Promise((resolve) =>
+            setTimeout(resolve, RESTORE_DELAYS_MS[attempt]),
+          );
+          if (cancelled) return;
         }
       } catch {
         // Сервер недоступен: сессии нет, но экран входа человеку доступен.

@@ -3,6 +3,38 @@ import { createApiClient, NetworkError } from "@ketocare/api-client";
 import i18n from "./i18n";
 
 /**
+ * Обновление access-токена по refresh-cookie. `null` — сессии больше нет;
+ * исключение — временный отказ, после которого сессия жива.
+ */
+export async function refreshAccessToken(): Promise<string | null> {
+  const response = await fetch("/api/v1/auth/refresh", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  // Сессии больше нет только тогда, когда сервер так и сказал. «Слишком
+  // часто» (429) и сбой сервера (5xx) — временные: прежде они тоже давали
+  // `null`, и клиент уводил на экран входа человека с живой сессией посреди
+  // работы (аудит адаптации 27.11.2026, А11). Теперь отказывает только сам
+  // запрос, а экран предлагает повторить.
+  if (isTransient(response.status)) {
+    throw new SessionRefreshDeferred(response.status);
+  }
+  if (!response.ok) return null;
+
+  const body: unknown = await response.json();
+  const token =
+    typeof body === "object" && body !== null && "access_token" in body
+      ? (body as { access_token?: unknown }).access_token
+      : undefined;
+  if (typeof token !== "string") return null;
+
+  setAccessToken(token);
+  return token;
+}
+
+/**
  * Единственная точка обращения к API (раздел 8.4 ТЗ): ручных fetch во фронтенде
  * быть не должно — клиент генерируется из OpenAPI (`make openapi`).
  */
@@ -14,25 +46,7 @@ export const api = createApiClient({
   // четверть часа молча переставал работать. Запрос делается «сырым» fetch, а
   // не через `api`, чтобы не уйти в рекурсию: обновление вызывается изнутри
   // обработки ответа самого клиента.
-  refreshAccessToken: async () => {
-    const response = await fetch("/api/v1/auth/refresh", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    if (!response.ok) return null;
-
-    const body: unknown = await response.json();
-    const token =
-      typeof body === "object" && body !== null && "access_token" in body
-        ? (body as { access_token?: unknown }).access_token
-        : undefined;
-    if (typeof token !== "string") return null;
-
-    setAccessToken(token);
-    return token;
-  },
+  refreshAccessToken,
 
   onSessionExpired: () => {
     setAccessToken(null);
@@ -41,6 +55,19 @@ export const api = createApiClient({
     });
   },
 });
+
+/** Отказ обновления, после которого сессия жива: повторить позже. */
+export class SessionRefreshDeferred extends Error {
+  constructor(readonly status: number) {
+    super(`session refresh deferred: ${status}`);
+    this.name = "SessionRefreshDeferred";
+  }
+}
+
+/** «Слишком часто» и сбой сервера: ответ о сессии ничего не говорит. */
+export function isTransient(status: number): boolean {
+  return status === 429 || status >= 500;
+}
 
 /**
  * Подписка на окончательное истечение сессии.
