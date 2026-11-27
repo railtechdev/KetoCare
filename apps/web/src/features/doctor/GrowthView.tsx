@@ -100,7 +100,7 @@ export function GrowthView({ patientId }: { patientId: string }) {
 
       {points.length > 0 && (
         <Section title={t("growth.tableTitle")} density="compact">
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-muted-foreground">

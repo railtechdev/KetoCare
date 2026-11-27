@@ -198,7 +198,15 @@ export function Field({
       id={id}
     >
       {isPassword ? (
-        <div className={cn("relative flex items-center", WIDTH_CLASS[width])}>
+        <div
+          // Размер шрифта — как у самого поля: ширина задана в `ch`, а `ch`
+          // считается от шрифта элемента. Без этого поле пароля выходило на
+          // 14 % шире соседнего поля той же роли ширины.
+          className={cn(
+            "relative flex items-center text-base md:text-sm",
+            WIDTH_CLASS[width],
+          )}
+        >
           <Input
             id={id}
             type={effectiveType}

@@ -209,7 +209,7 @@ function SpendTable({
   const { t } = useTranslation("admin");
 
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className="w-full min-w-[36rem] border-collapse text-sm">
         <thead>
           <tr className="border-b border-border text-muted-foreground">
@@ -267,7 +267,7 @@ function PeopleSection({ report }: { report: AiSpendReport }) {
       title={t("ai.spend.people")}
       description={t("ai.spend.peopleIntro")}
     >
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[40rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-muted-foreground">

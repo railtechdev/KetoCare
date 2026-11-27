@@ -80,6 +80,25 @@ export function TherapyCourseView({
   const upcoming = upcomingVisits(visits);
   const frame = useDocumentFrame();
   const patient = usePatient(patientId);
+  // График ещё не построен, а строить есть от чего: кнопка встаёт в пустой
+  // блок вместе с объяснением, что произойдёт.
+  const buildInEmptyState =
+    editable &&
+    schedule.data !== undefined &&
+    visits.length === 0 &&
+    startedOn !== null;
+
+  const buildSchedule = () =>
+    mutations.buildSchedule.mutate(undefined, {
+      onSuccess: (created) =>
+        toast.success(
+          created.length === 0
+            ? t("course.visits.scheduleUpToDate")
+            : t("course.visits.scheduleBuilt", { count: created.length }),
+        ),
+      onError: (error) =>
+        toast.error(errorMessageOf(error) ?? t("common:errors.unexpected")),
+    });
 
   return (
     <>
@@ -121,35 +140,27 @@ export function TherapyCourseView({
                   )}
                   {editable && (
                     <div className="flex flex-wrap gap-2">
+                      {!buildInEmptyState && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={
+                            startedOn === null ||
+                            mutations.buildSchedule.isPending
+                          }
+                          aria-describedby={buildReasonId}
+                          onClick={buildSchedule}
+                        >
+                          {t("course.visits.build")}
+                        </Button>
+                      )}
                       <Button
                         type="button"
-                        variant="outline"
-                        disabled={
-                          startedOn === null ||
-                          mutations.buildSchedule.isPending
-                        }
-                        aria-describedby={buildReasonId}
-                        onClick={() =>
-                          mutations.buildSchedule.mutate(undefined, {
-                            onSuccess: (created) =>
-                              toast.success(
-                                created.length === 0
-                                  ? t("course.visits.scheduleUpToDate")
-                                  : t("course.visits.scheduleBuilt", {
-                                      count: created.length,
-                                    }),
-                              ),
-                            onError: (error) =>
-                              toast.error(
-                                errorMessageOf(error) ??
-                                  t("common:errors.unexpected"),
-                              ),
-                          })
-                        }
+                        // Пока графика нет, первый шаг — построить его; визит
+                        // вне графика остаётся рядом, но не главным действием.
+                        variant={buildInEmptyState ? "outline" : "default"}
+                        onClick={() => setVisitOpen(true)}
                       >
-                        {t("course.visits.build")}
-                      </Button>
-                      <Button type="button" onClick={() => setVisitOpen(true)}>
                         <Plus aria-hidden="true" />
                         {t("course.visits.add")}
                       </Button>
@@ -215,9 +226,29 @@ export function TherapyCourseView({
                     description={
                       // Читающему (диетолог) совет «постройте график» обещал
                       // кнопки, которых у него нет (аудит интерфейса 18.11.2026).
-                      editable
-                        ? t("course.visits.emptyDescription")
-                        : t("course.visits.emptyDescriptionReadOnly")
+                      !editable
+                        ? t("course.visits.emptyDescriptionReadOnly")
+                        : buildInEmptyState
+                          ? t("course.visits.emptyDescriptionBuild", {
+                              date: formatIsoDate(startedOn) ?? startedOn,
+                            })
+                          : t("course.visits.emptyDescription")
+                    }
+                    // Кнопка стоит там же, где совет: прежде пустой блок
+                    // говорил «постройте график», а нажимать надо было в
+                    // шапке, и было неясно, строит ли его система сама.
+                    action={
+                      buildInEmptyState && (
+                        <Button
+                          type="button"
+                          disabled={mutations.buildSchedule.isPending}
+                          onClick={buildSchedule}
+                        >
+                          {t("course.visits.buildFrom", {
+                            date: formatIsoDate(startedOn) ?? startedOn,
+                          })}
+                        </Button>
+                      )
                     }
                   />
                 }
