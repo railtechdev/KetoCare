@@ -16,6 +16,22 @@ describe("parseChatInline", () => {
     ).toEqual([{ text: "откройте настройки", strong: false }]);
   });
 
+  it("ссылка рядом со скобками снимается так же, адрес не остаётся", () => {
+    expect(parseChatInline("см. [[статью](https://evil.example/x)]")).toEqual([
+      { text: "см. [статью]", strong: false },
+    ]);
+  });
+
+  it("длинная серия скобок разбирается за линейное время", () => {
+    for (const run of ["[\\", "[]("]) {
+      const started = performance.now();
+      // The previous pattern took ~0.9 s at 20 000 repeats and grows as the
+      // square: 60 000 puts it well past the limit, the fix stays in ms.
+      parseChatInline(run.repeat(60_000));
+      expect(performance.now() - started).toBeLessThan(1000);
+    }
+  });
+
   it("обратные кавычки и одиночные знаки разметки снимаются", () => {
     expect(
       parseChatInline("нажмите `Сохранить` *сразу* _потом_ # тут"),

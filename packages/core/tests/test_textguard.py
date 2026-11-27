@@ -9,11 +9,15 @@
 
 from __future__ import annotations
 
+import re
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from core.textguard import Kind, check, has_hard
 from core.textguard.summary_guard import HARD_KINDS
@@ -104,3 +108,27 @@ class TestFailClosed:
 
     def test_internal_is_hard(self) -> None:
         assert Kind.INTERNAL in HARD_KINDS
+
+
+# The sentence split was rewritten as a loop to stop backtracking quadratically
+# on long runs of «!» (CodeQL py/polynomial-redos). The split must stay the
+# same: the guard pairs signals within a sentence, and a different cut changes
+# verdicts. The alphabet includes a non-ASCII digit and a non-breaking space:
+# the regex classes `\d` and `\s` are Unicode-aware, and so must the loop be.
+_PREVIOUS_SPLIT = re.compile(r"(?<![\d])[.!?]+(?=\s|$)|\n+")
+
+
+@given(st.text(alphabet="аб1 9٣.!?\n\t ", max_size=40))
+@settings(max_examples=3000, deadline=None)
+def test_sentence_split_matches_the_previous_rule(text: str) -> None:
+    from core.textguard.textscan import _split_sentences
+
+    assert _split_sentences(text) == _PREVIOUS_SPLIT.split(text)
+
+
+def test_sentence_split_is_linear_on_a_long_run() -> None:
+    from core.textguard.textscan import sentences
+
+    started = time.perf_counter()
+    sentences("приступ" + "!" * 50_000 + "x")
+    assert time.perf_counter() - started < 1.0
