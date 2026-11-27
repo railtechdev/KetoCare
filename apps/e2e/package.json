@@ -11,8 +11,8 @@
     "format": "prettier --write src tests playwright.config.ts global-setup.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.0",
-    "@types/node": "^22.10.2",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^22.20.5",
     "typescript": "^5.7.2"
   }
 }
