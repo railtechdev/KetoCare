@@ -329,8 +329,9 @@ describe("состояния, которые не врут", () => {
     );
     const dialog = await screen.findByRole("dialog", { name: "Новая запись" });
     const type = await within(dialog).findByLabelText(/Тип приступа/);
-    // Узкая ширина обрезала выбранное значение: «Выберите ин…».
-    expect(type.className).not.toMatch(/max-w-field/);
+    // Узкая ширина обрезала выбранное значение: «Выберите ин…». Предел
+    // «во всю ширину» — строка в 80 знаков, шире любой панели.
+    expect(type.className).not.toMatch(/max-w-field-(?!full)/);
   });
 });
 

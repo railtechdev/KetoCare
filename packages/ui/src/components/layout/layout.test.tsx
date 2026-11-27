@@ -40,6 +40,25 @@ describe("Columns", () => {
     expect(container.textContent).toBe("главноесбоку");
   });
 
+  it("расходится по ширине своего места, а не окна", () => {
+    // В карте пациента навигация карты отнимает у колонок 15rem: на окне
+    // 1024 px порог по окну делил оставшиеся 40rem на 300 px основного и
+    // справку (аудит адаптации 27.11.2026, А8).
+    const { container } = render(
+      <Columns
+        asideLabel="Справка"
+        main={<p>главное</p>}
+        aside={<p>сбоку</p>}
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    const grid = root.firstElementChild as HTMLElement;
+
+    expect(root.className).toContain("@container");
+    expect(grid.className).toMatch(/@min-\[51rem\]:grid-cols-/);
+    expect(grid.className).not.toMatch(/(^|\s)(md|lg|xl):grid-cols-/);
+  });
+
   it("asideFirst ставит приставное раньше основного и в разметке тоже", () => {
     // Порядок чтения обязан совпадать на обеих ширинах: перестановка задаётся
     // размещением в сетке, а не `order`, иначе клавиатура и скринридер пошли бы
