@@ -9,6 +9,7 @@ import { useSession } from "./useSession";
 
 vi.mock("../../lib/api", () => ({
   api: { POST: vi.fn() },
+  isTransient: (status: number) => status === 429 || status >= 500,
   setAccessToken: vi.fn(),
   // Провайдер подписывается на окончательное истечение сессии, чтобы увести
   // человека на вход. Подписка возвращает функцию отписки — её вызывает React
@@ -100,6 +101,48 @@ describe("сессия и кэш запросов", () => {
 
     expect(client.getQueryData(PATIENT_KEY)).toBeUndefined();
     expect(setAccessToken).toHaveBeenCalledWith(null);
+  });
+
+  it("«слишком часто» при загрузке — повтор, а не экран входа", async () => {
+    // Десять перезагрузок подряд давали 429 на обновлении, и кабинет считал,
+    // что сессии нет (аудит адаптации 27.11.2026, А11).
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      (api.POST as unknown as Mock)
+        .mockResolvedValueOnce({ response: { status: 429 } })
+        .mockResolvedValueOnce({ response: { status: 503 } })
+        .mockResolvedValueOnce({
+          data: { access_token: token("u1") },
+          response: { status: 200 },
+        });
+
+      renderProbe();
+      expect(screen.getByText("Восстанавливаем сессию…")).toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(4_000);
+
+      expect(
+        await screen.findByRole("button", { name: "Выйти" }),
+      ).toBeInTheDocument();
+      expect(api.POST).toHaveBeenCalledTimes(3);
+      expect(setAccessToken).toHaveBeenCalledWith(token("u1"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("отказ в сессии (401) не повторяется", async () => {
+    (api.POST as unknown as Mock).mockResolvedValue({
+      response: { status: 401 },
+    });
+
+    renderProbe();
+
+    expect(
+      await screen.findByRole("button", { name: "Выйти" }),
+    ).toBeInTheDocument();
+    expect(api.POST).toHaveBeenCalledTimes(1);
   });
 
   it("недоступный сервер не оставляет кабинет в восстановлении навсегда", async () => {
