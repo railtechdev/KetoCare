@@ -214,7 +214,11 @@ export function DataTable<TData>({
               <tr
                 key={row.id}
                 role="row"
-                className="group bg-card transition-colors hover:bg-muted/35 @max-[40rem]:flex @max-[40rem]:flex-col @max-[40rem]:gap-1.5 @max-[40rem]:px-3.5 @max-[40rem]:py-3"
+                // Карточка — одна сетка на все строки: колонка подписей шириной
+                // с самую длинную подпись, общая для всей карточки (`subgrid`).
+                // С долей ширины на каждую строку «Кетосоотношение» на 360 px
+                // не помещалось в свою колонку.
+                className="group bg-card transition-colors hover:bg-muted/35 @max-[40rem]:grid @max-[40rem]:grid-cols-[minmax(min-content,max-content)_minmax(0,1fr)] @max-[40rem]:gap-x-3 @max-[40rem]:gap-y-1.5 @max-[40rem]:px-3.5 @max-[40rem]:py-3"
               >
                 {row.getVisibleCells().map((cell, index) => {
                   const isStickyRight = cell.column.id === "actions";
@@ -231,10 +235,10 @@ export function DataTable<TData>({
                       key={cell.id}
                       role="cell"
                       className={cn(
-                        "px-3.5 py-2.5 align-middle @max-[40rem]:p-0",
+                        "px-3.5 py-2.5 align-middle @max-[40rem]:col-span-2 @max-[40rem]:p-0",
                         index === 0 && "@max-[40rem]:font-medium",
                         label !== "" &&
-                          "@max-[40rem]:grid @max-[40rem]:grid-cols-[minmax(6rem,40%)_minmax(0,1fr)] @max-[40rem]:gap-3",
+                          "@max-[40rem]:grid @max-[40rem]:grid-cols-subgrid",
                         isStickyRight &&
                           "border-border/60 @min-[40rem]:sticky @min-[40rem]:right-0 @min-[40rem]:z-10 @min-[40rem]:border-l @min-[40rem]:bg-card/95 @min-[40rem]:backdrop-blur-xs @min-[40rem]:group-hover:bg-muted/85 @max-[40rem]:pt-1",
                       )}
@@ -249,7 +253,10 @@ export function DataTable<TData>({
                           {label}
                         </span>
                       )}
-                      <div className="min-w-0">
+                      {/* В карточке значение переносится: пометка «Назначения ещё
+                          нет» и кнопка «Напомнить семье» в строке без переноса
+                          уходили за край карточки на 360 px. */}
+                      <div className="min-w-0 @max-[40rem]:break-words @max-[40rem]:[&_*]:whitespace-normal">
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext(),
