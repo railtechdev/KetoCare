@@ -309,8 +309,23 @@ REMOTE
     echo "https://app.$old_name → https://app.$new_name"
 }
 
+relay_old() {
+    # Новые имена ещё не открываются (DNS): люди продолжают ходить по прежним
+    # адресам, а прежний сервер пересылает их новому SSH-туннелем
+    # (interim-relay.sh). Окончательные имена нового сервера — в NEW_NAME:
+    # его окружение на это время смотрит на прежние.
+    say "прежний сервер: адреса пересылаются на новый"
+    local old_name new_ip
+    old_name="$(landing_of "$OLD")"
+    new_ip="$(ssh -G "$NEW" | awk '/^hostname /{print $2}')"
+    [ -n "${NEW_NAME:-}" ] || fail "для OLD_MODE=relay задайте NEW_NAME — окончательное имя нового сервера"
+    on "$OLD" "/usr/local/sbin/ketocare-interim-relay old-up '$new_ip' '$old_name' '$NEW_NAME'"
+}
+
 restore_old() {
     say "прежний сервер: свои адреса обратно"
+    on "$OLD" "if [ -f /srv/ketocare-deploy.sh.disabled-by-move ]; then mv /srv/ketocare-deploy.sh.disabled-by-move /srv/ketocare-deploy.sh; fi"
+    on "$OLD" "if [ -x /usr/local/sbin/ketocare-interim-relay ]; then /usr/local/sbin/ketocare-interim-relay old-down >/dev/null; fi"
     on "$OLD" "rm -f /etc/nginx/sites-enabled/ketocare-moved.conf; \
         if ls /etc/nginx/sites-disabled-by-move/*.conf >/dev/null 2>&1; then mv /etc/nginx/sites-disabled-by-move/*.conf /etc/nginx/sites-enabled/; fi; \
         nginx -t >/dev/null 2>&1 && systemctl reload nginx"
@@ -362,7 +377,14 @@ case "$MODE" in
         on "$NEW" "rm -f /etc/ketocare/standby && $C up -d >/dev/null 2>&1"
         health
         on "$NEW" "$C ps --format '{{.Service}} {{.State}}'" | sed 's/^/  /'
-        redirect_old
+        # Выкат из GitHub на прежний сервер больше не должен ничего запускать:
+        # его `main` поднял бы там приложение и второго бота с тем же токеном.
+        on "$OLD" "if [ -f /srv/ketocare-deploy.sh ]; then mv /srv/ketocare-deploy.sh /srv/ketocare-deploy.sh.disabled-by-move; fi"
+        if [ "${OLD_MODE:-redirect}" = relay ]; then
+            relay_old
+        else
+            redirect_old
+        fi
         echo
         echo "Перенос выполнен. Прежний сервер остановлен в $STOPPED_AT и НЕ запускается сам;"
         echo "его адреса перенаправляют на новые. Дальше — по листу (docs/MIGRATION_2026-11.md)."
