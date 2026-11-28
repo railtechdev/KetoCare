@@ -73,13 +73,17 @@ jobs:
     env:
       ENVIRONMENT: ${{ inputs.environment || 'test' }}
       LABEL: ${{ (inputs.environment || 'test') == 'test' && 'uptime' || format('uptime-{0}', inputs.environment) }}
-      # Адреса test-стенда — те же, что у выката: переменные репозитория, а
-      # при их отсутствии — значения шага «Стенд отвечает снаружи».
-      # Другому окружению они не подставляются: проверка прода по адресам
-      # test-стенда отвечала бы «всё в порядке» про чужую машину.
-      LANDING_URL: ${{ inputs.landing_url || ((inputs.environment || 'test') == 'test' && (vars.LANDING_SITE_URL || 'https://ketocare.railtech.uz/') || '') }}
-      APP_URL: ${{ inputs.app_url || ((inputs.environment || 'test') == 'test' && (vars.PUBLIC_APP_URL || 'https://app.ketocare.railtech.uz/') || '') }}
-      MINIAPP_URL: ${{ inputs.miniapp_url || ((inputs.environment || 'test') == 'test' && (vars.MINIAPP_ORIGIN || 'https://tma.ketocare.railtech.uz/') || '') }}
+      # Адреса по умолчанию — переменные репозитория `UPTIME_*`: с двумя
+      # окружениями выката (ADR-0095) адреса и секреты приложения живут в
+      # окружениях GitHub, а монитор окружением не пользуется намеренно —
+      # задача с `environment:` каждые пятнадцать минут писала бы запись о
+      # «выкате». Прежние имена переменных остаются запасными.
+      # Другому окружению адреса по умолчанию не подставляются: проверка
+      # одного сервера по адресам другого отвечала бы «всё в порядке» про
+      # чужую машину.
+      LANDING_URL: ${{ inputs.landing_url || ((inputs.environment || 'test') == 'test' && (vars.UPTIME_LANDING_URL || vars.LANDING_SITE_URL || 'https://ketocare.railtech.uz/') || '') }}
+      APP_URL: ${{ inputs.app_url || ((inputs.environment || 'test') == 'test' && (vars.UPTIME_APP_URL || vars.PUBLIC_APP_URL || 'https://app.ketocare.railtech.uz/') || '') }}
+      MINIAPP_URL: ${{ inputs.miniapp_url || ((inputs.environment || 'test') == 'test' && (vars.UPTIME_MINIAPP_URL || vars.MINIAPP_ORIGIN || 'https://tma.ketocare.railtech.uz/') || '') }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
@@ -95,11 +99,13 @@ jobs:
         env:
           # Токен бота нужен только для getMe/getWebhookInfo. Скрипт его не
           # печатает, а GitHub маскирует секреты в журнале и сам.
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          # `UPTIME_*` — секреты репозитория только для монитора; секретов
+          # приложения на уровне репозитория нет (deploy.yml).
+          BOT_TOKEN: ${{ secrets.UPTIME_BOT_TOKEN || secrets.BOT_TOKEN }}
           # Токен ручки /api/v1/health/ai (состояние ИИ по журналу ai_jobs) —
           # то же значение, что deploy.yml кладёт на стенд. Нет секрета —
           # проверка ИИ пропускается, остальные идут.
-          MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
+          MONITOR_TOKEN: ${{ secrets.UPTIME_MONITOR_TOKEN || secrets.MONITOR_TOKEN }}
         run: |
           for name in LANDING_URL APP_URL MINIAPP_URL; do
             if [ -z "${!name}" ]; then

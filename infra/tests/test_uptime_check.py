@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import os
 import re
@@ -323,21 +322,26 @@ class TestWorkflow:
         workflow = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))
         assert "MONITOR_TOKEN" in workflow[True]["workflow_call"]["secrets"]
         check = next(s for s in workflow["jobs"]["check"]["steps"] if s.get("id") == "check")
-        assert check["env"]["MONITOR_TOKEN"] == "${{ secrets.MONITOR_TOKEN }}"
+        # Секрет монитора — свой, уровня репозитория: секреты приложения живут
+        # в окружениях выката (ADR-0095), а монитор окружением не пользуется.
+        assert check["env"]["MONITOR_TOKEN"] == (
+            "${{ secrets.UPTIME_MONITOR_TOKEN || secrets.MONITOR_TOKEN }}"
+        )
 
-    def test_deploy_puts_the_monitor_token_on_the_stand(self) -> None:
-        """Тот же секрет обязан доехать до стенда — иначе ручки там нет (404)."""
+    def test_the_server_creates_the_monitor_token_itself(self) -> None:
+        """Токен ручки обязан быть на сервере — иначе её там нет (404).
 
-        workflow = yaml.safe_load(_DEPLOY.read_text(encoding="utf-8"))
-        steps = workflow["jobs"]["deploy"]["steps"]
-        render = next(s for s in steps if s.get("name") == "Собрать окружение из секретов")
-        assert render["env"]["MONITOR_TOKEN"] == "${{ secrets.MONITOR_TOKEN }}"
-        script = render["run"]
-        start = re.search(r"^\s*NAMES\s*=\s*\[", script, re.M)
-        assert start is not None
-        bracket = script.index("[", start.start())
-        names = ast.literal_eval(script[bracket : script.index("]", bracket) + 1])
-        assert "MONITOR_TOKEN" in names
+        Из GitHub он больше не приезжает: служебные ключи создаёт сам сервер
+        (ADR-0095), и выкат не несёт ни одного секрета приложения.
+        """
+
+        script = (_DEPLOY.parents[2] / "infra" / "scripts" / "server-secrets.sh").read_text(
+            encoding="utf-8"
+        )
+        generated = re.search(r'^GENERATED="([^"]+)"', script, re.M)
+        assert generated is not None
+        assert "MONITOR_TOKEN" in generated.group(1).split()
+        assert "secrets.MONITOR_TOKEN" not in _DEPLOY.read_text(encoding="utf-8")
 
 
 class TestAiHealth:

@@ -68,7 +68,27 @@ $COMPOSE run --rm api python infra/scripts/load_dmtt_standard.py --on-deploy \
 $COMPOSE run --rm api python infra/scripts/load_source_standards.py --on-deploy \
     || echo "ВНИМАНИЕ: справочники-источники не загружены, см. вывод выше" >&2
 
-$COMPOSE up -d
+# Режим ожидания (ADR-0095): сервер поднят заранее, а данные и семьи ещё на
+# прежнем. Бот и воркер в нём не запускаются, и это не осторожность, а условие
+# переноса: бот с тем же токеном перехватил бы сообщения семей у работающего
+# сервера (long polling одного токена — только из одного места) и отвечал бы
+# им «чат не привязан» по пустой базе, а воркер после пробного разворачивания
+# копии разослал бы семьям напоминания второй раз. Метку ставит
+# bootstrap-server.sh и снимает перенос (docs/MIGRATION_2026-11.md).
+STANDBY_MARK="${KETOCARE_STANDBY_MARK:-/etc/ketocare/standby}"
+if [ -f "$STANDBY_MARK" ]; then
+    echo "РЕЖИМ ОЖИДАНИЯ ($STANDBY_MARK): бот и воркер не запускаются"
+    $COMPOSE up -d postgres redis api
+    $COMPOSE stop bot worker
+elif [ -z "${BOT_TOKEN:-}" ]; then
+    # Бота ещё не подключили: без токена он падает на старте и перезапускается
+    # каждые несколько секунд, засоряя журнал. Остальное работает без него.
+    echo "Токен Telegram-бота не задан — бот не запускается"
+    $COMPOSE up -d postgres redis api worker
+    $COMPOSE stop bot
+else
+    $COMPOSE up -d
+fi
 
 if [ "${1:-}" != "--api-only" ]; then
     # Сборка фронта на хосте (node 22 + corepack, см. docs/DEPLOY.md).
@@ -95,6 +115,10 @@ if [ "${1:-}" != "--api-only" ]; then
     pnpm --filter @ketocare/api-client run generate
     NODE_OPTIONS=--max-old-space-size=1536 pnpm --filter @ketocare/web run build
     rsync -a --delete apps/web/dist/ "$WEB_ROOT"/
+    # Какой коммит стоит на этом сервере. По этому файлу выкат на боевой
+    # сверяет, что тот же коммит сейчас на тестовом (deploy.yml). После rsync:
+    # `--delete` снёс бы его.
+    git rev-parse HEAD > "$WEB_ROOT/version.txt"
 
     # Telegram Mini App (ADR-0017). Каталог создаёт человек при настройке домена
     # (docs/DEPLOY.md): /var/www принадлежит root, и `mkdir` отсюда — это отказ

@@ -1,6 +1,24 @@
 name: Deploy
+run-name: Deploy → ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'demo' }}
 
-# Автодеплой test-стенда: main → VPS (docs/DEPLOY.md).
+# Выкат на два окружения (ADR-0095, docs/DEPLOY.md):
+#
+#   • `demo` — тестовый сервер: сюда `main` едет сам после зелёного CI;
+#   • `production` — боевой, с настоящими пациентами: только кнопкой
+#     (Actions → Deploy → Run workflow) и только коммитом из `main`, который
+#     прямо сейчас стоит на тестовом.
+#
+# Секретов приложения здесь нет вовсе, настроек — тоже. Пароль базы и ключи
+# подписи создаёт сам сервер, его адреса и часовой пояс записаны на нём при
+# настройке, токен бота и ключи ИИ вводятся в кабинете. Отсюда на сервер едет
+# одно имя окружения — сервер сверяет его со своей меткой.
+#
+# Секретно здесь только то, чем выкат заходит на сервер: `DEMO_DEPLOY_*` и
+# `PROD_DEPLOY_*` — секреты уровня репозитория. Окружения GitHub (Settings →
+# Environments) не используются намеренно: их заводит только владелец
+# репозитория, а мы работаем в нём как соавторы. Имена с приставкой
+# окружения выбираются явно, поэтому секрет одного сервера не может молча
+# подставиться вместо секрета другого.
 #
 # Запускается ПОСЛЕ зелёного CI, а не по самому push: событие push приходит
 # раньше, чем известен результат тестов, и деплой по нему выкатывал бы
@@ -33,22 +51,32 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      environment:
+        description: "Куда выкатывать"
+        type: choice
+        options: [demo, production]
+        default: demo
+      allow_untested:
+        description: "Боевой: выкатить коммит, которого сейчас нет на тестовом (только авария)"
+        type: boolean
+        default: false
       ref:
         description: "Коммит или ветка для выкатки (по умолчанию — вершина main); на сервер уходит её SHA"
         required: false
         default: "main"
 
-# Два деплоя одновременно ломают стенд: миграции и `compose up` из разных
+# Два деплоя одновременно ломают сервер: миграции и `compose up` из разных
 # прогонов встретятся на одной базе. cancel-in-progress намеренно false —
 # оборванный посреди `rsync --delete` деплой оставит пустой /var/www, то есть
-# белый экран вместо кабинета.
+# белый экран вместо кабинета. Замок — на окружение: тестовый и боевой друг
+# друга не ждут.
 concurrency:
-  group: deploy-test
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'demo' }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Выкатка на test
+    name: Выкатка
     runs-on: ubuntu-latest
     # Четыре условия, а не одно: успех прогона, событие push (а не
     # pull_request), ветка main И тот же репозиторий — иначе форк с веткой
@@ -59,6 +87,9 @@ jobs:
        github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
+    env:
+      # Автоматический выкат — всегда на тестовый; боевой называют руками.
+      DEPLOY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'demo' }}
     permissions:
       contents: read
     timeout-minutes: 40
@@ -133,141 +164,80 @@ jobs:
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "Выкатывается: $REF"
 
-      - name: Собрать окружение из секретов
-        if: steps.target.outputs.stale != 'true'
+      - name: Боевой — только проверенный коммит из main
+        id: gate
+        if: steps.target.outputs.stale != 'true' && env.DEPLOY_ENVIRONMENT == 'production'
         env:
-          # Секреты
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
-          BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Ключ шифрования настроек, которые администратор вводит в кабинете
-          # (ключ ИИ, ADR-0080). Пусто — ключ выводится из SECRET_KEY; задан —
-          # смена SECRET_KEY не делает введённые секреты нечитаемыми.
-          SETTINGS_ENCRYPTION_KEY: ${{ secrets.SETTINGS_ENCRYPTION_KEY }}
-          # Токен монитора доступности: открывает GET /api/v1/health/ai. Тот же
-          # секрет читает uptime.yml — значение одно на оба места. Пусто —
-          # ручки на стенде нет (404), а монитор без секрета ИИ не проверяет.
-          MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
-          # Имена моделей (раздел 10.2 ТЗ). Не секреты — но принимаются и из
-          # Secrets: адрес Mini App уже наступил на эти грабли, а расплата
-          # несоразмерная — выкат успешен, ИИ-функции молча отвечают
-          # «недоступно». Пустое значение — тоже ответ: код отказывается
-          # подставлять модель по умолчанию, потому что это был бы хардкод
-          # модели (правило 6 CLAUDE.md).
-          AI_MODEL_FAST: ${{ vars.AI_MODEL_FAST || secrets.AI_MODEL_FAST }}
-          AI_MODEL_SMART: ${{ vars.AI_MODEL_SMART || secrets.AI_MODEL_SMART }}
-          # Куда подключения из кабинета могут отправлять запросы с данными
-          # детей (ADR-0082): список хостов через запятую, `*.домен` — поддомены.
-          # Пусто — любой адрес. Задаёт тот, кто обслуживает сервер, а не
-          # администратор кабинета.
-          AI_PROVIDER_HOSTS: ${{ vars.AI_PROVIDER_HOSTS }}
-          # Предохранители расхода. Умолчания заданы в `core.config`, поэтому
-          # пустое значение здесь не ломает ничего — оно означает «как в коде».
-          AI_DAILY_BUDGET_USD: ${{ vars.AI_DAILY_BUDGET_USD }}
-          AI_USER_DAILY_LIMIT: ${{ vars.AI_USER_DAILY_LIMIT }}
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          # Имя окружения в Sentry: без него боевые ошибки лежали бы вперемешку
-          # с ошибками с машины разработчика. Не секрет — переменная репозитория.
-          SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT || 'production' }}
-          # Учётные данные первого администратора. На диск сервера НЕ попадают:
-          # remote-deploy.sh забирает их из потока и не пишет в файл окружения.
-          # Учётка создаётся один раз; если она уже есть, пароль не трогается —
-          # человек мог сменить его при первом входе.
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          ADMIN_NAME: ${{ secrets.ADMIN_NAME || vars.ADMIN_NAME }}
-          # Имя бота публично (по нему находят бота), но берётся из секрета,
-          # если он задан: так все настройки бота лежат в одном месте.
-          BOT_USERNAME: ${{ secrets.BOT_USERNAME || vars.BOT_USERNAME }}
-          TRUSTED_PROXY_IPS: ${{ vars.TRUSTED_PROXY_IPS }}
-          WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
-          MINIAPP_ORIGIN: ${{ vars.MINIAPP_ORIGIN }}
-          # Публичный адрес Mini App. Пока значение пусто, кнопки «Приложение»
-          # в меню бота нет (apps/bot/src/bot/keyboards.py).
-          #
-          # Читается и из переменных, и из секретов: адрес публичный и место ему
-          # в Variables, но положить его в Secrets — естественная ошибка (там уже
-          # лежат BOT_TOKEN и BOT_USERNAME), а расплата за неё несоразмерная:
-          # выкат проходит успешно, и кнопка молча не появляется. Так же
-          # разобран BOT_USERNAME парой строк выше.
-          MINIAPP_URL: ${{ vars.MINIAPP_URL || secrets.MINIAPP_URL }}
-          LANDING_SITE_URL: ${{ vars.LANDING_SITE_URL }}
-          LANDING_INDEXABLE: ${{ vars.LANDING_INDEXABLE }}
-          PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
-          PUBLIC_CONTACT_EMAIL: ${{ vars.PUBLIC_CONTACT_EMAIL }}
-          PUBLIC_TELEGRAM_URL: ${{ vars.PUBLIC_TELEGRAM_URL }}
-          ATTACHMENT_QUOTA_MB: ${{ vars.ATTACHMENT_QUOTA_MB }}
-          ATTACHMENT_PURGE_DAYS: ${{ vars.ATTACHMENT_PURGE_DAYS }}
-          REPORT_LINK_TTL_HOURS: ${{ vars.REPORT_LINK_TTL_HOURS }}
-          TZ: ${{ vars.TZ }}
-          # Бэкапы. Публичный ключ age — секрет не по содержанию (он публичный),
-          # а по последствиям подмены: чужой ключ в этой строке означает копии,
-          # которые расшифрует не клиника. `BACKUP_REMOTE` — переменная: адрес
-          # хранилища не секрет, а `rclone config` живёт на сервере.
-          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
-          BACKUP_REMOTE: ${{ vars.BACKUP_REMOTE }}
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ steps.target.outputs.ref }}
+          REPOSITORY: ${{ github.repository }}
+          # Адрес кабинета тестового сервера: выкат кладёт туда `version.txt`
+          # с коммитом. Переменная репозитория, а не окружения — её читает
+          # прогон боевого.
+          DEMO_APP_URL: ${{ vars.DEMO_APP_URL }}
+          ALLOW_UNTESTED: ${{ inputs.allow_untested }}
+        run: |
+          # 1. Коммит обязан лежать в main: ветка, не прошедшая PR, на сервер
+          #    с пациентами не едет ни при каких флажках.
+          STATUS=$(gh api "repos/$REPOSITORY/compare/$REF...main" --jq .status) || {
+            echo "::error::Не удалось сверить коммит с main"
+            exit 1
+          }
+          case "$STATUS" in
+            ahead|identical) echo "коммит $REF лежит в main" ;;
+            *) echo "::error::Коммит $REF не входит в main (compare: $STATUS) — на боевой не выкатывается"; exit 1 ;;
+          esac
+
+          # 2. Тот же коммит прямо сейчас стоит на тестовом: его там видели.
+          if [ "$ALLOW_UNTESTED" = "true" ]; then
+            echo "::warning::Проверка «коммит стоит на тестовом» отключена флажком allow_untested"
+            exit 0
+          fi
+          if [ -z "$DEMO_APP_URL" ]; then
+            echo "::error::Не задана переменная репозитория DEMO_APP_URL — нечем сверить коммит с тестовым"
+            exit 1
+          fi
+          ON_DEMO=""
+          for attempt in 1 2 3; do
+            ON_DEMO=$(curl -fsS --max-time 20 "${DEMO_APP_URL%/}/version.txt" | tr -d '[:space:]' || true)
+            [ -n "$ON_DEMO" ] && break
+            [ "$attempt" = "3" ] || sleep 10
+          done
+          if [ "$ON_DEMO" != "$REF" ]; then
+            echo "::error::На тестовом стоит «${ON_DEMO:-нет ответа}», а на боевой просят $REF. Сначала выкат на тестовый и проверка там."
+            exit 1
+          fi
+          echo "на тестовом стоит тот же коммит"
+
+      - name: Собрать окружение для сервера
+        if: steps.target.outputs.stale != 'true'
         run: |
           umask 077
-          # Значения экранируются shlex.quote: deploy.sh не парсит окружение, а
-          # ИСПОЛНЯЕТ его (`set -a; . ./.env`). Токен с `&` или пароль с кавычкой
-          # без этого превращаются в команду.
-          #
-          # Пустые значения пропускаются: Settings подставит свой дефолт, а
-          # пустая строка его затирает — так пустой MINIAPP_ORIGIN открыл бы CORS
-          # пустому origin вместо того, чтобы оставить умолчание.
-          #
-          # DATABASE_URL, REDIS_URL, *_DIR и BOT_API_BASE_URL здесь намеренно
-          # отсутствуют: их задаёт `environment:` в compose, а он сильнее
-          # `env_file`. Дубль выглядел бы настройкой, ничего не настраивая.
-          python3 - > env.rendered <<'PY'
-          import os, shlex
-
-          NAMES = [
-              "POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN",
-              "BOT_USERNAME", "ANTHROPIC_API_KEY", "SETTINGS_ENCRYPTION_KEY", "MONITOR_TOKEN",
-              "AI_MODEL_FAST", "AI_MODEL_SMART", "AI_PROVIDER_HOSTS",
-              "AI_DAILY_BUDGET_USD", "AI_USER_DAILY_LIMIT",
-              "SENTRY_DSN", "SENTRY_ENVIRONMENT",
-              "ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME",
-              "TRUSTED_PROXY_IPS", "WEB_ORIGIN", "MINIAPP_ORIGIN", "MINIAPP_URL",
-              "LANDING_SITE_URL", "LANDING_INDEXABLE", "PUBLIC_APP_URL",
-              "PUBLIC_CONTACT_EMAIL", "PUBLIC_TELEGRAM_URL",
-              "ATTACHMENT_QUOTA_MB", "ATTACHMENT_PURGE_DAYS",
-              "REPORT_LINK_TTL_HOURS", "TZ",
-              "BACKUP_AGE_RECIPIENT", "BACKUP_REMOTE",
-          ]
-          print("# Собран автоматически .github/workflows/deploy.yml — правки")
-          print("# руками затираются следующим деплоем. Источник значений —")
-          print("# Settings → Secrets and variables репозитория.")
-          for name in NAMES:
-              value = os.environ.get(name, "")
-              if value:
-                  print(f"{name}={shlex.quote(value)}")
-          PY
-
-          # Проверка до отправки: неполный файл затрёт рабочее окружение на
-          # сервере и уронит стенд молча. Чаще всего это значит, что секрет не
-          # заведён — например, потеряна строка `environment:` в job.
-          for required in POSTGRES_PASSWORD SECRET_KEY BOT_API_TOKEN; do
-            grep -q "^${required}=" env.rendered || {
-              echo "::error::Не задан секрет ${required} — деплой остановлен"
-              exit 1
-            }
-          done
-          echo "переменных в окружении: $(grep -c '^[A-Z]' env.rendered)"
+          # Одна строка — имя окружения. Адреса, часовой пояс и пределы сервер
+          # хранит сам (/etc/ketocare/settings.env, bootstrap-server.sh), ключи
+          # создаёт сам (server-secrets.sh), интеграции вводятся в кабинете.
+          printf 'DEPLOY_ENVIRONMENT=%s\n' "$DEPLOY_ENVIRONMENT" > env.rendered
 
       - name: Выкатить
         if: steps.target.outputs.stale != 'true'
         env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          # Боевой называют только руками; всё остальное — тестовый.
+          DEPLOY_SSH_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && secrets.PROD_DEPLOY_SSH_KEY || secrets.DEMO_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && secrets.PROD_DEPLOY_KNOWN_HOSTS || secrets.DEMO_DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && secrets.PROD_DEPLOY_HOST || secrets.DEMO_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && secrets.PROD_DEPLOY_USER || secrets.DEMO_DEPLOY_USER }}
           DEPLOY_REF: ${{ steps.target.outputs.ref }}
         run: |
           umask 077
+          # Пустой секрет — окружение не заведено (github_environment.py).
+          # Выкат останавливается до соединения: иначе ssh ушёл бы по пустому
+          # адресу с ошибкой, по которой причину не понять.
+          for name in DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_HOST DEPLOY_USER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Для окружения «$DEPLOY_ENVIRONMENT» не заведён доступ к серверу (${name}) — см. docs/DEPLOY.md"
+              exit 1
+            fi
+          done
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           # known_hosts, а не StrictHostKeyChecking=no: иначе первый же перехват
@@ -292,6 +262,12 @@ jobs:
 
       - name: Стенд отвечает снаружи
         if: steps.target.outputs.stale != 'true'
+        env:
+          # Адреса окружения — те же переменные, из которых собирается
+          # посадочная. Зашитых адресов нет: проверка боевого по адресам
+          # тестового отвечала бы «всё в порядке» про чужую машину.
+          LANDING_URL: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && vars.PROD_LANDING_URL || vars.DEMO_LANDING_URL }}
+          APP_URL: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') && vars.PROD_APP_URL || vars.DEMO_APP_URL }}
         # Три попытки, а не одна. Раннер GitHub ходит до Узбекистана через пол-
         # мира, и 17.09.2026 два выката из пяти были помечены красным на этом
         # шаге при живом стенде: `curl: (28) Connection timed out`, то есть
@@ -307,7 +283,13 @@ jobs:
         # Номер удавшейся попытки печатается: деградация пути видна заранее,
         # а не в тот день, когда перестанут проходить все три.
         run: |
-          for url in https://ketocare.railtech.uz/ https://app.ketocare.railtech.uz/; do
+          for name in LANDING_URL APP_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Не задана переменная репозитория для $name окружения «$DEPLOY_ENVIRONMENT» (DEMO_/PROD_LANDING_URL, DEMO_/PROD_APP_URL)"
+              exit 1
+            fi
+          done
+          for url in "${LANDING_URL%/}/" "${APP_URL%/}/"; do
             code=""
             for attempt in 1 2 3; do
               code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$url" || echo "нет ответа")

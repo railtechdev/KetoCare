@@ -56,7 +56,9 @@ def _stand_check_script() -> str:
     raise AssertionError("шаг «Стенд отвечает снаружи» исчез из выката")
 
 
-def _run(tmp_path: Path, codes: list[str]) -> subprocess.CompletedProcess[str]:
+def _run(
+    tmp_path: Path, codes: list[str], extra_env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     curl = fake_bin / "curl"
@@ -81,6 +83,10 @@ def _run(tmp_path: Path, codes: list[str]) -> subprocess.CompletedProcess[str]:
             "PATH": f"{fake_bin}:{os.environ['PATH']}",
             "CODES": str(queue),
             "LAST": str(tmp_path / "last.txt"),
+            # Адреса шаг берёт из переменных окружения выката (ADR-0095).
+            "LANDING_URL": "https://landing.example",
+            "APP_URL": "https://app.example/",
+            **(extra_env or {}),
         },
     )
 
@@ -113,13 +119,29 @@ class TestStandCheckSurvivesFlakyTransit:
         assert len(re.findall(r"попытка 1", result.stdout)) == 2
 
 
-def test_both_hosts_are_checked() -> None:
+def test_both_hosts_are_checked(tmp_path: Path) -> None:
     """Кабинет и посадочная — разные хосты с разными конфигурациями nginx."""
 
-    script = _stand_check_script()
+    result = _run(tmp_path, ["200", "200"])
 
-    assert "app.ketocare.railtech.uz" in script
-    assert "ketocare.railtech.uz/" in script
+    assert "https://landing.example/ → 200" in result.stdout
+    assert "https://app.example/ → 200" in result.stdout
+
+
+def test_addresses_come_from_the_environment_not_from_the_file() -> None:
+    """Серверов два: зашитый адрес проверял бы тестовый, выкатывая боевой."""
+
+    assert not re.search(r"https?://[a-z0-9.-]+\.[a-z]{2,}", _stand_check_script())
+
+
+@pytest.mark.parametrize("missing", ["LANDING_URL", "APP_URL"])
+def test_missing_address_stops_the_check(tmp_path: Path, missing: str) -> None:
+    """Пустой адрес — отказ, а не «проверять нечего»: иначе шаг молча зеленел бы."""
+
+    result = _run(tmp_path, ["200", "200"], {missing: ""})
+
+    assert result.returncode != 0
+    assert "Не задана переменная" in result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("marker", ["for attempt in", "exit 1"])

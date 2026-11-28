@@ -84,6 +84,12 @@ def _run(
         "PATH": f"{deployment['bin']}:{os.environ['PATH']}",
         "KETOCARE_REPO": str(deployment["repo"]),
         "KETOCARE_SELF": str(deployment["repo"] / "self.sh"),
+        # Метки окружения на «сервере» прогона нет — и взять её с машины, где
+        # идёт тест, скрипт не должен.
+        "KETOCARE_ENV_MARK": str(deployment["repo"] / "no-environment-mark"),
+        # Как и файла ключей сервера: здесь проверяется прежняя цепочка, где
+        # окружение приходит целиком.
+        "KETOCARE_SECRETS": str(deployment["repo"] / "no-server-secrets"),
         "DOCKER_CALLS": str(deployment["calls"]),
         "SSH_ORIGINAL_COMMAND": "main",
     }
@@ -102,12 +108,16 @@ def _run(
 #: мелочь оформления — на `eval` завязана вся передача `ADMIN_*`, и
 #: незакавыченное имя с пробелом роняет выкат целиком (`command not found`).
 WITH_ADMIN = """POSTGRES_PASSWORD=p
+SECRET_KEY=s
+BOT_API_TOKEN=b
 ADMIN_EMAIL=admin@clinic.example
 ADMIN_PASSWORD='пароль-из-секретов'
 ADMIN_NAME='Админ Клиники'
 """
 
 WITHOUT_PASSWORD = """POSTGRES_PASSWORD=p
+SECRET_KEY=s
+BOT_API_TOKEN=b
 ADMIN_EMAIL=admin@clinic.example
 """
 
