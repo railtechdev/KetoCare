@@ -230,6 +230,22 @@ for site in ketocare-landing ketocare-app ketocare-miniapp; do
     ln -sf "/etc/nginx/sites-available/$site.conf" "/etc/nginx/sites-enabled/$site.conf"
 done
 
+# `www.<имя>` — так адрес набирают руками. Только перенаправление, и только если
+# запись в DNS есть: имя без записи не дало бы выпустить сертификат на остальные.
+WWW_DOMAIN=""
+if getent hosts "www.$BASE_DOMAIN" >/dev/null 2>&1; then
+    WWW_DOMAIN="www.$BASE_DOMAIN"
+    step "nginx: $WWW_DOMAIN → $BASE_DOMAIN"
+    if [ -f /etc/nginx/sites-available/ketocare-www.conf ]; then
+        echo "  ketocare-www.conf уже есть — не трогаем"
+    else
+        printf 'server {\n    listen 80;\n    listen [::]:80;\n    server_name %s;\n    return 301 https://%s$request_uri;\n}\n' \
+            "$WWW_DOMAIN" "$BASE_DOMAIN" > /etc/nginx/sites-available/ketocare-www.conf
+        chmod 0644 /etc/nginx/sites-available/ketocare-www.conf
+    fi
+    ln -sf /etc/nginx/sites-available/ketocare-www.conf /etc/nginx/sites-enabled/ketocare-www.conf
+fi
+
 if [ -n "$LEGACY_DOMAIN" ]; then
     step "nginx: прежние имена → новые"
     if [ -f /etc/nginx/sites-available/ketocare-legacy.conf ]; then
@@ -281,6 +297,7 @@ else
     # `--redirect` обязателен: refresh-токен живёт в httpOnly-cookie и по
     # чистому HTTP утекает.
     certbot --nginx -d "$DOMAIN_LANDING" -d "$DOMAIN_APP" -d "$DOMAIN_MINIAPP" \
+        ${WWW_DOMAIN:+-d "$WWW_DOMAIN"} \
         --redirect --agree-tos --register-unsafely-without-email --non-interactive \
         || echo "СЕРТИФИКАТ НЕ ВЫПУЩЕН: проверьте A-записи трёх имён и запустите скрипт ещё раз" >&2
 fi
