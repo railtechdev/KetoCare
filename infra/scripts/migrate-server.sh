@@ -123,8 +123,10 @@ preflight() {
 #:     и тогда его не должно быть и на новом (server-secrets.sh, mirror);
 #:   BOT_TOKEN, BOT_USERNAME — бот, к которому привязаны семьи; уйдут в кабинет
 #:     вместе с разделом интеграций;
+#:   MONITOR_TOKEN — им монитор доступности проверяет ИИ; на переносе
+#:     28.11.2026 без него проверка ИИ сразу покраснела;
 #:   остальное — запасные значения, которые кабинет уже перекрывает.
-MIRRORED_KEYS="SECRET_KEY SETTINGS_ENCRYPTION_KEY BOT_TOKEN BOT_USERNAME ANTHROPIC_API_KEY AI_MODEL_FAST AI_MODEL_SMART SENTRY_DSN BACKUP_AGE_RECIPIENT"
+MIRRORED_KEYS="SECRET_KEY SETTINGS_ENCRYPTION_KEY BOT_TOKEN BOT_USERNAME MONITOR_TOKEN ANTHROPIC_API_KEY AI_MODEL_FAST AI_MODEL_SMART SENTRY_DSN BACKUP_AGE_RECIPIENT"
 
 copy_keys() {
     say "ключи приложения"
