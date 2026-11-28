@@ -324,10 +324,18 @@ else
     #
     # `--redirect` обязателен: refresh-токен живёт в httpOnly-cookie и по
     # чистому HTTP утекает.
-    certbot --nginx -d "$DOMAIN_LANDING" -d "$DOMAIN_APP" -d "$DOMAIN_MINIAPP" \
+    if ! certbot --nginx -d "$DOMAIN_LANDING" -d "$DOMAIN_APP" -d "$DOMAIN_MINIAPP" \
         ${WWW_DOMAIN:+-d "$WWW_DOMAIN"} \
-        --redirect --agree-tos --register-unsafely-without-email --non-interactive \
-        || echo "СЕРТИФИКАТ НЕ ВЫПУЩЕН: проверьте A-записи трёх имён и запустите скрипт ещё раз" >&2
+        --redirect --agree-tos --register-unsafely-without-email --non-interactive; then
+        # DNS ещё не разошёлся: регистратор меняет записи до суток. Сервер
+        # повторит сам, как только его имена укажут на него, и уберёт эту
+        # строку после успеха.
+        install -m 0755 "$REPO/infra/scripts/cert-when-dns-ready.sh" /usr/local/bin/ketocare-cert-when-dns-ready
+        echo "*/15 * * * * root /usr/local/bin/ketocare-cert-when-dns-ready $DOMAIN_LANDING $DOMAIN_APP $DOMAIN_MINIAPP${WWW_DOMAIN:+ $WWW_DOMAIN}" \
+            > /etc/cron.d/ketocare-cert
+        chmod 0644 /etc/cron.d/ketocare-cert
+        echo "СЕРТИФИКАТ НЕ ВЫПУЩЕН: DNS ещё не указывает сюда. Сервер повторит сам каждые 15 минут (журнал /var/log/ketocare-cert.log)." >&2
+    fi
 fi
 
 if [ "$ENVIRONMENT" = "production" ]; then
