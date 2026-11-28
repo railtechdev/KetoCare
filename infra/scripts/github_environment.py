@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
-"""Завести окружение выката в GitHub: адрес сервера, ключ выката, настройки (ADR-0095).
+"""Завести доступ выката к серверу окружения (ADR-0095).
 
-    github_environment.py production --domain ketocare.uz --server ketocare-prod
     github_environment.py demo --domain demo.ketocare.uz --server ketocare-demo
-    github_environment.py production --finish   # убрать прежние секреты с уровня репозитория
+    github_environment.py production --domain ketocare.uz --server ketocare-prod
+    github_environment.py production --finish   # убрать секреты прежнего стенда
 
-Секретов приложения здесь нет: пароль базы и ключи подписи создаёт сам сервер
-(`server-secrets.sh`), токен бота и ключи ИИ вводятся в кабинете. Окружению в
-GitHub нужно только то, чем выкат заходит на сервер, и несекретные настройки —
-адреса, часовой пояс.
+Секретов приложения и его настроек в GitHub нет: пароль базы и ключи подписи
+создаёт сам сервер, адреса и часовой пояс записаны на нём при настройке,
+токен бота и ключи ИИ вводятся в кабинете. Здесь заводится только то, чем
+выкат заходит на сервер, — секреты уровня репозитория с приставкой окружения
+(`DEMO_DEPLOY_*`, `PROD_DEPLOY_*`), — и адреса, по которым выкат проверяет,
+что сервер отвечает (`DEMO_APP_URL` и др.).
 
-Ключ выката создаётся в памяти (`/dev/shm`), закрытая часть уходит в секрет
-`DEPLOY_SSH_KEY`, открытая печатается — её принимает `bootstrap-server.sh`
-переменной `DEPLOY_PUBKEY`. Уже заведённый ключ не перевыпускается
-(`--force` — перевыпустить): его открытая часть уже стоит на сервере.
+Окружения GitHub (Settings → Environments) не используются: их заводит только
+владелец репозитория, а работа в нём идёт на правах соавтора.
 
-Последней ставится переменная `ENVIRONMENT_READY`: до неё выкат в окружение
-закрыт. Значение, которого у окружения нет, GitHub молча берёт с уровня
-репозитория — наполовину настроенное окружение выкатилось бы на чужой сервер.
+Ключ выката создаётся в памяти (`/dev/shm`), закрытая часть уходит в секрет,
+открытая печатается — её принимает `bootstrap-server.sh` переменной
+`DEPLOY_PUBKEY`. Уже заведённый ключ не перевыпускается (`--force` —
+перевыпустить): его открытая часть уже стоит на сервере.
 """
 
 from __future__ import annotations
@@ -29,12 +30,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-#: Чем выкат заходит на сервер — единственное секретное у окружения.
-DEPLOY_NAMES = ("DEPLOY_HOST", "DEPLOY_USER", "DEPLOY_KNOWN_HOSTS", "DEPLOY_SSH_KEY")
-#: Что лежало на уровне репозитория, пока сервер был один, и подлежит удалению:
-#: значения приложения теперь у сервера и в кабинете.
+PREFIX = {"demo": "DEMO", "production": "PROD"}
+#: Доступ выката к серверу — единственное секретное у окружения.
+DEPLOY_FIELDS = ("DEPLOY_HOST", "DEPLOY_USER", "DEPLOY_KNOWN_HOSTS", "DEPLOY_SSH_KEY")
+#: Что лежало на уровне репозитория, пока сервер был один: значения приложения
+#: теперь у сервера и в кабинете, а доступ — под именами с приставкой.
 LEGACY_REPOSITORY_NAMES = (
-    *DEPLOY_NAMES,
+    *DEPLOY_FIELDS,
     "POSTGRES_PASSWORD",
     "SECRET_KEY",
     "BOT_API_TOKEN",
@@ -51,6 +53,15 @@ LEGACY_REPOSITORY_NAMES = (
     "ADMIN_EMAIL",
     "ADMIN_PASSWORD",
     "ADMIN_NAME",
+)
+#: Переменные прежнего стенда — адреса и пояс теперь записаны на серверах.
+LEGACY_REPOSITORY_VARIABLES = (
+    "LANDING_SITE_URL",
+    "MINIAPP_ORIGIN",
+    "PUBLIC_APP_URL",
+    "TRUSTED_PROXY_IPS",
+    "TZ",
+    "WEB_ORIGIN",
 )
 OWNER = "ketocare"
 
@@ -70,21 +81,19 @@ def gh(*args: str, stdin: str | None = None) -> str:
     return done.stdout
 
 
-def existing(kind: str, environment: str | None) -> set[str]:
-    scope = ["--env", environment] if environment else []
-    return set(gh(kind, "list", *scope, "--json", "name", "--jq", ".[].name").split())
+def existing(kind: str) -> set[str]:
+    return set(gh(kind, "list", "--json", "name", "--jq", ".[].name").split())
 
 
-def put_hidden(label: str, body: str, environment: str, *, dry: bool) -> None:
+def put_hidden(label: str, body: str, *, dry: bool) -> None:
     if not dry:
-        gh("secret", "set", label, "--env", environment, stdin=body)
+        gh("secret", "set", label, stdin=body)
     print(f"  {label} — записан")
 
 
-def put_variable(label: str, value: str, environment: str | None, *, dry: bool) -> None:
-    scope = ["--env", environment] if environment else []
+def put_variable(label: str, value: str, *, dry: bool) -> None:
     if not dry:
-        gh("variable", "set", label, *scope, "--body", value)
+        gh("variable", "set", label, "--body", value)
     print(f"  {label} = {value}")
 
 
@@ -140,59 +149,33 @@ def server_address(alias: str) -> tuple[str, str]:
 
 
 def setup(args: argparse.Namespace) -> None:
-    environment: str = args.environment
+    prefix = PREFIX[args.environment]
     dry: bool = args.dry_run
     domain: str = args.domain
-    repository = gh("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").strip()
-
-    print(f"окружение «{environment}» в {repository}" + (" (пробный прогон)" if dry else ""))
-    if not dry:
-        gh("api", "--method", "PUT", f"repos/{repository}/environments/{environment}")
-    # Пока идёт настройка, выкат в это окружение закрыт (deploy.yml, шаг
-    # «Окружение настроено»).
-    put_variable("ENVIRONMENT_READY", "configuring", environment, dry=dry)
-
-    for label, value in {
-        "LANDING_SITE_URL": f"https://{domain}",
-        "PUBLIC_APP_URL": f"https://app.{domain}",
-        "WEB_ORIGIN": f"https://app.{domain}",
-        "MINIAPP_ORIGIN": f"https://tma.{domain}",
-        "MINIAPP_URL": f"https://tma.{domain}",
-        "TRUSTED_PROXY_IPS": "172.30.100.1",
-        "TZ": "Asia/Tashkent",
-        "SENTRY_ENVIRONMENT": environment,
-        # Тестовый сервер в поиске не нужен: без переменной robots.txt отдаёт Disallow.
-        **({"LANDING_INDEXABLE": "1"} if environment == "production" else {}),
-    }.items():
-        put_variable(label, value, environment, dry=dry)
+    print(f"окружение «{args.environment}»" + (" (пробный прогон)" if dry else ""))
 
     address, host_key = server_address(args.server)
-    have = existing("secret", environment) if not dry else set()
-    put_hidden("DEPLOY_HOST", address, environment, dry=dry)
-    put_hidden("DEPLOY_USER", OWNER, environment, dry=dry)
-    put_hidden("DEPLOY_KNOWN_HOSTS", host_key, environment, dry=dry)
+    have = existing("secret") if not dry else set()
+    put_hidden(f"{prefix}_DEPLOY_HOST", address, dry=dry)
+    put_hidden(f"{prefix}_DEPLOY_USER", OWNER, dry=dry)
+    put_hidden(f"{prefix}_DEPLOY_KNOWN_HOSTS", host_key, dry=dry)
     public = ""
-    if "DEPLOY_SSH_KEY" in have and not args.force:
-        print("  DEPLOY_SSH_KEY — уже есть, не перевыпущен (открытая часть стоит на сервере)")
+    if f"{prefix}_DEPLOY_SSH_KEY" in have and not args.force:
+        print(f"  {prefix}_DEPLOY_SSH_KEY — уже есть, не перевыпущен (открытая часть на сервере)")
     else:
         private, public = deploy_key()
-        put_hidden("DEPLOY_SSH_KEY", private, environment, dry=dry)
+        put_hidden(f"{prefix}_DEPLOY_SSH_KEY", private, dry=dry)
 
-    print("уровень репозитория:")
-    if environment == "production":
-        # Монитор доступности окружениями не пользуется: его адреса — здесь.
-        for label, value in {
-            "UPTIME_LANDING_URL": f"https://{domain}/",
-            "UPTIME_APP_URL": f"https://app.{domain}/",
-            "UPTIME_MINIAPP_URL": f"https://tma.{domain}/",
-        }.items():
-            put_variable(label, value, None, dry=dry)
-    else:
-        # По этому адресу выкат на боевой сверяет, какой коммит стоит на тестовом.
-        put_variable("DEMO_APP_URL", f"https://app.{domain}", None, dry=dry)
-
-    # Последним: у окружения всё своё, выкат в него открыт.
-    put_variable("ENVIRONMENT_READY", environment, environment, dry=dry)
+    # Адреса — не настройки приложения, а то, по чему выкат и монитор проверяют,
+    # что сервер отвечает. По `DEMO_APP_URL` выкат на боевой сверяет, какой
+    # коммит стоит на тестовом.
+    put_variable(f"{prefix}_LANDING_URL", f"https://{domain}/", dry=dry)
+    put_variable(f"{prefix}_APP_URL", f"https://app.{domain}/", dry=dry)
+    if args.environment == "production":
+        # Монитор доступности смотрит на боевой.
+        put_variable("UPTIME_LANDING_URL", f"https://{domain}/", dry=dry)
+        put_variable("UPTIME_APP_URL", f"https://app.{domain}/", dry=dry)
+        put_variable("UPTIME_MINIAPP_URL", f"https://tma.{domain}/", dry=dry)
 
     if public:
         print("\nоткрытая часть ключа выката — переменной DEPLOY_PUBKEY в bootstrap-server.sh:")
@@ -200,25 +183,28 @@ def setup(args: argparse.Namespace) -> None:
 
 
 def finish(args: argparse.Namespace) -> None:
-    """Убрать прежние секреты с уровня репозитория — когда окружения настроены."""
+    """Убрать секреты и переменные прежнего стенда — когда оба сервера заведены."""
 
-    # Сначала доказательство, что оба окружения ходят на серверы своим ключом:
-    # иначе удаление оставило бы выкат без адреса.
-    for environment in ("demo", "production"):
-        absent = sorted(set(DEPLOY_NAMES) - existing("secret", environment))
+    have = existing("secret")
+    for prefix in PREFIX.values():
+        absent = [f"{prefix}_{field}" for field in DEPLOY_FIELDS if f"{prefix}_{field}" not in have]
         if absent:
-            sys.exit(f"у окружения «{environment}» нет: {', '.join(absent)} — удалять рано")
-    for label in sorted(existing("secret", None) & set(LEGACY_REPOSITORY_NAMES)):
+            sys.exit(f"не заведены: {', '.join(absent)} — удалять рано")
+    for label in sorted(have & set(LEGACY_REPOSITORY_NAMES)):
         if not args.dry_run:
             gh("secret", "delete", label)
-        print(f"  с уровня репозитория убран {label}")
+        print(f"  убран секрет {label}")
+    for label in sorted(existing("variable") & set(LEGACY_REPOSITORY_VARIABLES)):
+        if not args.dry_run:
+            gh("variable", "delete", label)
+        print(f"  убрана переменная {label}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
-    parser.add_argument("environment", choices=["demo", "production"])
+    parser.add_argument("environment", choices=sorted(PREFIX))
     parser.add_argument("--domain", help="имя посадочной: ketocare.uz, demo.ketocare.uz")
     parser.add_argument("--server", help="сервер окружения — имя из ~/.ssh/config")
     parser.add_argument("--force", action="store_true", help="перевыпустить ключ выката")
@@ -226,7 +212,7 @@ def main() -> None:
         "--dry-run", action="store_true", help="только показать, что будет записано"
     )
     parser.add_argument(
-        "--finish", action="store_true", help="убрать прежние секреты с уровня репозитория"
+        "--finish", action="store_true", help="убрать секреты и переменные прежнего стенда"
     )
     args = parser.parse_args()
 

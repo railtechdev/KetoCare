@@ -26,6 +26,8 @@
 set -euo pipefail
 
 FILE="${KETOCARE_SECRETS:-/etc/ketocare/secrets.env}"
+#: Несекретные настройки сервера: адреса, часовой пояс. Пишет bootstrap-server.sh.
+SETTINGS="${KETOCARE_SETTINGS:-$(dirname "$FILE")/settings.env}"
 GROUP="${KETOCARE_SECRETS_GROUP:-ketocare}"
 
 #: Что сервер создаёт сам. Больше ничего: токен Telegram-бота, ключи ИИ и прочие
@@ -96,11 +98,26 @@ case "${1:-}" in
         config="${2:-}"
         [ -f "$config" ] || fail "render: нет файла настроек"
         [ -f "$FILE" ] || fail "нет $FILE — сервер не настроен (bootstrap-server.sh)"
+        # Порядок старшинства: ключи сервера, затем его настройки (адреса,
+        # часовой пояс — записаны при настройке сервера), затем то, что
+        # принёс выкат (имя окружения). Имя, которое есть выше, ниже не
+        # повторяется: переопределить сервер снаружи нельзя.
         own="$(names_in "$FILE")"
+        local_settings=""
+        if [ -f "$SETTINGS" ]; then
+            local_settings="$(names_in "$SETTINGS")"
+        fi
         while IFS= read -r line; do
             name="${line%%=*}"
-            printf '%s\n' "$own" | grep -qx "$name" || printf '%s\n' "$line"
+            printf '%s\n' "$own" "$local_settings" | grep -qx "$name" || printf '%s\n' "$line"
         done < "$config"
+        if [ -f "$SETTINGS" ]; then
+            echo "# Настройки сервера — $SETTINGS; записаны при настройке сервера."
+            while IFS= read -r line; do
+                name="${line%%=*}"
+                printf '%s\n' "$own" | grep -qx "$name" || printf '%s\n' "$line"
+            done < "$SETTINGS"
+        fi
         echo "# Ключи сервера — $FILE; создаются сервером, не вводятся никем."
         cat "$FILE"
         ;;

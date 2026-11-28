@@ -141,7 +141,7 @@ def test_missing_address_stops_the_check(tmp_path: Path, missing: str) -> None:
     result = _run(tmp_path, ["200", "200"], {missing: ""})
 
     assert result.returncode != 0
-    assert "не задана переменная" in result.stdout + result.stderr
+    assert "Не задана переменная" in result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("marker", ["for attempt in", "exit 1"])

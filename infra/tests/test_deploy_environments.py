@@ -195,6 +195,23 @@ class TestServerKeepsItsOwnKeys:
         assert not server["calls"].exists()
 
 
+class TestServerSettingsWin:
+    """Адреса сервера записаны на нём; принесённое снаружи их не меняет."""
+
+    def test_server_settings_override_what_arrives(self, server: dict[str, Path]) -> None:
+        (server["secrets"].parent / "settings.env").write_text(
+            "WEB_ORIGIN=https://app.own\nTZ=Asia/Tashkent\n"
+        )
+
+        result = _remote_deploy(server, "WEB_ORIGIN=https://foreign\n")
+
+        assert result.returncode == 0, result.stderr
+        environment = (server["repo"] / ".env").read_text()
+        assert "WEB_ORIGIN=https://app.own" in environment
+        assert "foreign" not in environment
+        assert "TZ=Asia/Tashkent" in environment
+
+
 def _secrets(tmp_path: Path, *args: str, stdin: str = "") -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", str(_SERVER_SECRETS), *args],
@@ -262,24 +279,82 @@ class TestServerSecrets:
         assert "from-old" not in result.stdout + result.stderr
 
 
+def _workflow_text() -> str:
+    return _WORKFLOW.read_text(encoding="utf-8")
+
+
 def test_workflow_carries_no_application_secret() -> None:
-    """В выкате нет ни одного секрета приложения — только доступ к серверу."""
+    """В выкате нет ни одного секрета приложения — только доступ к серверам."""
 
-    used = set(re.findall(r"secrets\.([A-Z_]+)", _WORKFLOW.read_text(encoding="utf-8")))
-    assert used == {"DEPLOY_SSH_KEY", "DEPLOY_KNOWN_HOSTS", "DEPLOY_HOST", "DEPLOY_USER"}
+    used = set(re.findall(r"secrets\.([A-Z_]+)", _workflow_text()))
+    fields = {"DEPLOY_SSH_KEY", "DEPLOY_KNOWN_HOSTS", "DEPLOY_HOST", "DEPLOY_USER"}
+    assert used == {f"{prefix}_{field}" for prefix in ("DEMO", "PROD") for field in fields}
 
 
-def test_workflow_always_names_the_environment() -> None:
-    """Имя окружения — обязательная строка окружения, и берётся оно у прогона."""
+def test_workflow_uses_no_github_environments() -> None:
+    """Окружения GitHub заводит только владелец репозитория, а работа идёт на
+    правах соавтора: выкат, сославшийся на окружение, упёрся бы в права."""
 
-    workflow = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))
+    workflow = yaml.safe_load(_workflow_text())
+    assert "environment" not in workflow["jobs"]["deploy"]
+
+
+def test_production_access_is_taken_only_by_hand() -> None:
+    """Автоматический выкат не может взять ключ боевого ни при каком условии."""
+
+    for line in _workflow_text().splitlines():
+        if "secrets.PROD_" in line:
+            assert "github.event_name == 'workflow_dispatch'" in line, line
+            assert "inputs.environment == 'production'" in line, line
+            assert "secrets.DEMO_" in line, line
+
+
+def test_workflow_sends_only_the_environment_name() -> None:
+    """Настройки сервера записаны на нём самом; выкат несёт одно имя окружения."""
+
+    workflow = yaml.safe_load(_workflow_text())
     job = workflow["jobs"]["deploy"]
-    assert job["environment"] == job["env"]["DEPLOY_ENVIRONMENT"]
     # Автоматический выкат (после CI) — только на тестовый.
-    assert job["environment"].endswith("|| 'demo' }}")
-    assemble = next(s for s in job["steps"] if s.get("name") == "Собрать настройки окружения")
-    assert '"DEPLOY_ENVIRONMENT"' in assemble["run"]
-    assert "for required in DEPLOY_ENVIRONMENT" in assemble["run"]
+    assert job["env"]["DEPLOY_ENVIRONMENT"].endswith("|| 'demo' }}")
+    assemble = next(s for s in job["steps"] if s.get("name") == "Собрать окружение для сервера")
+    assert "env" not in assemble
+    assert assemble["run"].count("DEPLOY_ENVIRONMENT") == 2
+
+
+def _missing_access(tmp_path: Path, **values: str) -> subprocess.CompletedProcess[str]:
+    workflow = yaml.safe_load(_workflow_text())
+    step = next(s for s in workflow["jobs"]["deploy"]["steps"] if s.get("name") == "Выкатить")
+    run = str(step["run"])
+    # Только проверка — до первого обращения к ssh.
+    script = tmp_path / "access.sh"
+    script.write_text(run[: run.index("mkdir -p ~/.ssh")] + "echo checked\n")
+    return subprocess.run(
+        ["bash", "--noprofile", "--norc", "-eo", "pipefail", str(script)],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "DEPLOY_ENVIRONMENT": "demo", **values},
+    )
+
+
+ACCESS = {
+    "DEPLOY_SSH_KEY": "k",
+    "DEPLOY_KNOWN_HOSTS": "h",
+    "DEPLOY_HOST": "1.2.3.4",
+    "DEPLOY_USER": "ketocare",
+}
+
+
+class TestUnconfiguredEnvironmentStops:
+    def test_complete_access_passes(self, tmp_path: Path) -> None:
+        result = _missing_access(tmp_path, **ACCESS)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    @pytest.mark.parametrize("field", sorted(ACCESS))
+    def test_any_missing_field_stops(self, tmp_path: Path, field: str) -> None:
+        result = _missing_access(tmp_path, **{**ACCESS, field: ""})
+
+        assert result.returncode != 0
+        assert "не заведён доступ" in result.stdout + result.stderr
 
 
 # --- 2. режим ожидания ------------------------------------------------------------
@@ -429,38 +504,3 @@ class TestProductionGate:
 
         assert result.returncode == 0
         assert "allow_untested" in result.stdout
-
-
-# --- 4. выкат закрыт, пока окружение не настроено до конца ------------------------
-
-
-def _ready(tmp_path: Path, *, ready: str, environment: str) -> subprocess.CompletedProcess[str]:
-    workflow = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))
-    steps = workflow["jobs"]["deploy"]["steps"]
-    step = next(s for s in steps if s.get("id") == "ready")
-    # До сборки окружения из секретов: иначе чужие значения уже собраны в файл.
-    names = [s.get("name") for s in steps]
-    assert names.index("Окружение настроено") < names.index("Собрать настройки окружения")
-    assert step["env"]["READY"] == "${{ vars.ENVIRONMENT_READY }}"
-    script = tmp_path / "ready.sh"
-    script.write_text(str(step["run"]))
-    return subprocess.run(
-        ["bash", "--noprofile", "--norc", "-eo", "pipefail", str(script)],
-        capture_output=True,
-        text=True,
-        env={**os.environ, "READY": ready, "DEPLOY_ENVIRONMENT": environment},
-    )
-
-
-class TestHalfConfiguredEnvironment:
-    """Секрет, которого у окружения нет, GitHub берёт с уровня репозитория."""
-
-    def test_configured_environment_deploys(self, tmp_path: Path) -> None:
-        assert _ready(tmp_path, ready="demo", environment="demo").returncode == 0
-
-    @pytest.mark.parametrize("ready", ["", "configuring", "production"])
-    def test_anything_else_stops_the_deploy(self, tmp_path: Path, ready: str) -> None:
-        result = _ready(tmp_path, ready=ready, environment="demo")
-
-        assert result.returncode != 0
-        assert "не настроено" in result.stdout + result.stderr

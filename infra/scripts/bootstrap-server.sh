@@ -204,6 +204,34 @@ step "ключи сервера"
 # созданные не трогает — иначе сменился бы пароль у работающей базы.
 KETOCARE_SECRETS_GROUP="$OWNER" bash "$REPO/infra/scripts/server-secrets.sh" init
 
+step "настройки сервера"
+# Адреса и часовой пояс этого сервера. Выкат их не приносит: в GitHub нет ни
+# одной настройки приложения (ADR-0095). Файл пишется один раз — дальше его
+# значения правит тот, кто обслуживает сервер, а настройки приложения вводятся
+# в кабинете.
+SETTINGS_FILE=/etc/ketocare/settings.env
+if [ -f "$SETTINGS_FILE" ]; then
+    echo "уже есть: $(sed -n 's/^\([A-Z_]*\)=.*/\1/p' "$SETTINGS_FILE" | tr '\n' ' ')"
+else
+    {
+        echo "# Настройки сервера $ENVIRONMENT. Записаны bootstrap-server.sh; выкат их не меняет."
+        echo "WEB_ORIGIN=https://$DOMAIN_APP"
+        echo "PUBLIC_APP_URL=https://$DOMAIN_APP"
+        echo "MINIAPP_ORIGIN=https://$DOMAIN_MINIAPP"
+        echo "MINIAPP_URL=https://$DOMAIN_MINIAPP"
+        echo "LANDING_SITE_URL=https://$DOMAIN_LANDING"
+        # Тестовый сервер в поиске не нужен: без этой строки robots.txt отдаёт Disallow.
+        [ "$ENVIRONMENT" = "production" ] && echo "LANDING_INDEXABLE=1"
+        # Шлюз docker-сети, откуда приходит трафик nginx (подсеть зафиксирована в compose).
+        echo "TRUSTED_PROXY_IPS=172.30.100.1"
+        echo "TZ=Asia/Tashkent"
+        echo "SENTRY_ENVIRONMENT=$ENVIRONMENT"
+    } > "$SETTINGS_FILE"
+    chown "root:$OWNER" "$SETTINGS_FILE"
+    chmod 640 "$SETTINGS_FILE"
+    echo "записаны: $(sed -n 's/^\([A-Z_]*\)=.*/\1/p' "$SETTINGS_FILE" | tr '\n' ' ')"
+fi
+
 step "nginx: заголовки безопасности"
 # Сайты подключают их строкой `include` в каждом location. Без этих файлов
 # nginx не проходит проверку вовсе: «open() …/ketocare-security-headers.conf failed».
