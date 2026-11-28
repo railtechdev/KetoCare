@@ -169,10 +169,40 @@ copy_volume() {
 copy_redis() {
     say "redis"
     on "$NEW" "$C stop redis >/dev/null 2>&1"
-    # Снимок кладётся как dump.rdb, каталог AOF убирается: иначе redis прочтёт
-    # AOF нового сервера, а не снимок. Владелец — как у каталога данных.
+    # Снимок кладётся как dump.rdb, каталог AOF убирается. Владелец — как у
+    # каталога данных.
     on "$OLD" "$C exec -T redis sh -c 'redis-cli SAVE >/dev/null && cat /data/dump.rdb'" \
         | on "$NEW" "docker run --rm -i -v ketocare_redisdata:/data alpine sh -c 'rm -rf /data/appendonlydir /data/dump.rdb && cat > /data/dump.rdb && [ -s /data/dump.rdb ] && chown \$(stat -c %u:%g /data) /data/dump.rdb'"
+    # Положить снимок мало. Наш redis работает с журналом (`--appendonly yes`),
+    # а redis 7 при включённом журнале снимок НЕ читает: не найдя журнала, он
+    # заводит пустой — и поднимается без единого ключа (так и вышло на
+    # репетиции 28.11.2026; прежняя инструкция в DEPLOY.md обещала обратное).
+    # Поэтому снимок один раз поднимается без журнала, журнал включается на
+    # ходу — redis переписывает в него всё, что в памяти, — и только после
+    # этого запускается штатный контейнер.
+    on "$NEW" "bash -s" <<'REMOTE'
+set -euo pipefail
+name=ketocare-redis-import
+cli() { docker exec "$name" redis-cli "$@" | tr -d '\r'; }
+docker rm -f "$name" >/dev/null 2>&1 || true
+docker run -d --name "$name" -v ketocare_redisdata:/data redis:7 redis-server --appendonly no >/dev/null
+trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+for _ in $(seq 1 20); do cli ping 2>/dev/null | grep -q PONG && break; sleep 1; done
+cli CONFIG SET appendonly yes >/dev/null
+for _ in $(seq 1 60); do
+    state="$(cli INFO persistence)"
+    if printf '%s\n' "$state" | grep -qx 'aof_enabled:1' \
+       && printf '%s\n' "$state" | grep -qx 'aof_rewrite_in_progress:0' \
+       && printf '%s\n' "$state" | grep -qx 'aof_rewrite_scheduled:0' \
+       && printf '%s\n' "$state" | grep -qx 'aof_last_bgrewrite_status:ok'; then
+        cli SHUTDOWN >/dev/null 2>&1 || true
+        exit 0
+    fi
+    sleep 1
+done
+echo "журнал redis не переписан за минуту" >&2
+exit 1
+REMOTE
     on "$NEW" "$C up -d redis >/dev/null 2>&1"
     sleep 3
     local was now
