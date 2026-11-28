@@ -40,7 +40,7 @@ import tempfile
 from pathlib import Path
 
 #: Секреты приложения: у каждого окружения свои, на уровне репозитория их нет.
-APP_SECRETS = (
+APP_NAMES = (
     "POSTGRES_PASSWORD",
     "SECRET_KEY",
     "BOT_API_TOKEN",
@@ -55,10 +55,10 @@ APP_SECRETS = (
     "AI_MODEL_SMART",
 )
 #: Секреты выката: адрес и ключ сервера.
-DEPLOY_SECRETS = ("DEPLOY_HOST", "DEPLOY_USER", "DEPLOY_KNOWN_HOSTS", "DEPLOY_SSH_KEY")
+DEPLOY_NAMES = ("DEPLOY_HOST", "DEPLOY_USER", "DEPLOY_KNOWN_HOSTS", "DEPLOY_SSH_KEY")
 #: Учётная запись первого администратора: на диск сервера не попадает, поэтому
 #: с прежнего сервера её не взять — да и на перенесённой базе она уже есть.
-ADMIN_SECRETS = ("ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME")
+ADMIN_NAMES = ("ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME")
 #: Настройки без секретности, которые переезжают с прежнего сервера как есть.
 COPIED_VARIABLES = (
     "AI_DAILY_BUDGET_USD",
@@ -80,7 +80,7 @@ GENERATED = (
     "MONITOR_TOKEN",
 )
 #: Что человек задаёт тестовому сам.
-BY_HAND = ("BOT_TOKEN", "BOT_USERNAME", *ADMIN_SECRETS)
+BY_HAND = ("BOT_TOKEN", "BOT_USERNAME", *ADMIN_NAMES)
 
 REMOTE_ENV = "/srv/ketocare/.env"
 OWNER = "ketocare"
@@ -199,7 +199,7 @@ def setup(args: argparse.Namespace) -> None:
     if environment == "production" and not source:
         sys.exit("production: секреты приложения берутся с прежнего сервера — нужен --secrets-from")
 
-    for name in APP_SECRETS:
+    for name in APP_NAMES:
         if name in source:
             secret(name, source[name])
         elif environment == "demo" and name in GENERATED:
@@ -294,13 +294,13 @@ def finish(args: argparse.Namespace) -> None:
     there = existing("secret", environment)
     # Сначала доказательство, что у окружения всё своё: иначе удаление оставило
     # бы сервер без пароля базы на следующем выкате.
-    required = {"POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN", *DEPLOY_SECRETS}
+    required = {"POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN", *DEPLOY_NAMES}
     absent = sorted(required - there)
     if absent:
         sys.exit(f"у окружения «{environment}» нет: {', '.join(absent)} — удалять рано")
     at_repository = existing("secret", None)
     # `MINIAPP_URL` лежал секретом исторически; теперь это переменная окружения.
-    leftovers = {*APP_SECRETS, *DEPLOY_SECRETS, *ADMIN_SECRETS, "MINIAPP_URL"}
+    leftovers = {*APP_NAMES, *DEPLOY_NAMES, *ADMIN_NAMES, "MINIAPP_URL"}
     for name in sorted(at_repository & leftovers):
         if not args.dry_run:
             gh("secret", "delete", name)
