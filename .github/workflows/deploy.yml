@@ -8,11 +8,11 @@ run-name: Deploy → ${{ github.event_name == 'workflow_dispatch' && inputs.envi
 #     (Actions → Deploy → Run workflow) и только коммитом из `main`, который
 #     прямо сейчас стоит на тестовом.
 #
-# Адрес сервера, ключ и все секреты приложения у каждого окружения СВОИ
-# (Settings → Environments). На уровне репозитория секретов приложения нет
-# намеренно: секрет окружения, который забыли завести, GitHub молча взял бы
-# с уровня репозитория — и тестовый бот начал бы отвечать семьям токеном
-# боевого.
+# Секретов приложения здесь нет вовсе. Пароль базы и ключи подписи создаёт сам
+# сервер, токен бота и ключи ИИ вводятся в кабинете; отсюда на сервер едут
+# только несекретные настройки. У окружения свои (Settings → Environments)
+# адрес сервера и ключ, которым выкат на него заходит, — и больше ничего
+# секретного.
 #
 # Запускается ПОСЛЕ зелёного CI, а не по самому push: событие push приходит
 # раньше, чем известен результат тестов, и деплой по нему выкатывал бы
@@ -163,11 +163,11 @@ jobs:
         id: ready
         if: steps.target.outputs.stale != 'true'
         env:
-          # Ставится ПОСЛЕДНЕЙ, когда у окружения заведены все свои секреты
-          # (infra/scripts/github_environment.py). Секрет, которого у окружения
-          # нет, GitHub молча берёт с уровня репозитория — и наполовину
-          # настроенное окружение выкатилось бы с чужим паролем базы или чужим
-          # ботом. Переменной уровня репозитория с этим именем нет намеренно.
+          # Ставится ПОСЛЕДНЕЙ, когда у окружения заведены свои адрес сервера,
+          # ключ и настройки (infra/scripts/github_environment.py). Значение,
+          # которого у окружения нет, GitHub молча берёт с уровня репозитория —
+          # и наполовину настроенное окружение выкатилось бы на чужой сервер.
+          # Переменной уровня репозитория с этим именем нет намеренно.
           READY: ${{ vars.ENVIRONMENT_READY }}
         run: |
           if [ "$READY" != "$DEPLOY_ENVIRONMENT" ]; then
@@ -220,66 +220,40 @@ jobs:
           fi
           echo "на тестовом стоит тот же коммит"
 
-      - name: Собрать окружение из секретов
+      - name: Собрать настройки окружения
         if: steps.target.outputs.stale != 'true'
         env:
-          # Секреты
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
-          BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Ключ шифрования настроек, которые администратор вводит в кабинете
-          # (ключ ИИ, ADR-0080). Пусто — ключ выводится из SECRET_KEY; задан —
-          # смена SECRET_KEY не делает введённые секреты нечитаемыми.
-          SETTINGS_ENCRYPTION_KEY: ${{ secrets.SETTINGS_ENCRYPTION_KEY }}
-          # Токен монитора доступности: открывает GET /api/v1/health/ai. Тот же
-          # секрет читает uptime.yml — значение одно на оба места. Пусто —
-          # ручки на стенде нет (404), а монитор без секрета ИИ не проверяет.
-          MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
-          # Имена моделей (раздел 10.2 ТЗ). Не секреты — но принимаются и из
-          # Secrets: адрес Mini App уже наступил на эти грабли, а расплата
-          # несоразмерная — выкат успешен, ИИ-функции молча отвечают
-          # «недоступно». Пустое значение — тоже ответ: код отказывается
-          # подставлять модель по умолчанию, потому что это был бы хардкод
-          # модели (правило 6 CLAUDE.md).
-          AI_MODEL_FAST: ${{ vars.AI_MODEL_FAST || secrets.AI_MODEL_FAST }}
-          AI_MODEL_SMART: ${{ vars.AI_MODEL_SMART || secrets.AI_MODEL_SMART }}
+          # Только НЕСЕКРЕТНЫЕ настройки — адреса, часовой пояс, пределы
+          # (Settings → Environments → Variables). Ни одного секрета приложения
+          # здесь нет и быть не должно (ADR-0095):
+          #   • пароль базы, ключ подписи, ключ шифрования настроек и ключ связи
+          #     бота с API создаёт сам сервер (infra/scripts/server-secrets.sh)
+          #     и дополняет ими эти настройки — их не вводит никто;
+          #   • токен Telegram-бота, ключи ИИ и прочие интеграции вводятся в
+          #     кабинете.
+          # Имя, которое есть среди ключей сервера, он из присланного
+          # выбрасывает: подменить ключ отсюда нельзя.
+          #
           # Куда подключения из кабинета могут отправлять запросы с данными
           # детей (ADR-0082): список хостов через запятую, `*.домен` — поддомены.
           # Пусто — любой адрес. Задаёт тот, кто обслуживает сервер, а не
           # администратор кабинета.
           AI_PROVIDER_HOSTS: ${{ vars.AI_PROVIDER_HOSTS }}
-          # Предохранители расхода. Умолчания заданы в `core.config`, поэтому
-          # пустое значение здесь не ломает ничего — оно означает «как в коде».
+          # Имена моделей и предохранители расхода — запасные значения: то, что
+          # администратор задал в «Модели и расход», сильнее (ADR-0080).
+          AI_MODEL_FAST: ${{ vars.AI_MODEL_FAST }}
+          AI_MODEL_SMART: ${{ vars.AI_MODEL_SMART }}
           AI_DAILY_BUDGET_USD: ${{ vars.AI_DAILY_BUDGET_USD }}
           AI_USER_DAILY_LIMIT: ${{ vars.AI_USER_DAILY_LIMIT }}
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          # Имя окружения в Sentry: без него боевые ошибки лежали бы вперемешку
-          # с ошибками с машины разработчика. Не секрет — переменная репозитория.
-          SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT || 'production' }}
-          # Учётные данные первого администратора. На диск сервера НЕ попадают:
-          # remote-deploy.sh забирает их из потока и не пишет в файл окружения.
-          # Учётка создаётся один раз; если она уже есть, пароль не трогается —
-          # человек мог сменить его при первом входе.
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          ADMIN_NAME: ${{ secrets.ADMIN_NAME || vars.ADMIN_NAME }}
-          # Имя бота публично (по нему находят бота), но берётся из секрета,
-          # если он задан: так все настройки бота лежат в одном месте.
-          BOT_USERNAME: ${{ secrets.BOT_USERNAME || vars.BOT_USERNAME }}
+          # Имя окружения в Sentry: без него ошибки боевого лежали бы вперемешку
+          # с ошибками тестового.
+          SENTRY_ENVIRONMENT: ${{ vars.SENTRY_ENVIRONMENT }}
           TRUSTED_PROXY_IPS: ${{ vars.TRUSTED_PROXY_IPS }}
           WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
           MINIAPP_ORIGIN: ${{ vars.MINIAPP_ORIGIN }}
           # Публичный адрес Mini App. Пока значение пусто, кнопки «Приложение»
           # в меню бота нет (apps/bot/src/bot/keyboards.py).
-          #
-          # Читается и из переменных, и из секретов: адрес публичный и место ему
-          # в Variables, но положить его в Secrets — естественная ошибка (там уже
-          # лежат BOT_TOKEN и BOT_USERNAME), а расплата за неё несоразмерная:
-          # выкат проходит успешно, и кнопка молча не появляется. Так же
-          # разобран BOT_USERNAME парой строк выше.
-          MINIAPP_URL: ${{ vars.MINIAPP_URL || secrets.MINIAPP_URL }}
+          MINIAPP_URL: ${{ vars.MINIAPP_URL }}
           LANDING_SITE_URL: ${{ vars.LANDING_SITE_URL }}
           LANDING_INDEXABLE: ${{ vars.LANDING_INDEXABLE }}
           PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
@@ -289,17 +263,14 @@ jobs:
           ATTACHMENT_PURGE_DAYS: ${{ vars.ATTACHMENT_PURGE_DAYS }}
           REPORT_LINK_TTL_HOURS: ${{ vars.REPORT_LINK_TTL_HOURS }}
           TZ: ${{ vars.TZ }}
-          # Бэкапы. Публичный ключ age — секрет не по содержанию (он публичный),
-          # а по последствиям подмены: чужой ключ в этой строке означает копии,
-          # которые расшифрует не клиника. `BACKUP_REMOTE` — переменная: адрес
-          # хранилища не секрет, а `rclone config` живёт на сервере.
-          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          # Адрес внешнего хранилища копий не секрет, а `rclone config` живёт
+          # на сервере.
           BACKUP_REMOTE: ${{ vars.BACKUP_REMOTE }}
         run: |
           umask 077
           # Значения экранируются shlex.quote: deploy.sh не парсит окружение, а
-          # ИСПОЛНЯЕТ его (`set -a; . ./.env`). Токен с `&` или пароль с кавычкой
-          # без этого превращаются в команду.
+          # ИСПОЛНЯЕТ его (`set -a; . ./.env`). Значение с `&` или кавычкой без
+          # этого превращается в команду.
           #
           # Пустые значения пропускаются: Settings подставит свой дефолт, а
           # пустая строка его затирает — так пустой MINIAPP_ORIGIN открыл бы CORS
@@ -312,42 +283,38 @@ jobs:
           import os, shlex
 
           NAMES = [
-              "POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN",
-              "BOT_USERNAME", "ANTHROPIC_API_KEY", "SETTINGS_ENCRYPTION_KEY", "MONITOR_TOKEN",
               "AI_MODEL_FAST", "AI_MODEL_SMART", "AI_PROVIDER_HOSTS",
               "AI_DAILY_BUDGET_USD", "AI_USER_DAILY_LIMIT",
-              "SENTRY_DSN", "SENTRY_ENVIRONMENT",
-              "ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME",
+              "SENTRY_ENVIRONMENT",
               "TRUSTED_PROXY_IPS", "WEB_ORIGIN", "MINIAPP_ORIGIN", "MINIAPP_URL",
               "LANDING_SITE_URL", "LANDING_INDEXABLE", "PUBLIC_APP_URL",
               "PUBLIC_CONTACT_EMAIL", "PUBLIC_TELEGRAM_URL",
               "ATTACHMENT_QUOTA_MB", "ATTACHMENT_PURGE_DAYS",
               "REPORT_LINK_TTL_HOURS", "TZ",
-              "BACKUP_AGE_RECIPIENT", "BACKUP_REMOTE",
+              "BACKUP_REMOTE",
               # Имя окружения: сервер сверяет его со своей меткой и отказывает
               # чужому (remote-deploy.sh) — перепутанный DEPLOY_HOST не должен
-              # положить окружение тестового на боевой.
+              # положить настройки тестового на боевой.
               "DEPLOY_ENVIRONMENT",
           ]
           print("# Собран автоматически .github/workflows/deploy.yml — правки")
           print("# руками затираются следующим деплоем. Источник значений —")
-          print("# Settings → Secrets and variables репозитория.")
+          print("# Settings → Environments → Variables. Ключи дописывает сервер.")
           for name in NAMES:
               value = os.environ.get(name, "")
               if value:
                   print(f"{name}={shlex.quote(value)}")
           PY
 
-          # Проверка до отправки: неполный файл затрёт рабочее окружение на
-          # сервере и уронит стенд молча. Чаще всего это значит, что секрет не
-          # заведён — например, потеряна строка `environment:` в job.
-          for required in POSTGRES_PASSWORD SECRET_KEY BOT_API_TOKEN DEPLOY_ENVIRONMENT; do
+          # Без имени окружения сервер выкат не примет; без адресов кабинет
+          # открылся бы с CORS на умолчание из примера.
+          for required in DEPLOY_ENVIRONMENT WEB_ORIGIN; do
             grep -q "^${required}=" env.rendered || {
-              echo "::error::Не задан секрет ${required} — деплой остановлен"
+              echo "::error::Не задана переменная окружения ${required} — деплой остановлен"
               exit 1
             }
           done
-          echo "переменных в окружении: $(grep -c '^[A-Z]' env.rendered)"
+          echo "настроек в окружении: $(grep -c '^[A-Z]' env.rendered)"
 
       - name: Выкатить
         if: steps.target.outputs.stale != 'true'

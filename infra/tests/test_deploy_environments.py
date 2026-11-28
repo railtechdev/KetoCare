@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -26,6 +27,7 @@ import yaml
 _ROOT = Path(__file__).resolve().parents[2]
 _REMOTE_DEPLOY = _ROOT / "infra" / "scripts" / "remote-deploy.sh"
 _DEPLOY = _ROOT / "infra" / "scripts" / "deploy.sh"
+_SERVER_SECRETS = _ROOT / "infra" / "scripts" / "server-secrets.sh"
 _WORKFLOW = _ROOT / ".github" / "workflows" / "deploy.yml"
 
 _RECORDING_STUB = """#!/usr/bin/env bash
@@ -59,6 +61,12 @@ def _commit(repo: Path) -> None:
 # --- 1. сервер не принимает чужое окружение ---------------------------------------
 
 
+#: Рабочее окружение «сервера» до выката.
+WORKING = "POSTGRES_PASSWORD=working\n"
+#: Что приносит выкат: несекретные настройки. Ключи у сервера свои.
+SETTINGS = "WEB_ORIGIN=https://x\n"
+
+
 @pytest.fixture
 def server(tmp_path: Path) -> dict[str, Path]:
     repo = tmp_path / "repo"
@@ -66,13 +74,17 @@ def server(tmp_path: Path) -> dict[str, Path]:
     scripts = repo / "infra" / "scripts"
     scripts.mkdir(parents=True)
     _stub(scripts, "deploy.sh", '#!/usr/bin/env bash\necho deployed >> "$CALLS"\n')
+    (scripts / "server-secrets.sh").write_text(_SERVER_SECRETS.read_text(encoding="utf-8"))
     (repo / "infra" / "docker-compose.prod.yml").write_text("services: {}\n")
     # Рабочее окружение сервера: чужой выкат не вправе его тронуть.
     (repo / ".gitignore").write_text(".env*\n.deploy.lock\n")
     _commit(repo)
     subprocess.run(["git", "remote", "add", "origin", str(repo)], cwd=repo, check=True)
     subprocess.run(["git", "fetch", "--quiet", "origin"], cwd=repo, check=True)
-    (repo / ".env").write_text("POSTGRES_PASSWORD=working\n")
+    (repo / ".env").write_text(WORKING)
+    # Ключи сервера: создал сам сервер, из GitHub они не приходят.
+    secrets = tmp_path / "secrets"
+    secrets.write_text("POSTGRES_PASSWORD='own'\nSECRET_KEY='own'\nBOT_API_TOKEN='own'\n")
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -83,6 +95,7 @@ def server(tmp_path: Path) -> dict[str, Path]:
         "bin": fake_bin,
         "calls": tmp_path / "calls.txt",
         "mark": tmp_path / "mark",
+        "secrets": secrets,
     }
 
 
@@ -99,6 +112,7 @@ def _remote_deploy(server: dict[str, Path], env_file: str) -> subprocess.Complet
             "KETOCARE_REPO": str(server["repo"]),
             "KETOCARE_SELF": str(server["repo"] / "self.sh"),
             "KETOCARE_ENV_MARK": str(server["mark"]),
+            "KETOCARE_SECRETS": str(server["secrets"]),
             "CALLS": str(server["calls"]),
             "SSH_ORIGINAL_COMMAND": "main",
         },
@@ -106,31 +120,31 @@ def _remote_deploy(server: dict[str, Path], env_file: str) -> subprocess.Complet
 
 
 class TestServerRefusesAnotherEnvironment:
-    def test_demo_secrets_do_not_land_on_production(self, server: dict[str, Path]) -> None:
+    def test_demo_settings_do_not_land_on_production(self, server: dict[str, Path]) -> None:
         server["mark"].write_text("production\n")
 
-        result = _remote_deploy(server, "POSTGRES_PASSWORD=demo\nDEPLOY_ENVIRONMENT=demo\n")
+        result = _remote_deploy(server, SETTINGS + "DEPLOY_ENVIRONMENT=demo\n")
 
         assert result.returncode == 66, result.stderr
         assert "отказано" in result.stderr
         # Рабочее окружение цело, выкат не начинался.
-        assert (server["repo"] / ".env").read_text() == "POSTGRES_PASSWORD=working\n"
+        assert (server["repo"] / ".env").read_text() == WORKING
         assert not (server["repo"] / ".env.next").exists()
         assert not server["calls"].exists()
 
     def test_own_environment_is_deployed(self, server: dict[str, Path]) -> None:
         server["mark"].write_text("production\n")
 
-        result = _remote_deploy(server, "POSTGRES_PASSWORD=new\nDEPLOY_ENVIRONMENT=production\n")
+        result = _remote_deploy(server, SETTINGS + "DEPLOY_ENVIRONMENT=production\n")
 
         assert result.returncode == 0, result.stderr
-        assert "POSTGRES_PASSWORD=new" in (server["repo"] / ".env").read_text()
+        assert "WEB_ORIGIN=https://x" in (server["repo"] / ".env").read_text()
         assert server["calls"].read_text() == "deployed\n"
 
     def test_unmarked_server_refuses_a_named_environment(self, server: dict[str, Path]) -> None:
         """Сервер без метки заведён до двух окружений — новый выкат не для него."""
 
-        result = _remote_deploy(server, "POSTGRES_PASSWORD=x\nDEPLOY_ENVIRONMENT=demo\n")
+        result = _remote_deploy(server, SETTINGS + "DEPLOY_ENVIRONMENT=demo\n")
 
         assert result.returncode == 66
         assert not server["calls"].exists()
@@ -138,10 +152,121 @@ class TestServerRefusesAnotherEnvironment:
     def test_marked_server_refuses_an_unnamed_environment(self, server: dict[str, Path]) -> None:
         server["mark"].write_text("demo\n")
 
-        result = _remote_deploy(server, "POSTGRES_PASSWORD=x\n")
+        result = _remote_deploy(server, SETTINGS)
 
         assert result.returncode == 66
         assert not server["calls"].exists()
+
+
+class TestServerKeepsItsOwnKeys:
+    """Ключи создаёт сервер; выкат приносит только несекретные настройки."""
+
+    def test_keys_join_the_settings(self, server: dict[str, Path]) -> None:
+        result = _remote_deploy(server, SETTINGS)
+
+        assert result.returncode == 0, result.stderr
+        environment = (server["repo"] / ".env").read_text()
+        assert "WEB_ORIGIN=https://x" in environment
+        assert "POSTGRES_PASSWORD='own'" in environment
+        # Принесённые настройки лежат отдельно: по ним перенос пересобирает
+        # окружение, когда меняет ключи.
+        assert (server["repo"] / ".env.config").read_text() == SETTINGS
+
+    def test_a_key_cannot_be_replaced_from_outside(self, server: dict[str, Path]) -> None:
+        result = _remote_deploy(server, "SECRET_KEY=injected\n" + SETTINGS)
+
+        assert result.returncode == 0, result.stderr
+        environment = (server["repo"] / ".env").read_text()
+        assert "injected" not in environment
+        assert "SECRET_KEY='own'" in environment
+
+    def test_settings_alone_never_replace_a_working_environment(
+        self, server: dict[str, Path]
+    ) -> None:
+        """Сервер без своих ключей (заведён раньше) получил бы окружение без
+        пароля базы — и потерял бы рабочее."""
+
+        server["secrets"].unlink()
+
+        result = _remote_deploy(server, SETTINGS)
+
+        assert result.returncode == 65, result.stderr
+        assert (server["repo"] / ".env").read_text() == WORKING
+        assert not server["calls"].exists()
+
+
+def _secrets(tmp_path: Path, *args: str, stdin: str = "") -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", str(_SERVER_SECRETS), *args],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "KETOCARE_SECRETS": str(tmp_path / "secrets.env")},
+    )
+
+
+def _line(tmp_path: Path, name: str) -> str | None:
+    for line in (tmp_path / "secrets.env").read_text().splitlines():
+        if line.startswith(f"{name}="):
+            return line
+    return None
+
+
+class TestServerSecrets:
+    def test_init_creates_keys_once(self, tmp_path: Path) -> None:
+        assert _secrets(tmp_path, "init").returncode == 0
+        first = (tmp_path / "secrets.env").read_text()
+        # Повторная настройка сервера не вправе сменить пароль базы.
+        assert _secrets(tmp_path, "init").returncode == 0
+        assert (tmp_path / "secrets.env").read_text() == first
+
+        # Токена Telegram-бота и ключей ИИ здесь нет: их вводят в кабинете.
+        assert _secrets(tmp_path, "names").stdout.split() == [
+            "POSTGRES_PASSWORD",
+            "SECRET_KEY",
+            "BOT_API_TOKEN",
+            "SETTINGS_ENCRYPTION_KEY",
+            "MONITOR_TOKEN",
+        ]
+        assert (tmp_path / "secrets.env").stat().st_mode & 0o007 == 0
+
+    def test_init_prints_names_not_values(self, tmp_path: Path) -> None:
+        result = _secrets(tmp_path, "init")
+
+        for line in (tmp_path / "secrets.env").read_text().splitlines():
+            value = line.split("=", 1)[1].strip("'")
+            assert value not in result.stdout + result.stderr
+
+    def test_mirror_takes_the_named_and_drops_the_missing(self, tmp_path: Path) -> None:
+        """Перенос: прежний сервер не имел отдельного ключа шифрования настроек —
+        оставь новый свой, ключи ИИ из кабинета перестали бы читаться."""
+
+        _secrets(tmp_path, "init")
+        own_password = _line(tmp_path, "POSTGRES_PASSWORD")
+
+        result = _secrets(
+            tmp_path,
+            "mirror",
+            "SECRET_KEY",
+            "SETTINGS_ENCRYPTION_KEY",
+            "BOT_TOKEN",
+            stdin="SECRET_KEY='from-old'\nBOT_TOKEN=1:abc\nPOSTGRES_PASSWORD=sneaked\n",
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert _line(tmp_path, "SECRET_KEY") == "SECRET_KEY='from-old'"
+        assert _line(tmp_path, "BOT_TOKEN") == "BOT_TOKEN=1:abc"
+        assert _line(tmp_path, "SETTINGS_ENCRYPTION_KEY") is None
+        # Не названное в команде со входа не берётся.
+        assert _line(tmp_path, "POSTGRES_PASSWORD") == own_password
+        assert "from-old" not in result.stdout + result.stderr
+
+
+def test_workflow_carries_no_application_secret() -> None:
+    """В выкате нет ни одного секрета приложения — только доступ к серверу."""
+
+    used = set(re.findall(r"secrets\.([A-Z_]+)", _WORKFLOW.read_text(encoding="utf-8")))
+    assert used == {"DEPLOY_SSH_KEY", "DEPLOY_KNOWN_HOSTS", "DEPLOY_HOST", "DEPLOY_USER"}
 
 
 def test_workflow_always_names_the_environment() -> None:
@@ -152,9 +277,9 @@ def test_workflow_always_names_the_environment() -> None:
     assert job["environment"] == job["env"]["DEPLOY_ENVIRONMENT"]
     # Автоматический выкат (после CI) — только на тестовый.
     assert job["environment"].endswith("|| 'demo' }}")
-    assemble = next(s for s in job["steps"] if s.get("name") == "Собрать окружение из секретов")
+    assemble = next(s for s in job["steps"] if s.get("name") == "Собрать настройки окружения")
     assert '"DEPLOY_ENVIRONMENT"' in assemble["run"]
-    assert "DEPLOY_ENVIRONMENT; do" in assemble["run"]
+    assert "for required in DEPLOY_ENVIRONMENT" in assemble["run"]
 
 
 # --- 2. режим ожидания ------------------------------------------------------------
@@ -302,7 +427,7 @@ def _ready(tmp_path: Path, *, ready: str, environment: str) -> subprocess.Comple
     step = next(s for s in steps if s.get("id") == "ready")
     # До сборки окружения из секретов: иначе чужие значения уже собраны в файл.
     names = [s.get("name") for s in steps]
-    assert names.index("Окружение настроено") < names.index("Собрать окружение из секретов")
+    assert names.index("Окружение настроено") < names.index("Собрать настройки окружения")
     assert step["env"]["READY"] == "${{ vars.ENVIRONMENT_READY }}"
     script = tmp_path / "ready.sh"
     script.write_text(str(step["run"]))

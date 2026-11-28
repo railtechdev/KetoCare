@@ -1,46 +1,40 @@
 #!/usr/bin/env python3
-"""Завести окружение выката в GitHub: секреты, переменные, ключ (ADR-0095).
+"""Завести окружение выката в GitHub: адрес сервера, ключ выката, настройки (ADR-0095).
 
-    github_environment.py production --domain ketocare.uz --server ketocare-prod \\
-        --secrets-from ketocare-old
+    github_environment.py production --domain ketocare.uz --server ketocare-prod
     github_environment.py demo --domain demo.ketocare.uz --server ketocare-demo
-    github_environment.py --finish production     # убрать секреты приложения с уровня репозитория
+    github_environment.py production --finish   # убрать прежние секреты с уровня репозитория
 
-Ни одно значение секрета не печатается и не ложится на диск: значения идут из
-источника прямо на вход `gh secret set`. Печатаются только имена.
-
-Откуда значения:
-
-* `production` — из файла окружения прежнего сервера (`--secrets-from`, имя из
-  `~/.ssh/config`): секреты приложения обязаны остаться ПРЕЖНИМИ — `SECRET_KEY`
-  подписывает сессии и расшифровывает ключи ИИ из кабинета, к `BOT_TOKEN`
-  привязаны семьи, а `POSTGRES_PASSWORD` должен совпасть с тем, что получит
-  перенесённая база;
-* `demo` — служебные секреты генерируются; токен бота, его имя и учётную запись
-  администратора человек задаёт сам (Settings → Environments → demo).
-
-Секрет, уже заведённый окружению, не перезаписывается (`--force` — перезаписать):
-повторный запуск не должен сменить пароль базы у работающего сервера.
+Секретов приложения здесь нет: пароль базы и ключи подписи создаёт сам сервер
+(`server-secrets.sh`), токен бота и ключи ИИ вводятся в кабинете. Окружению в
+GitHub нужно только то, чем выкат заходит на сервер, и несекретные настройки —
+адреса, часовой пояс.
 
 Ключ выката создаётся в памяти (`/dev/shm`), закрытая часть уходит в секрет
 `DEPLOY_SSH_KEY`, открытая печатается — её принимает `bootstrap-server.sh`
-переменной `DEPLOY_PUBKEY`.
+переменной `DEPLOY_PUBKEY`. Уже заведённый ключ не перевыпускается
+(`--force` — перевыпустить): его открытая часть уже стоит на сервере.
+
+Последней ставится переменная `ENVIRONMENT_READY`: до неё выкат в окружение
+закрыт. Значение, которого у окружения нет, GitHub молча берёт с уровня
+репозитория — наполовину настроенное окружение выкатилось бы на чужой сервер.
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import os
-import secrets as random_secrets
-import shlex
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-#: Секреты приложения: у каждого окружения свои, на уровне репозитория их нет.
-APP_NAMES = (
+#: Чем выкат заходит на сервер — единственное секретное у окружения.
+DEPLOY_NAMES = ("DEPLOY_HOST", "DEPLOY_USER", "DEPLOY_KNOWN_HOSTS", "DEPLOY_SSH_KEY")
+#: Что лежало на уровне репозитория, пока сервер был один, и подлежит удалению:
+#: значения приложения теперь у сервера и в кабинете.
+LEGACY_REPOSITORY_NAMES = (
+    *DEPLOY_NAMES,
     "POSTGRES_PASSWORD",
     "SECRET_KEY",
     "BOT_API_TOKEN",
@@ -53,36 +47,11 @@ APP_NAMES = (
     "BACKUP_AGE_RECIPIENT",
     "AI_MODEL_FAST",
     "AI_MODEL_SMART",
+    "MINIAPP_URL",
+    "ADMIN_EMAIL",
+    "ADMIN_PASSWORD",
+    "ADMIN_NAME",
 )
-#: Секреты выката: адрес и ключ сервера.
-DEPLOY_NAMES = ("DEPLOY_HOST", "DEPLOY_USER", "DEPLOY_KNOWN_HOSTS", "DEPLOY_SSH_KEY")
-#: Учётная запись первого администратора: на диск сервера не попадает, поэтому
-#: с прежнего сервера её не взять — да и на перенесённой базе она уже есть.
-ADMIN_NAMES = ("ADMIN_EMAIL", "ADMIN_PASSWORD", "ADMIN_NAME")
-#: Настройки без секретности, которые переезжают с прежнего сервера как есть.
-COPIED_VARIABLES = (
-    "AI_DAILY_BUDGET_USD",
-    "AI_USER_DAILY_LIMIT",
-    "AI_PROVIDER_HOSTS",
-    "ATTACHMENT_QUOTA_MB",
-    "ATTACHMENT_PURGE_DAYS",
-    "REPORT_LINK_TTL_HOURS",
-    "PUBLIC_CONTACT_EMAIL",
-    "PUBLIC_TELEGRAM_URL",
-    "BACKUP_REMOTE",
-)
-#: Генерируются для тестового сервера.
-GENERATED = (
-    "POSTGRES_PASSWORD",
-    "SECRET_KEY",
-    "BOT_API_TOKEN",
-    "SETTINGS_ENCRYPTION_KEY",
-    "MONITOR_TOKEN",
-)
-#: Что человек задаёт тестовому сам.
-BY_HAND = ("BOT_TOKEN", "BOT_USERNAME", *ADMIN_NAMES)
-
-REMOTE_ENV = "/srv/ketocare/.env"
 OWNER = "ketocare"
 
 
@@ -96,58 +65,27 @@ def gh(*args: str, stdin: str | None = None) -> str:
         ["gh", *args], input=stdin, capture_output=True, text=True, env=_env(), check=False
     )
     if done.returncode != 0:
-        # stderr `gh` значений не содержит: тело секрета шло на вход.
+        # В stderr `gh` значений нет: тело уходило на вход.
         sys.exit(f"gh {' '.join(args[:3])}…: {done.stderr.strip()}")
     return done.stdout
 
 
-def ssh(host: str, command: str) -> str:
-    done = subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", host, command], capture_output=True, text=True, check=False
-    )
-    if done.returncode != 0:
-        sys.exit(f"ssh {host}: {done.stderr.strip()}")
-    return done.stdout
-
-
-def remote_environment(host: str) -> dict[str, str]:
-    """Файл окружения сервера. Значения там пропущены через `shlex.quote`."""
-
-    values: dict[str, str] = {}
-    for line in ssh(host, f"cat {REMOTE_ENV}").splitlines():
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, raw = line.split("=", 1)
-        parts = shlex.split(raw)
-        if parts:
-            values[name] = parts[0]
-    return values
-
-
 def existing(kind: str, environment: str | None) -> set[str]:
     scope = ["--env", environment] if environment else []
-    listing = gh(kind, "list", *scope, "--json", "name", "--jq", ".[].name")
-    return set(listing.split())
+    return set(gh(kind, "list", *scope, "--json", "name", "--jq", ".[].name").split())
 
 
-def set_secret(name: str, value: str, environment: str | None, *, dry: bool) -> None:
+def put_hidden(label: str, body: str, environment: str, *, dry: bool) -> None:
+    if not dry:
+        gh("secret", "set", label, "--env", environment, stdin=body)
+    print(f"  {label} — записан")
+
+
+def put_variable(label: str, value: str, environment: str | None, *, dry: bool) -> None:
     scope = ["--env", environment] if environment else []
     if not dry:
-        gh("secret", "set", name, *scope, stdin=value)
-    print(f"  секрет {name}")
-
-
-def set_variable(name: str, value: str, environment: str | None, *, dry: bool) -> None:
-    scope = ["--env", environment] if environment else []
-    if not dry:
-        gh("variable", "set", name, *scope, "--body", value)
-    print(f"  переменная {name} = {value}")
-
-
-def generated(name: str) -> str:
-    if name == "SETTINGS_ENCRYPTION_KEY":
-        return base64.urlsafe_b64encode(os.urandom(32)).decode()
-    return random_secrets.token_urlsafe(48)
+        gh("variable", "set", label, *scope, "--body", value)
+    print(f"  {label} = {value}")
 
 
 def deploy_key() -> tuple[str, str]:
@@ -174,6 +112,33 @@ def deploy_key() -> tuple[str, str]:
         return key.read_text(), key.with_suffix(".pub").read_text().strip()
 
 
+def server_address(alias: str) -> tuple[str, str]:
+    """Адрес сервера и его ключ для `known_hosts` выката."""
+
+    # Адрес — тот, по которому на сервер ходит эта машина (HostName из
+    # ~/.ssh/config): сам сервер мог бы назвать внутренний.
+    resolved = subprocess.run(["ssh", "-G", alias], capture_output=True, text=True, check=True)
+    address = next(
+        line.split()[1] for line in resolved.stdout.splitlines() if line.startswith("hostname ")
+    )
+    scanned = subprocess.run(
+        ["ssh-keyscan", "-t", "ed25519", address], capture_output=True, text=True, check=False
+    ).stdout.strip()
+    if not scanned:
+        sys.exit(f"ssh-keyscan {address}: сервер не отдал ключ")
+    # Сверка с тем, что эта машина уже знает: иначе в known_hosts выката лёг бы
+    # ключ того, кто ответил на сканирование.
+    known = subprocess.run(
+        ["ssh-keygen", "-F", address], capture_output=True, text=True, check=False
+    ).stdout
+    if scanned.split()[-1] not in known:
+        sys.exit(
+            f"ключ сервера {address} не совпал с записью этой машины — "
+            "зайдите на сервер по этому адресу один раз и сверьте отпечаток"
+        )
+    return address, scanned
+
+
 def setup(args: argparse.Namespace) -> None:
     environment: str = args.environment
     dry: bool = args.dry_run
@@ -184,127 +149,69 @@ def setup(args: argparse.Namespace) -> None:
     if not dry:
         gh("api", "--method", "PUT", f"repos/{repository}/environments/{environment}")
     # Пока идёт настройка, выкат в это окружение закрыт (deploy.yml, шаг
-    # «Окружение настроено»): наполовину заведённые секреты GitHub дополнил бы
-    # значениями с уровня репозитория.
-    set_variable("ENVIRONMENT_READY", "configuring", environment, dry=dry)
-    have = existing("secret", environment) if not dry else set()
+    # «Окружение настроено»).
+    put_variable("ENVIRONMENT_READY", "configuring", environment, dry=dry)
 
-    def secret(name: str, value: str) -> None:
-        if name in have and not args.force:
-            print(f"  секрет {name} — уже есть, не тронут")
-            return
-        set_secret(name, value, environment, dry=dry)
-
-    source = remote_environment(args.secrets_from) if args.secrets_from else {}
-    if environment == "production" and not source:
-        sys.exit("production: секреты приложения берутся с прежнего сервера — нужен --secrets-from")
-
-    for name in APP_NAMES:
-        if name in source:
-            secret(name, source[name])
-        elif environment == "demo" and name in GENERATED:
-            secret(name, generated(name))
-
-    for name, value in {
+    for label, value in {
         "LANDING_SITE_URL": f"https://{domain}",
         "PUBLIC_APP_URL": f"https://app.{domain}",
         "WEB_ORIGIN": f"https://app.{domain}",
         "MINIAPP_ORIGIN": f"https://tma.{domain}",
+        "MINIAPP_URL": f"https://tma.{domain}",
         "TRUSTED_PROXY_IPS": "172.30.100.1",
         "TZ": "Asia/Tashkent",
         "SENTRY_ENVIRONMENT": environment,
-        # Тестовый сервер в поиске не нужен: robots.txt отдаёт Disallow.
+        # Тестовый сервер в поиске не нужен: без переменной robots.txt отдаёт Disallow.
         **({"LANDING_INDEXABLE": "1"} if environment == "production" else {}),
-        **{name: source[name] for name in COPIED_VARIABLES if name in source},
     }.items():
-        set_variable(name, value, environment, dry=dry)
-    # Адрес Mini App — кнопка в боте. Секретом он лежал исторически; переменная
-    # окружения сильнее не станет, поэтому значение пишется туда же, куда читает
-    # выкат первым, — в переменные.
-    set_variable("MINIAPP_URL", f"https://tma.{domain}", environment, dry=dry)
+        put_variable(label, value, environment, dry=dry)
 
-    # Адрес — тот, по которому на сервер ходит эта машина (HostName из
-    # ~/.ssh/config): `hostname -I` на сервере мог бы назвать внутренний.
-    resolved = subprocess.run(
-        ["ssh", "-G", args.server], capture_output=True, text=True, check=True
-    ).stdout
-    address = next(
-        line.split()[1] for line in resolved.splitlines() if line.startswith("hostname ")
-    )
-    host_keys = subprocess.run(
-        ["ssh-keyscan", "-t", "ed25519", address], capture_output=True, text=True, check=False
-    ).stdout.strip()
-    if not host_keys:
-        sys.exit(f"ssh-keyscan {address}: сервер не отдал ключ")
-    # Ключ сервера, полученный сканированием, сверяется с тем, что уже знает
-    # эта машина: иначе в known_hosts выката лёг бы ключ того, кто ответил.
-    known = subprocess.run(
-        ["ssh-keygen", "-F", address], capture_output=True, text=True, check=False
-    ).stdout
-    scanned = host_keys.split()[-1]
-    if scanned not in known:
-        sys.exit(
-            f"ключ сервера {address} не совпал с записью этой машины — "
-            "зайдите на сервер по этому адресу один раз и сверьте отпечаток"
-        )
-    secret("DEPLOY_HOST", address)
-    secret("DEPLOY_USER", OWNER)
-    secret("DEPLOY_KNOWN_HOSTS", host_keys)
-
+    address, host_key = server_address(args.server)
+    have = existing("secret", environment) if not dry else set()
+    put_hidden("DEPLOY_HOST", address, environment, dry=dry)
+    put_hidden("DEPLOY_USER", OWNER, environment, dry=dry)
+    put_hidden("DEPLOY_KNOWN_HOSTS", host_key, environment, dry=dry)
+    public = ""
     if "DEPLOY_SSH_KEY" in have and not args.force:
-        print("  секрет DEPLOY_SSH_KEY — уже есть, не тронут (открытая часть уже на сервере)")
+        print("  DEPLOY_SSH_KEY — уже есть, не перевыпущен (открытая часть стоит на сервере)")
     else:
         private, public = deploy_key()
-        set_secret("DEPLOY_SSH_KEY", private, environment, dry=dry)
-        print("\nоткрытая часть ключа выката — переменной DEPLOY_PUBKEY в bootstrap-server.sh:")
-        print(public)
+        put_hidden("DEPLOY_SSH_KEY", private, environment, dry=dry)
 
+    print("уровень репозитория:")
     if environment == "production":
-        # Монитор доступности и сверка «что стоит на тестовом» окружениями не
-        # пользуются: их значения — уровня репозитория, под своими именами.
-        print("уровень репозитория:")
-        for name, value in {
+        # Монитор доступности окружениями не пользуется: его адреса — здесь.
+        for label, value in {
             "UPTIME_LANDING_URL": f"https://{domain}/",
             "UPTIME_APP_URL": f"https://app.{domain}/",
             "UPTIME_MINIAPP_URL": f"https://tma.{domain}/",
         }.items():
-            set_variable(name, value, None, dry=dry)
-        for name, origin in {
-            "UPTIME_BOT_TOKEN": "BOT_TOKEN",
-            "UPTIME_MONITOR_TOKEN": "MONITOR_TOKEN",
-        }.items():
-            if origin in source:
-                set_secret(name, source[origin], None, dry=dry)
+            put_variable(label, value, None, dry=dry)
     else:
-        print("уровень репозитория:")
-        set_variable("DEMO_APP_URL", f"https://app.{domain}", None, dry=dry)
-        missing = [name for name in BY_HAND if name not in have]
-        if missing:
-            print("\nзадать руками (Settings → Environments → demo): " + ", ".join(missing))
-            print("затем запустить эту команду ещё раз — выкат откроется только тогда")
-            return
-    # Последним: всё своё у окружения заведено, выкат в него открыт.
-    set_variable("ENVIRONMENT_READY", environment, environment, dry=dry)
+        # По этому адресу выкат на боевой сверяет, какой коммит стоит на тестовом.
+        put_variable("DEMO_APP_URL", f"https://app.{domain}", None, dry=dry)
+
+    # Последним: у окружения всё своё, выкат в него открыт.
+    put_variable("ENVIRONMENT_READY", environment, environment, dry=dry)
+
+    if public:
+        print("\nоткрытая часть ключа выката — переменной DEPLOY_PUBKEY в bootstrap-server.sh:")
+        print(public)
 
 
 def finish(args: argparse.Namespace) -> None:
-    """Убрать секреты приложения с уровня репозитория — когда окружения готовы."""
+    """Убрать прежние секреты с уровня репозитория — когда окружения настроены."""
 
-    environment: str = args.environment
-    there = existing("secret", environment)
-    # Сначала доказательство, что у окружения всё своё: иначе удаление оставило
-    # бы сервер без пароля базы на следующем выкате.
-    required = {"POSTGRES_PASSWORD", "SECRET_KEY", "BOT_API_TOKEN", "BOT_TOKEN", *DEPLOY_NAMES}
-    absent = sorted(required - there)
-    if absent:
-        sys.exit(f"у окружения «{environment}» нет: {', '.join(absent)} — удалять рано")
-    at_repository = existing("secret", None)
-    # `MINIAPP_URL` лежал секретом исторически; теперь это переменная окружения.
-    leftovers = {*APP_NAMES, *DEPLOY_NAMES, *ADMIN_NAMES, "MINIAPP_URL"}
-    for name in sorted(at_repository & leftovers):
+    # Сначала доказательство, что оба окружения ходят на серверы своим ключом:
+    # иначе удаление оставило бы выкат без адреса.
+    for environment in ("demo", "production"):
+        absent = sorted(set(DEPLOY_NAMES) - existing("secret", environment))
+        if absent:
+            sys.exit(f"у окружения «{environment}» нет: {', '.join(absent)} — удалять рано")
+    for label in sorted(existing("secret", None) & set(LEGACY_REPOSITORY_NAMES)):
         if not args.dry_run:
-            gh("secret", "delete", name)
-        print(f"  с уровня репозитория убран {name}")
+            gh("secret", "delete", label)
+        print(f"  с уровня репозитория убран {label}")
 
 
 def main() -> None:
@@ -314,13 +221,12 @@ def main() -> None:
     parser.add_argument("environment", choices=["demo", "production"])
     parser.add_argument("--domain", help="имя посадочной: ketocare.uz, demo.ketocare.uz")
     parser.add_argument("--server", help="сервер окружения — имя из ~/.ssh/config")
+    parser.add_argument("--force", action="store_true", help="перевыпустить ключ выката")
     parser.add_argument(
-        "--secrets-from", help="прежний сервер, с которого берутся секреты приложения"
+        "--dry-run", action="store_true", help="только показать, что будет записано"
     )
-    parser.add_argument("--force", action="store_true", help="перезаписать уже заведённые секреты")
-    parser.add_argument("--dry-run", action="store_true", help="только показать имена")
     parser.add_argument(
-        "--finish", action="store_true", help="убрать секреты приложения с уровня репозитория"
+        "--finish", action="store_true", help="убрать прежние секреты с уровня репозитория"
     )
     args = parser.parse_args()
 

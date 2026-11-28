@@ -668,29 +668,12 @@ def test_password_variable_name_is_the_one_the_deploy_passes() -> None:
         if line.lstrip().startswith("if ") and "ADMIN_EMAIL" in line and f'-z "${{{name}' in line
     ], "в remote-deploy.sh нет ветки «адрес задан, пароль — нет»"
 
-    # Звено 4: значение приходит из секрета, и объявление лежит В ТОМ ЖЕ шаге,
-    # где собирается окружение. В соседнем шаге оно до рендера не доедет.
+    # Звено 4 снято 28.11.2026 (ADR-0095): выкат из GitHub не несёт ни одного
+    # секрета приложения, пароль администратора в том числе. Цепочка выше
+    # остаётся для того, кто подаёт окружение точке входа сам; первого
+    # администратора на новом сервере заводит `create_admin.py` на сервере.
     workflow = _uncommented((_ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf8"))
-    head = workflow.index("- name: Собрать окружение из секретов")
-    rest = workflow[head + 1 :]
-    stop = rest.find("\n      - name:")
-    step = rest if stop == -1 else rest[:stop]
-    assert re.search(rf"^\s*{name}:\s*\$\{{\{{\s*secrets\.{name}\b", step, re.M), (
-        "deploy.yml не берёт пароль из секрета в шаге сборки окружения"
-    )
-
-    # Звено 5: имя в САМОМ списке переносимых. Список разбирается как список
-    # Python, а не ищется регуляркой: имя, вынесенное в хвостовой комментарий
-    # («временно отключим»), текстовую проверку переживало — та же ошибка
-    # «упоминание вместо содержимого», за которую переписано звено 1.
-    listed = re.search(r"^\s*NAMES\s*=\s*\[", step, re.M)
-    assert listed is not None, (
-        "в шаге сборки окружения нет списка NAMES — проверка перестала смотреть туда, "
-        "куда обещает: похожее имя рядом (REQUIRED_NAMES) ей не годится"
-    )
-    bracket = step.index("[", listed.start())
-    transferred = ast.literal_eval(step[bracket : step.index("]", bracket) + 1])
-    assert name in transferred, "deploy.yml не переносит переменную на сервер: её нет в списке имён"
+    assert f"secrets.{name}" not in workflow, "пароль администратора вернулся в выкат из GitHub"
 
 
 def test_exit_code_reaches_the_shell() -> None:

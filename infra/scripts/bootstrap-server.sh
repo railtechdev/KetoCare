@@ -197,6 +197,13 @@ if [ -n "$REPO_REF" ] || [ -n "$FRESH_CLONE" ]; then
     echo "код: $(sudo -u "$OWNER" git -C "$REPO" log --oneline -1)"
 fi
 
+step "ключи сервера"
+# Пароль базы, ключ подписи сессий, ключ шифрования настроек и ключ связи бота
+# с API создаёт сам сервер: они нужны раньше, чем запустится кабинет, поэтому
+# их не вводит никто, и в GitHub их нет (ADR-0095). Повторный запуск уже
+# созданные не трогает — иначе сменился бы пароль у работающей базы.
+KETOCARE_SECRETS_GROUP="$OWNER" bash "$REPO/infra/scripts/server-secrets.sh" init
+
 step "nginx: заголовки безопасности"
 # Сайты подключают их строкой `include` в каждом location. Без этих файлов
 # nginx не проходит проверку вовсе: «open() …/ketocare-security-headers.conf failed».

@@ -17,10 +17,12 @@
 #   • снимок redis — секреты привязок бота: без них бот не узнаёт ни одну семью.
 # Том `reports` не переносится: PDF пересобирается из базы.
 #
+#   • ключи приложения, от которых зависят данные: `SECRET_KEY` расшифровывает
+#     ключи ИИ, введённые в кабинете, `BOT_TOKEN` — бот, к которому привязаны
+#     семьи. Они уходят с сервера на сервер и в GitHub не попадают.
+#
 # Новый сервер к этому моменту настроен (bootstrap-server.sh с STANDBY=1) и на
-# него выкачен тот же или более новый коммит С ТЕМИ ЖЕ секретами приложения:
-# `SECRET_KEY` подписывает сессии и расшифровывает ключи ИИ из кабинета,
-# `BOT_TOKEN` — тот же бот, к которому привязаны семьи.
+# него выкачен тот же или более новый коммит.
 #
 # Почему бот и воркер нового сервера стоят до переноса — см. deploy.sh, «режим
 # ожидания»: один токен бота опрашивается только из одного места.
@@ -77,6 +79,9 @@ preflight() {
     mark="$(on "$OLD" "cat /etc/ketocare/environment 2>/dev/null || true" | tr -d '[:space:]')"
     [ "$mark" != "production" ] || fail "«прежний» сервер ($OLD) размечен как production — аргументы перепутаны?"
 
+    on "$NEW" "test -f /etc/ketocare/secrets.env && test -f $REPO/.env.config" \
+        || fail "на новом сервере нет ключей сервера или настроек выката — сначала bootstrap-server.sh и первый выкат"
+
     for volume in pgdata redisdata attachments erased; do
         on "$NEW" "docker volume inspect ketocare_$volume >/dev/null 2>&1" \
             || fail "на новом сервере нет тома ketocare_$volume — сначала первый выкат"
@@ -107,6 +112,32 @@ preflight() {
 }
 
 # --- перенос ----------------------------------------------------------------
+
+#: Что на боевом обязано остаться ПРЕЖНИМ. Остальные ключи у нового сервера
+#: свои (пароль базы, ключ связи бота с API): от их значения ничьи данные не
+#: зависят.
+#:   SECRET_KEY, SETTINGS_ENCRYPTION_KEY — расшифровывают ключи ИИ, введённые в
+#:     кабинете; отдельного ключа шифрования на прежнем сервере могло не быть,
+#:     и тогда его не должно быть и на новом (server-secrets.sh, mirror);
+#:   BOT_TOKEN, BOT_USERNAME — бот, к которому привязаны семьи; уйдут в кабинет
+#:     вместе с разделом интеграций;
+#:   остальное — запасные значения, которые кабинет уже перекрывает.
+MIRRORED_KEYS="SECRET_KEY SETTINGS_ENCRYPTION_KEY BOT_TOKEN BOT_USERNAME ANTHROPIC_API_KEY AI_MODEL_FAST AI_MODEL_SMART SENTRY_DSN BACKUP_AGE_RECIPIENT"
+
+copy_keys() {
+    say "ключи приложения"
+    local pattern="${MIRRORED_KEYS// /|}"
+    # Значения идут потоком между серверами; печатаются только имена.
+    on "$OLD" "grep -E '^($pattern)=' $REPO/.env || true" \
+        | on "$NEW" "bash $REPO/infra/scripts/server-secrets.sh mirror $MIRRORED_KEYS >/dev/null"
+    # Окружение приложения пересобирается из настроек последнего выката и
+    # обновлённых ключей — так же, как это делает сам выкат.
+    on "$NEW" "cd $REPO && test -f .env.config \
+        && ( umask 077; bash infra/scripts/server-secrets.sh render .env.config > .env.next ) \
+        && chown --reference=.env.config .env.next && mv .env.next .env" \
+        || fail "окружение нового сервера не пересобрано — был ли на нём выкат?"
+    echo "на новом сервере: $(on "$NEW" "bash $REPO/infra/scripts/server-secrets.sh names" | tr '\n' ' ')"
+}
 
 copy_database() {
     say "база"
@@ -191,6 +222,7 @@ case "$MODE" in
 
     rehearse)
         preflight
+        copy_keys
         copy_database
         compare_rows loose
         copy_volume attachments
@@ -213,6 +245,7 @@ case "$MODE" in
         # копия.
         on "$OLD" "$C stop bot worker api"
         STOPPED_AT="$(date '+%H:%M:%S')"
+        copy_keys
         copy_database
         compare_rows strict
         copy_volume attachments
