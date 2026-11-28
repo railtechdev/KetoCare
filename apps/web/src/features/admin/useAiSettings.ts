@@ -217,3 +217,26 @@ export function useAiSpend(period: AiSpendPeriod) {
     },
   });
 }
+
+export type AssistantSpeedReport =
+  components["schemas"]["AssistantSpeedReport"];
+export type AssistantStep = AssistantSpeedReport["steps"][number]["step"];
+
+/**
+ * Сколько идёт ответ помощника по шагам (ADR-0094): только длительности — ни
+ * вопроса, ни ответа, ни человека.
+ */
+export function useAssistantSpeed(period: AiSpendPeriod) {
+  return useQuery({
+    queryKey: ["admin", "assistant-speed", period],
+    queryFn: async (): Promise<AssistantSpeedReport> => {
+      const { data, error } = await api.GET(
+        "/api/v1/admin/ai/assistant-speed",
+        { params: { query: { period } } },
+      );
+      if (error || !data)
+        throw error ?? new Error("Empty assistant speed report");
+      return data;
+    },
+  });
+}
