@@ -84,6 +84,9 @@ def _run(
         "PATH": f"{deployment['bin']}:{os.environ['PATH']}",
         "KETOCARE_REPO": str(deployment["repo"]),
         "KETOCARE_SELF": str(deployment["repo"] / "self.sh"),
+        # Метки окружения на «сервере» прогона нет — и взять её с машины, где
+        # идёт тест, скрипт не должен.
+        "KETOCARE_ENV_MARK": str(deployment["repo"] / "no-environment-mark"),
         "DOCKER_CALLS": str(deployment["calls"]),
         "SSH_ORIGINAL_COMMAND": "main",
     }

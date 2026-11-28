@@ -1,12 +1,27 @@
 #!/usr/bin/env bash
-# Первичная настройка VPS под test-стенд. Запускается ОТ ROOT, один раз:
+# Первичная настройка сервера под KetoCare. Запускается ОТ ROOT:
 #
 #   scp infra/scripts/bootstrap-server.sh root@<адрес>:/tmp/
-#   ssh root@<адрес> "bash /tmp/bootstrap-server.sh"
+#   ssh root@<адрес> "ENVIRONMENT=demo BASE_DOMAIN=demo.ketocare.uz bash /tmp/bootstrap-server.sh"
+#
+# Серверов два (ADR-0095), и скрипт обязан знать, какой он настраивает:
+#
+#   ENVIRONMENT    demo | production — метка сервера: чужое окружение выкат сюда
+#                  не положит (remote-deploy.sh);
+#   BASE_DOMAIN    имя посадочной; кабинет — app.<имя>, Mini App — tma.<имя>;
+#   LEGACY_DOMAIN  прежнее имя посадочной (необязательно): три прежних имени
+#                  будут перенаправлять на новые — по ним закладки врачей и
+#                  кнопки в старых сообщениях бота;
+#   STANDBY=1      режим ожидания: бот и воркер не запускаются, пока сюда не
+#                  перенесены данные (docs/MIGRATION_2026-11.md);
+#   DEPLOY_PUBKEY  открытая часть ключа выката — встанет в authorized_keys
+#                  с ограничением одной командой;
+#   REPO_REF       ветка или коммит, из которого берутся конфигурации nginx и
+#                  точка входа выката (на свежем клоне — main; на работающем
+#                  сервере рабочее дерево без этой переменной не трогается).
 #
 # Повторный запуск безопасен: каждый шаг сначала проверяет, не сделан ли он уже.
-# Дальше стенд обновляется только автодеплоем (docs/DEPLOY.md) — на сервер после
-# этого заходить незачем.
+# Дальше сервер обновляется только выкатом (docs/DEPLOY.md).
 #
 # Чего скрипт НЕ делает намеренно:
 #   • не создаёт .env — окружение приходит из секретов GitHub при каждом деплое;
@@ -15,24 +30,71 @@
 #     совпал с секретом;
 #   • не трогает конфиги nginx, если они уже есть: certbot дописывает в них
 #     блоки TLS ПРЯМО В ЭТИ ФАЙЛЫ, и повторное копирование из репозитория
-#     стёрло бы сертификаты вместе с редиректом на https.
+#     стёрло бы сертификаты вместе с редиректом на https;
+#   • не снимает режим ожидания: это шаг переноса, а не настройки.
 
 set -euo pipefail
 
-DOMAIN_LANDING="${DOMAIN_LANDING:-ketocare.railtech.uz}"
-DOMAIN_APP="${DOMAIN_APP:-app.ketocare.railtech.uz}"
+ENVIRONMENT="${ENVIRONMENT:-}"
+BASE_DOMAIN="${BASE_DOMAIN:-}"
+LEGACY_DOMAIN="${LEGACY_DOMAIN:-}"
+STANDBY="${STANDBY:-}"
+DEPLOY_PUBKEY="${DEPLOY_PUBKEY:-}"
 OWNER="${OWNER:-ketocare}"
-REPO_URL="${REPO_URL:-git@github.com:railtechdev/KetoCare.git}"
+# По https: репозиторий открытый, и ключ доступа к GitHub серверу не нужен.
+# Закроют репозиторий — здесь понадобится deploy key и адрес git@github.com:….
+REPO_URL="${REPO_URL:-https://github.com/railtechdev/KetoCare.git}"
+REPO_REF="${REPO_REF:-}"
 REPO=/srv/ketocare
-# Точка входа автодеплоя — ВНЕ рабочего дерева (см. шаг ниже).
-ENTRYPOINT=/srv/ketocare-deploy.sh
+# Точка входа выката — ВНЕ рабочего дерева и в каталоге ВЛАДЕЛЬЦА (см. шаг ниже).
+ENTRY_DIR=/srv/ketocare-entry
+ENTRYPOINT="$ENTRY_DIR/deploy.sh"
+# Имя, зашитое в конфигурации nginx репозитория; при установке заменяется.
+TEMPLATE_DOMAIN="ketocare.railtech.uz"
 
 step() { echo; echo "### $*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
+fail() { echo "$*" >&2; exit 1; }
 
-[ "$(id -u)" -eq 0 ] || { echo "Запускать от root" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || fail "Запускать от root"
+case "$ENVIRONMENT" in
+    demo|production) ;;
+    *) fail "Задайте ENVIRONMENT=demo или ENVIRONMENT=production" ;;
+esac
+# Имя уходит в sed и в конфигурацию nginx: только то, из чего состоят имена.
+printf '%s' "$BASE_DOMAIN" | grep -qE '^[a-z0-9]([a-z0-9.-]{1,80})[a-z0-9]$' \
+    || fail "Задайте BASE_DOMAIN, например ketocare.uz"
+if [ -n "$LEGACY_DOMAIN" ]; then
+    printf '%s' "$LEGACY_DOMAIN" | grep -qE '^[a-z0-9]([a-z0-9.-]{1,80})[a-z0-9]$' \
+        || fail "LEGACY_DOMAIN — не имя"
+fi
+
+DOMAIN_LANDING="$BASE_DOMAIN"
+DOMAIN_APP="app.$BASE_DOMAIN"
+DOMAIN_MINIAPP="tma.$BASE_DOMAIN"
 
 export DEBIAN_FRONTEND=noninteractive
+
+step "процессор"
+# Колёса numpy 2.x собраны под x86-64-v2 (ADR-0014). Не отказ: стек пока
+# закреплён на версиях, которые работают и без него, — но знать надо сейчас.
+if [ "$(grep -o -E 'sse4_2|popcnt' /proc/cpuinfo | sort -u | wc -l)" -eq 2 ]; then
+    echo "x86-64-v2: да"
+else
+    echo "x86-64-v2: НЕТ (sse4_2/popcnt не видны) — ограничения ADR-0014 остаются"
+fi
+
+step "метка окружения: $ENVIRONMENT"
+install -d -m 0755 /etc/ketocare
+if [ -f /etc/ketocare/environment ] \
+   && [ "$(tr -d '[:space:]' < /etc/ketocare/environment)" != "$ENVIRONMENT" ]; then
+    fail "Сервер уже размечен как «$(cat /etc/ketocare/environment)» — менять окружение на месте нельзя"
+fi
+echo "$ENVIRONMENT" > /etc/ketocare/environment
+if [ "$STANDBY" = "1" ]; then
+    touch /etc/ketocare/standby
+fi
+[ -f /etc/ketocare/standby ] && echo "режим ожидания: бот и воркер не запускаются"
 
 step "пользователь $OWNER"
 if id "$OWNER" >/dev/null 2>&1; then
@@ -48,7 +110,7 @@ step "swap"
 if swapon --show | grep -q .; then
     echo "уже есть: $(swapon --show --noheadings --raw | head -1)"
 else
-    # Без swap сборка фронта и weasyprint упираются в OOM на 2 ГБ RAM.
+    # Сборка фронта при выкате берёт до 1,5 ГБ рядом с работающей системой.
     fallocate -l 2G /swapfile && chmod 600 /swapfile
     mkswap /swapfile >/dev/null && swapon /swapfile
     grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
@@ -68,8 +130,9 @@ ufw status | head -5
 
 step "базовые пакеты"
 apt-get update -qq
+# age — шифрование резервных копий: без него backup.sh отказывается работать.
 apt-get install -y -qq nginx python3-certbot-nginx rsync git curl ca-certificates \
-    gnupg unattended-upgrades >/dev/null
+    gnupg unattended-upgrades age >/dev/null
 echo "nginx $(nginx -v 2>&1 | sed 's|.*/||')"
 
 step "docker"
@@ -98,76 +161,173 @@ fi
 corepack enable >/dev/null 2>&1 || true
 
 step "каталоги"
-mkdir -p "$REPO" /var/www/ketocare-landing /var/www/ketocare-app /srv/backups
-chown "$OWNER:$OWNER" "$REPO" /var/www/ketocare-landing /var/www/ketocare-app /srv/backups
+WEB_ROOTS="/var/www/ketocare-landing /var/www/ketocare-app /var/www/ketocare-miniapp"
+# shellcheck disable=SC2086
+mkdir -p "$REPO" $WEB_ROOTS /srv/backups
+# Владелец — тот, от кого идёт выкат: в каталог, созданный root, rsync писать
+# не сможет, и выкат упадёт целиком (так и вышло с каталогом Mini App).
+# shellcheck disable=SC2086
+chown "$OWNER:$OWNER" "$REPO" $WEB_ROOTS /srv/backups
 # 700 у бэкапов: там дампы с клиническими данными и архивы удалённых пациентов.
 chmod 700 /srv/backups
 chmod 750 "$REPO"
 ls -ld /srv/backups "$REPO" | sed 's/^/  /'
 
 step "репозиторий"
+FRESH_CLONE=""
 if [ -d "$REPO/.git" ]; then
     echo "уже склонирован: $(sudo -u "$OWNER" git -C "$REPO" log --oneline -1)"
 else
-    # Ключ доступа к GitHub (deploy key) должен уже лежать у $OWNER в ~/.ssh.
     sudo -u "$OWNER" git clone --quiet "$REPO_URL" "$REPO"
+    FRESH_CLONE=1
+fi
+# Рабочее дерево двигается только на свежем клоне или по прямой просьбе: на
+# работающем сервере его ведёт выкат, и повторный запуск настройки (например,
+# за сертификатом) не вправе сменить код под ним.
+if [ -n "$REPO_REF" ] || [ -n "$FRESH_CLONE" ]; then
+    REF="${REPO_REF:-main}"
+    printf '%s' "$REF" | grep -qE '^[A-Za-z0-9._/-]{1,120}$' || fail "REPO_REF — не имя ветки и не коммит"
+    sudo -u "$OWNER" git -C "$REPO" fetch --quiet origin
+    # Отсоединённый HEAD, как после выката.
+    if sudo -u "$OWNER" git -C "$REPO" rev-parse --verify --quiet "origin/$REF" >/dev/null; then
+        sudo -u "$OWNER" git -C "$REPO" checkout --quiet --detach --force "origin/$REF"
+    else
+        sudo -u "$OWNER" git -C "$REPO" checkout --quiet --detach --force "$REF"
+    fi
+    echo "код: $(sudo -u "$OWNER" git -C "$REPO" log --oneline -1)"
 fi
 
-step "nginx: сайты"
-install -m 0644 "$REPO/infra/nginx/server-names-hash.conf" /etc/nginx/conf.d/
+step "nginx: заголовки безопасности"
+# Сайты подключают их строкой `include` в каждом location. Без этих файлов
+# nginx не проходит проверку вовсе: «open() …/ketocare-security-headers.conf failed».
+install -d -m 0755 /etc/nginx/snippets
+install -m 0644 "$REPO/infra/nginx/security-headers.conf" /etc/nginx/snippets/ketocare-security-headers.conf
+for policy in app miniapp landing; do
+    install -m 0644 "$REPO/infra/nginx/csp-$policy.conf" "/etc/nginx/snippets/ketocare-csp-$policy.conf"
+done
 # Без этого nginx не стартует ВООБЩЕ: имя app.* не помещается в корзину
 # хеш-таблицы имён по умолчанию (32 байта).
-for site in ketocare-landing ketocare-app; do
+install -m 0644 "$REPO/infra/nginx/server-names-hash.conf" /etc/nginx/conf.d/
+
+step "nginx: сайты $DOMAIN_LANDING, $DOMAIN_APP, $DOMAIN_MINIAPP"
+for site in ketocare-landing ketocare-app ketocare-miniapp; do
     if [ -f "/etc/nginx/sites-available/$site.conf" ]; then
         echo "  $site.conf уже есть — не трогаем (в нём блоки TLS от certbot)"
     else
-        install -m 0644 "$REPO/infra/nginx/$site.conf" /etc/nginx/sites-available/
+        # В репозитории конфигурации написаны на имя первого стенда; имена этого
+        # сервера получаются заменой: app.<имя> и tma.<имя> — те же приставки.
+        sed "s/${TEMPLATE_DOMAIN//./\\.}/$BASE_DOMAIN/g" "$REPO/infra/nginx/$site.conf" \
+            > "/etc/nginx/sites-available/$site.conf"
+        chmod 0644 "/etc/nginx/sites-available/$site.conf"
     fi
     ln -sf "/etc/nginx/sites-available/$site.conf" "/etc/nginx/sites-enabled/$site.conf"
 done
+
+if [ -n "$LEGACY_DOMAIN" ]; then
+    step "nginx: прежние имена → новые"
+    if [ -f /etc/nginx/sites-available/ketocare-legacy.conf ]; then
+        echo "  ketocare-legacy.conf уже есть — не трогаем"
+    else
+        # Только перенаправление: по прежним именам лежат закладки врачей,
+        # ссылки на распечатках и кнопки в старых сообщениях бота. Сертификат на
+        # эти имена выпускается после того, как их DNS укажет сюда
+        # (docs/MIGRATION_2026-11.md), — до тех пор блоки отвечают только на 80.
+        {
+            for prefix in "" "app." "tma."; do
+                cat <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${prefix}${LEGACY_DOMAIN};
+    return 301 https://${prefix}${BASE_DOMAIN}\$request_uri;
+}
+EOF
+            done
+        } > /etc/nginx/sites-available/ketocare-legacy.conf
+        chmod 0644 /etc/nginx/sites-available/ketocare-legacy.conf
+    fi
+    ln -sf /etc/nginx/sites-available/ketocare-legacy.conf /etc/nginx/sites-enabled/ketocare-legacy.conf
+fi
+
 # Дефолтный сайт перехватывает запросы к именам, которых ещё нет, и проверка
 # certbot уходит не туда.
 rm -f /etc/nginx/sites-enabled/default
 # Заглушки: 80-й порт обязан отвечать 200 ДО выпуска сертификатов.
-for root in /var/www/ketocare-landing /var/www/ketocare-app; do
-    [ -f "$root/index.html" ] || echo "KetoCare: разворачивается" > "$root/index.html"
+for root in $WEB_ROOTS; do
+    if [ ! -f "$root/index.html" ]; then
+        echo "KetoCare: разворачивается" > "$root/index.html"
+        chown "$OWNER:$OWNER" "$root/index.html"
+    fi
 done
 nginx -t 2>&1 | tail -1
 systemctl reload nginx
 
 step "TLS"
 if [ -d "/etc/letsencrypt/live/$DOMAIN_LANDING" ]; then
-    certbot certificates 2>/dev/null | grep -E "Certificate Name|Expiry" | sed 's/^/  /'
+    certbot certificates 2>/dev/null | grep -E "Certificate Name|Domains|Expiry" | sed 's/^/  /'
 else
     # Порядок обязателен: certbot проверяет доступность имён СНАРУЖИ, поэтому
-    # DNS уже должен указывать сюда, а nginx — отвечать на 80.
-    certbot --nginx -d "$DOMAIN_LANDING" -d "$DOMAIN_APP" \
-        --redirect --agree-tos --register-unsafely-without-email --non-interactive
+    # DNS уже должен указывать сюда, а nginx — отвечать на 80. Отказ не
+    # останавливает настройку: DNS заводит человек, и запись могла ещё не
+    # разойтись — шаг повторяется тем же запуском скрипта.
+    #
+    # `--redirect` обязателен: refresh-токен живёт в httpOnly-cookie и по
+    # чистому HTTP утекает.
+    certbot --nginx -d "$DOMAIN_LANDING" -d "$DOMAIN_APP" -d "$DOMAIN_MINIAPP" \
+        --redirect --agree-tos --register-unsafely-without-email --non-interactive \
+        || echo "СЕРТИФИКАТ НЕ ВЫПУЩЕН: проверьте A-записи трёх имён и запустите скрипт ещё раз" >&2
 fi
 
-step "бэкапы по расписанию"
-CRON="0 3 * * * $REPO/infra/scripts/backup.sh >> /srv/backups/backup.log 2>&1"
-if sudo -u "$OWNER" crontab -l 2>/dev/null | grep -qF "backup.sh"; then
-    echo "уже настроены"
+if [ "$ENVIRONMENT" = "production" ]; then
+    step "бэкапы по расписанию"
+    CRON="0 3 * * * $REPO/infra/scripts/backup.sh >> /srv/backups/backup.log 2>&1"
+    if sudo -u "$OWNER" crontab -l 2>/dev/null | grep -qF "backup.sh"; then
+        echo "уже настроены"
+    else
+        { sudo -u "$OWNER" crontab -l 2>/dev/null || true; echo "$CRON"; } | sudo -u "$OWNER" crontab -
+        echo "добавлено: $CRON"
+    fi
 else
-    { sudo -u "$OWNER" crontab -l 2>/dev/null || true; echo "$CRON"; } | sudo -u "$OWNER" crontab -
-    echo "добавлено: $CRON"
+    # На тестовом — демо-данные: их пересобирает сид, копировать нечего, а без
+    # ключа шифрования скрипт каждую ночь писал бы в журнал отказ.
+    echo
+    echo "### бэкапы: на тестовом не ставятся"
 fi
 
-step "точка входа автодеплоя"
+step "точка входа выката"
 # Вне рабочего дерева намеренно: скрипт делает `git checkout --force`, и лежи
 # исполняемая копия внутри репозитория, checkout переписывал бы файл, который
-# bash в этот момент выполняет. Дальше копия обновляет себя сама, последним
-# шагом успешного выката.
+# bash в этот момент выполняет. Каталог — владельца выката: копия обновляет
+# себя сама (временный файл рядом и переименование), а в корне /srv,
+# принадлежащем root, выкат создать файл не может — «Permission denied».
+install -d -m 0755 -o "$OWNER" -g "$OWNER" "$ENTRY_DIR"
 install -m 0755 -o "$OWNER" -g "$OWNER" \
     "$REPO/infra/scripts/remote-deploy.sh" "$ENTRYPOINT"
 ls -l "$ENTRYPOINT"
 
+if [ -n "$DEPLOY_PUBKEY" ]; then
+    step "ключ выката"
+    # Ключ умеет ровно одно — запустить точку входа. Без ограничения утечка
+    # секрета DEPLOY_SSH_KEY означала бы полный доступ к машине: владелец
+    # состоит в группе docker, а docker — это root по построению.
+    printf '%s' "$DEPLOY_PUBKEY" | grep -qE '^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+( [^"]*)?$' \
+        || fail "DEPLOY_PUBKEY — не открытый ключ ssh"
+    KEYS="/home/$OWNER/.ssh/authorized_keys"
+    install -d -m 0700 -o "$OWNER" -g "$OWNER" "/home/$OWNER/.ssh"
+    touch "$KEYS" && chown "$OWNER:$OWNER" "$KEYS" && chmod 600 "$KEYS"
+    KEY_BODY="$(printf '%s' "$DEPLOY_PUBKEY" | awk '{print $2}')"
+    if grep -qF "$KEY_BODY" "$KEYS"; then
+        echo "уже записан"
+    else
+        echo "restrict,command=\"$ENTRYPOINT\" $DEPLOY_PUBKEY" >> "$KEYS"
+        echo "записан с ограничением: command=\"$ENTRYPOINT\""
+    fi
+fi
+
 echo
-echo "Готово. Дальше — БЕЗ входа на сервер:"
-echo "  1. Ключ автодеплоя: открытую часть в ~$OWNER/.ssh/authorized_keys строкой"
-echo "     restrict,command=\"$ENTRYPOINT\" ssh-ed25519 …"
-echo "     закрытую — в секрет DEPLOY_SSH_KEY репозитория."
-echo "  2. Actions → Deploy → Run workflow — первый выкат."
-echo "  3. Первый администратор: секреты ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME —"
-echo "     учётка появится сама при выкате (docs/DEPLOY.md)."
+echo "Готово: $ENVIRONMENT, $DOMAIN_LANDING."
+echo "  1. Секреты и переменные окружения «$ENVIRONMENT» в GitHub (docs/DEPLOY.md):"
+echo "     DEPLOY_HOST, DEPLOY_USER=$OWNER, DEPLOY_KNOWN_HOSTS, DEPLOY_SSH_KEY и секреты приложения."
+echo "  2. Actions → Deploy → Run workflow, окружение «$ENVIRONMENT» — первый выкат."
+[ -f /etc/ketocare/standby ] && echo "  3. Режим ожидания снимает перенос данных: docs/MIGRATION_2026-11.md."
+exit 0

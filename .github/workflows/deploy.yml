@@ -1,6 +1,18 @@
 name: Deploy
+run-name: Deploy → ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'demo' }}
 
-# Автодеплой test-стенда: main → VPS (docs/DEPLOY.md).
+# Выкат на два окружения (ADR-0095, docs/DEPLOY.md):
+#
+#   • `demo` — тестовый сервер: сюда `main` едет сам после зелёного CI;
+#   • `production` — боевой, с настоящими пациентами: только кнопкой
+#     (Actions → Deploy → Run workflow) и только коммитом из `main`, который
+#     прямо сейчас стоит на тестовом.
+#
+# Адрес сервера, ключ и все секреты приложения у каждого окружения СВОИ
+# (Settings → Environments). На уровне репозитория секретов приложения нет
+# намеренно: секрет окружения, который забыли завести, GitHub молча взял бы
+# с уровня репозитория — и тестовый бот начал бы отвечать семьям токеном
+# боевого.
 #
 # Запускается ПОСЛЕ зелёного CI, а не по самому push: событие push приходит
 # раньше, чем известен результат тестов, и деплой по нему выкатывал бы
@@ -33,23 +45,35 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      environment:
+        description: "Куда выкатывать"
+        type: choice
+        options: [demo, production]
+        default: demo
+      allow_untested:
+        description: "Боевой: выкатить коммит, которого сейчас нет на тестовом (только авария)"
+        type: boolean
+        default: false
       ref:
         description: "Коммит или ветка для выкатки (по умолчанию — вершина main); на сервер уходит её SHA"
         required: false
         default: "main"
 
-# Два деплоя одновременно ломают стенд: миграции и `compose up` из разных
+# Два деплоя одновременно ломают сервер: миграции и `compose up` из разных
 # прогонов встретятся на одной базе. cancel-in-progress намеренно false —
 # оборванный посреди `rsync --delete` деплой оставит пустой /var/www, то есть
-# белый экран вместо кабинета.
+# белый экран вместо кабинета. Замок — на окружение: тестовый и боевой друг
+# друга не ждут.
 concurrency:
-  group: deploy-test
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'demo' }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Выкатка на test
+    name: Выкатка
     runs-on: ubuntu-latest
+    # Автоматический выкат — всегда на тестовый; боевой называют руками.
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'demo' }}
     # Четыре условия, а не одно: успех прогона, событие push (а не
     # pull_request), ветка main И тот же репозиторий — иначе форк с веткой
     # «main» дотянулся бы до боевого стенда.
@@ -59,6 +83,8 @@ jobs:
        github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
+    env:
+      DEPLOY_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'demo' }}
     permissions:
       contents: read
     timeout-minutes: 40
@@ -132,6 +158,67 @@ jobs:
 
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "Выкатывается: $REF"
+
+      - name: Окружение настроено
+        id: ready
+        if: steps.target.outputs.stale != 'true'
+        env:
+          # Ставится ПОСЛЕДНЕЙ, когда у окружения заведены все свои секреты
+          # (infra/scripts/github_environment.py). Секрет, которого у окружения
+          # нет, GitHub молча берёт с уровня репозитория — и наполовину
+          # настроенное окружение выкатилось бы с чужим паролем базы или чужим
+          # ботом. Переменной уровня репозитория с этим именем нет намеренно.
+          READY: ${{ vars.ENVIRONMENT_READY }}
+        run: |
+          if [ "$READY" != "$DEPLOY_ENVIRONMENT" ]; then
+            echo "::error::Окружение «$DEPLOY_ENVIRONMENT» не настроено до конца (ENVIRONMENT_READY=«$READY») — выкат остановлен. См. docs/DEPLOY.md."
+            exit 1
+          fi
+
+      - name: Боевой — только проверенный коммит из main
+        id: gate
+        if: steps.target.outputs.stale != 'true' && env.DEPLOY_ENVIRONMENT == 'production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ steps.target.outputs.ref }}
+          REPOSITORY: ${{ github.repository }}
+          # Адрес кабинета тестового сервера: выкат кладёт туда `version.txt`
+          # с коммитом. Переменная репозитория, а не окружения — её читает
+          # прогон боевого.
+          DEMO_APP_URL: ${{ vars.DEMO_APP_URL }}
+          ALLOW_UNTESTED: ${{ inputs.allow_untested }}
+        run: |
+          # 1. Коммит обязан лежать в main: ветка, не прошедшая PR, на сервер
+          #    с пациентами не едет ни при каких флажках.
+          STATUS=$(gh api "repos/$REPOSITORY/compare/$REF...main" --jq .status) || {
+            echo "::error::Не удалось сверить коммит с main"
+            exit 1
+          }
+          case "$STATUS" in
+            ahead|identical) echo "коммит $REF лежит в main" ;;
+            *) echo "::error::Коммит $REF не входит в main (compare: $STATUS) — на боевой не выкатывается"; exit 1 ;;
+          esac
+
+          # 2. Тот же коммит прямо сейчас стоит на тестовом: его там видели.
+          if [ "$ALLOW_UNTESTED" = "true" ]; then
+            echo "::warning::Проверка «коммит стоит на тестовом» отключена флажком allow_untested"
+            exit 0
+          fi
+          if [ -z "$DEMO_APP_URL" ]; then
+            echo "::error::Не задана переменная репозитория DEMO_APP_URL — нечем сверить коммит с тестовым"
+            exit 1
+          fi
+          ON_DEMO=""
+          for attempt in 1 2 3; do
+            ON_DEMO=$(curl -fsS --max-time 20 "${DEMO_APP_URL%/}/version.txt" | tr -d '[:space:]' || true)
+            [ -n "$ON_DEMO" ] && break
+            [ "$attempt" = "3" ] || sleep 10
+          done
+          if [ "$ON_DEMO" != "$REF" ]; then
+            echo "::error::На тестовом стоит «${ON_DEMO:-нет ответа}», а на боевой просят $REF. Сначала выкат на тестовый и проверка там."
+            exit 1
+          fi
+          echo "на тестовом стоит тот же коммит"
 
       - name: Собрать окружение из секретов
         if: steps.target.outputs.stale != 'true'
@@ -237,6 +324,10 @@ jobs:
               "ATTACHMENT_QUOTA_MB", "ATTACHMENT_PURGE_DAYS",
               "REPORT_LINK_TTL_HOURS", "TZ",
               "BACKUP_AGE_RECIPIENT", "BACKUP_REMOTE",
+              # Имя окружения: сервер сверяет его со своей меткой и отказывает
+              # чужому (remote-deploy.sh) — перепутанный DEPLOY_HOST не должен
+              # положить окружение тестового на боевой.
+              "DEPLOY_ENVIRONMENT",
           ]
           print("# Собран автоматически .github/workflows/deploy.yml — правки")
           print("# руками затираются следующим деплоем. Источник значений —")
@@ -250,7 +341,7 @@ jobs:
           # Проверка до отправки: неполный файл затрёт рабочее окружение на
           # сервере и уронит стенд молча. Чаще всего это значит, что секрет не
           # заведён — например, потеряна строка `environment:` в job.
-          for required in POSTGRES_PASSWORD SECRET_KEY BOT_API_TOKEN; do
+          for required in POSTGRES_PASSWORD SECRET_KEY BOT_API_TOKEN DEPLOY_ENVIRONMENT; do
             grep -q "^${required}=" env.rendered || {
               echo "::error::Не задан секрет ${required} — деплой остановлен"
               exit 1
@@ -292,6 +383,12 @@ jobs:
 
       - name: Стенд отвечает снаружи
         if: steps.target.outputs.stale != 'true'
+        env:
+          # Адреса окружения — те же переменные, из которых собирается
+          # посадочная. Зашитых адресов нет: проверка боевого по адресам
+          # тестового отвечала бы «всё в порядке» про чужую машину.
+          LANDING_URL: ${{ vars.LANDING_SITE_URL }}
+          APP_URL: ${{ vars.PUBLIC_APP_URL }}
         # Три попытки, а не одна. Раннер GitHub ходит до Узбекистана через пол-
         # мира, и 17.09.2026 два выката из пяти были помечены красным на этом
         # шаге при живом стенде: `curl: (28) Connection timed out`, то есть
@@ -307,7 +404,13 @@ jobs:
         # Номер удавшейся попытки печатается: деградация пути видна заранее,
         # а не в тот день, когда перестанут проходить все три.
         run: |
-          for url in https://ketocare.railtech.uz/ https://app.ketocare.railtech.uz/; do
+          for name in LANDING_URL APP_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::У окружения не задана переменная для $name (LANDING_SITE_URL, PUBLIC_APP_URL)"
+              exit 1
+            fi
+          done
+          for url in "${LANDING_URL%/}/" "${APP_URL%/}/"; do
             code=""
             for attempt in 1 2 3; do
               code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$url" || echo "нет ответа")

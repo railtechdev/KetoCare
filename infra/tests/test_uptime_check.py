@@ -323,7 +323,11 @@ class TestWorkflow:
         workflow = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))
         assert "MONITOR_TOKEN" in workflow[True]["workflow_call"]["secrets"]
         check = next(s for s in workflow["jobs"]["check"]["steps"] if s.get("id") == "check")
-        assert check["env"]["MONITOR_TOKEN"] == "${{ secrets.MONITOR_TOKEN }}"
+        # Секрет монитора — свой, уровня репозитория: секреты приложения живут
+        # в окружениях выката (ADR-0095), а монитор окружением не пользуется.
+        assert check["env"]["MONITOR_TOKEN"] == (
+            "${{ secrets.UPTIME_MONITOR_TOKEN || secrets.MONITOR_TOKEN }}"
+        )
 
     def test_deploy_puts_the_monitor_token_on_the_stand(self) -> None:
         """Тот же секрет обязан доехать до стенда — иначе ручки там нет (404)."""
