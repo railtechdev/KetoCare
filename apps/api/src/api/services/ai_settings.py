@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core import ai_budget, app_settings, secret_box
+from core import ai_budget, ai_trace, app_settings, secret_box
 from core.ai_catalog import (
     KINDS,
     Catalog,
@@ -35,6 +35,7 @@ from core.app_settings import AI_TASKS, AiGroup, GroupOverrides, ProjectOverride
 from core.config import Settings
 from core.models.enums import AiJobKind, AiJobStatus
 from core.repositories import ai_jobs as ai_jobs_repo
+from core.repositories import ai_traces as ai_traces_repo
 from core.repositories import audit as audit_repo
 from core.repositories import users as users_repo
 
@@ -59,6 +60,11 @@ from ..schemas_ai_settings import (
     AiSpendLine,
     AiSpendReport,
     AiTaskView,
+    AiTiming,
+    AssistantModelTiming,
+    AssistantOutcomeCount,
+    AssistantSpeedReport,
+    AssistantStepTiming,
     KeyProblem,
     SpendPeriod,
 )
@@ -418,6 +424,46 @@ async def spend_report(
         people=people[:PEOPLE_LIMIT],
         people_total=len(people),
         people_limit=PEOPLE_LIMIT,
+    )
+
+
+async def assistant_speed(
+    session: AsyncSession, settings: Settings, period: SpendPeriod, now: datetime | None = None
+) -> AssistantSpeedReport:
+    """Where the time of an assistant answer goes (ADR-0094), same periods as spend."""
+
+    since = _period_start(settings, period, now or datetime.now(UTC))
+    rows = await ai_traces_repo.speed_since(session, kind=AiJobKind.ASSISTANT, since=since)
+
+    def timing(line: ai_traces_repo.Timing) -> dict[str, int]:
+        return {
+            "count": line.count,
+            "median_ms": line.median_ms,
+            "p90_ms": line.p90_ms,
+            "max_ms": line.max_ms,
+        }
+
+    return AssistantSpeedReport(
+        period=period,
+        since=since,
+        total=AiTiming(**timing(rows.total)) if rows.total else None,
+        steps=[
+            AssistantStepTiming(step=name, **timing(rows.steps[name]))  # type: ignore[arg-type]
+            for name in ai_trace.ASSISTANT_STEPS
+            if name in rows.steps
+        ],
+        by_model=sorted(
+            (
+                AssistantModelTiming(model=model, **timing(line))
+                for model, line in rows.models.items()
+            ),
+            key=lambda line: (-line.count, line.model),
+        ),
+        outcomes=[
+            AssistantOutcomeCount(outcome=outcome, count=rows.outcomes[outcome])
+            for outcome in ai_trace.ASSISTANT_OUTCOMES
+            if outcome in rows.outcomes
+        ],
     )
 
 
@@ -860,6 +906,7 @@ __all__ = [
     "remove_provider",
     "replace_key",
     "save_model",
+    "assistant_speed",
     "spend_report",
     "update_group",
     "update_provider",

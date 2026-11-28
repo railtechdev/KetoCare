@@ -15,7 +15,7 @@ from .accounts import (
     User,
     UserBackupCode,
 )
-from .ai_audit import AiConversation, AiJob, AuditLog, DoctorSummary, ReportJob
+from .ai_audit import AiConversation, AiJob, AiTrace, AuditLog, DoctorSummary, ReportJob
 from .base import Base
 from .clinical import (
     AedDrug,
@@ -113,6 +113,7 @@ __all__ = [
     "MenuItem",
     # ai/audit
     "AiJob",
+    "AiTrace",
     "AiConversation",
     "DoctorSummary",
     "ReportJob",

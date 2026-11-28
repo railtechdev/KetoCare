@@ -254,3 +254,51 @@ class AiSpendReport(BaseModel):
     people: list[AiPersonSpend]
     people_total: int
     people_limit: int
+
+
+# --- assistant speed (ADR-0094) ---------------------------------------------------
+
+
+AssistantStep = Literal[
+    "queue", "question_check", "search", "prepare", "model", "record", "answer_check", "save"
+]
+AssistantOutcome = Literal[
+    "answered", "refused_question", "no_material", "refused_answer", "limited", "failed"
+]
+
+
+class AiTiming(BaseModel):
+    """How long a step took: the usual case, the bad case and the worst, in ms."""
+
+    count: int
+    median_ms: int
+    p90_ms: int
+    max_ms: int
+
+
+class AssistantStepTiming(AiTiming):
+    step: AssistantStep
+
+
+class AssistantModelTiming(AiTiming):
+    model: str
+
+
+class AssistantOutcomeCount(BaseModel):
+    outcome: AssistantOutcome
+    count: int
+
+
+class AssistantSpeedReport(BaseModel):
+    """Where the time of an assistant answer goes — durations only, no text."""
+
+    period: SpendPeriod
+    since: datetime
+    #: From the question entering the queue to the answer being written;
+    #: `None` — no answers in the period.
+    total: AiTiming | None
+    #: Steps in the order they happen; a step that never ran is left out.
+    steps: list[AssistantStepTiming]
+    #: The model step by model — what switching the model would change.
+    by_model: list[AssistantModelTiming]
+    outcomes: list[AssistantOutcomeCount]

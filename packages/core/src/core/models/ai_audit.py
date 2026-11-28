@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Date, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -44,6 +44,29 @@ class AiJob(Base, UUIDPkMixin, CreatedAtMixin):
     cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6))
     error: Mapped[str | None]
     finished_at: Mapped[datetime | None]
+
+
+class AiTrace(Base, UUIDPkMixin, CreatedAtMixin):
+    """How long each step of one AI task took (ADR-0094).
+
+    Durations only. No question, no answer, no person, no child and no link to
+    `ai_jobs` (which knows the person and the child): the administrator reads
+    these rows, and the administrator has no access to clinical data.
+    """
+
+    __tablename__ = "ai_traces"
+    __table_args__ = (Index("ix_ai_traces_kind_created_at", "kind", "created_at"),)
+
+    kind: Mapped[AiJobKind] = mapped_column(pg_enum(AiJobKind, "ai_job_kind"), nullable=False)
+    #: How the task ended — `core.ai_trace.ASSISTANT_OUTCOMES` for the assistant.
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: Step name → milliseconds (`core.ai_trace.ASSISTANT_STEPS`).
+    steps: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False)
+    #: From the task entering the queue to the answer being written; the time
+    #: in the worker alone when the queue time is unknown.
+    total_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: The catalogue reference of the model called; `None` — no call.
+    model: Mapped[str | None] = mapped_column(String(128))
 
 
 class AiConversation(Base, UUIDPkMixin, CreatedAtMixin, UpdatedAtMixin):
