@@ -315,7 +315,9 @@ def _deploy(tmp_path: Path, *, standby: bool, bot_token: str = "1:token") -> lis
         text=True,
         cwd=repo,
         env={
-            **os.environ,
+            # Без токена бота из окружения прогона: тестовые настройки его
+            # задают, и «сервер без бота» иначе молча получил бы бота.
+            **{k: v for k, v in os.environ.items() if k != "BOT_TOKEN"},
             "PATH": f"{fake_bin}:{os.environ['PATH']}",
             "CALLS": str(calls),
             "KETOCARE_STANDBY_MARK": str(mark),
