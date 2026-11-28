@@ -59,10 +59,14 @@ case "${1:-}" in
         install -d -m 0755 "$(dirname "$FILE")"
         [ -f "$FILE" ] || : | save
         have="$(names_in "$FILE")"
+        # Имена, которые перенос убрал намеренно (`mirror`): ключа шифрования
+        # настроек на прежнем сервере не было, и созданный заново сделал бы
+        # нечитаемыми ключи ИИ из кабинета. Повторная настройка их не создаёт.
+        absent="$(sed -n 's/^# absent: //p' "$FILE")"
         {
             cat "$FILE"
             for name in $GENERATED; do
-                printf '%s\n' "$have" | grep -qx "$name" && continue
+                printf '%s\n' "$have" "$absent" | grep -qx "$name" && continue
                 printf "%s='%s'\n" "$name" "$(generate "$name")"
             done
         } | save
@@ -75,9 +79,17 @@ case "${1:-}" in
         [ -f "$FILE" ] || fail "нет $FILE — сначала init"
         incoming="$(cat)"
         wanted="$(printf '%s\n' "$@")"
+        arrived="$(printf '%s\n' "$incoming" | sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p')"
         {
-            # Свои строки — кроме названных; названные — только с входа.
+            # Свои строки — кроме названных и прежних отметок об отсутствии
+            # названных; названные — только с входа.
             while IFS= read -r line; do
+                case "$line" in
+                    "# absent: "*)
+                        printf '%s\n' "$wanted" | grep -qx "${line#\# absent: }" || printf '%s\n' "$line"
+                        continue
+                        ;;
+                esac
                 name="${line%%=*}"
                 printf '%s\n' "$wanted" | grep -qx "$name" || printf '%s\n' "$line"
             done < "$FILE"
@@ -90,6 +102,13 @@ case "${1:-}" in
                     printf '%s\n' "$line"
                 fi
             done <<< "$incoming"
+            # Названное, но не пришедшее — отсутствует намеренно: `init` его
+            # не создаст заново.
+            for name in "$@"; do
+                if ! printf '%s\n' "$arrived" | grep -qx "$name"; then
+                    printf '# absent: %s\n' "$name"
+                fi
+            done
         } | save
         echo "ключи сервера: $(names_in "$FILE" | tr '\n' ' ')"
         ;;

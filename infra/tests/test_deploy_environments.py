@@ -279,6 +279,26 @@ class TestServerSecrets:
         assert "from-old" not in result.stdout + result.stderr
 
 
+def test_init_after_mirror_does_not_recreate_a_dropped_key(tmp_path: Path) -> None:
+    """Найдено на боевом 28.11.2026: повторная настройка сервера после
+    репетиции вернула ключ шифрования настроек, которого у прежнего сервера не
+    было, — и ключи ИИ из кабинета перестали бы расшифровываться."""
+
+    _secrets(tmp_path, "init")
+    _secrets(tmp_path, "mirror", "SETTINGS_ENCRYPTION_KEY", "SECRET_KEY", stdin="SECRET_KEY=x\n")
+    assert _line(tmp_path, "SETTINGS_ENCRYPTION_KEY") is None
+
+    assert _secrets(tmp_path, "init").returncode == 0
+    assert _line(tmp_path, "SETTINGS_ENCRYPTION_KEY") is None
+    # Отметка — комментарий: в окружение приложения она не попадает.
+    assert "SETTINGS_ENCRYPTION_KEY" not in _secrets(tmp_path, "names").stdout
+
+    # Пришёл ключ при следующем переносе — отметка снимается.
+    _secrets(tmp_path, "mirror", "SETTINGS_ENCRYPTION_KEY", stdin="SETTINGS_ENCRYPTION_KEY=k\n")
+    assert _line(tmp_path, "SETTINGS_ENCRYPTION_KEY") == "SETTINGS_ENCRYPTION_KEY=k"
+    assert "# absent: SETTINGS_ENCRYPTION_KEY" not in (tmp_path / "secrets.env").read_text()
+
+
 def _workflow_text() -> str:
     return _WORKFLOW.read_text(encoding="utf-8")
 
