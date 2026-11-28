@@ -44,6 +44,8 @@ case "$MODE" in check|rehearse|cutover|rollback) ;; *) usage ;; esac
 REPO=/srv/ketocare
 # Одной строкой уходит на сервер: каталог и compose с окружением этого сервера.
 C="cd $REPO && docker compose --env-file .env -f infra/docker-compose.prod.yml"
+# От имени владельца рабочего дерева: root-у git отказывает («dubious ownership»).
+GIT="runuser -u ketocare -- git -C $REPO"
 SSH=(ssh -o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
 
 say() { echo; echo "### $*"; }
@@ -88,13 +90,13 @@ preflight() {
     done
 
     local old_commit new_commit
-    old_commit="$(on "$OLD" "git -C $REPO rev-parse HEAD")"
-    new_commit="$(on "$NEW" "git -C $REPO rev-parse HEAD")"
+    old_commit="$(on "$OLD" "$GIT rev-parse HEAD")"
+    new_commit="$(on "$NEW" "$GIT rev-parse HEAD")"
     echo "прежний: $old_commit"
     echo "новый:   $new_commit"
     # Новый обязан быть не старее: дамп старой схемы догоняется миграциями, а
     # дамп НОВОЙ схемы в старый код не лезет.
-    on "$NEW" "git -C $REPO fetch --quiet origin && git -C $REPO merge-base --is-ancestor $old_commit $new_commit" \
+    on "$NEW" "$GIT fetch --quiet origin && $GIT merge-base --is-ancestor $old_commit $new_commit" \
         || fail "на новом сервере код старее, чем на прежнем — сначала выкат"
 
     local old_pg new_pg
