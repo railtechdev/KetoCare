@@ -285,7 +285,7 @@ def test_workflow_always_names_the_environment() -> None:
 # --- 2. режим ожидания ------------------------------------------------------------
 
 
-def _deploy(tmp_path: Path, *, standby: bool) -> list[str]:
+def _deploy(tmp_path: Path, *, standby: bool, bot_token: str = "1:token") -> list[str]:
     repo = tmp_path / "repo"
     _git_repo(repo)
     scripts = repo / "infra" / "scripts"
@@ -297,7 +297,9 @@ def _deploy(tmp_path: Path, *, standby: bool) -> list[str]:
     _commit(repo)
     # Отсоединённый HEAD, как после remote-deploy.sh: иначе скрипт делает pull.
     subprocess.run(["git", "checkout", "--quiet", "--detach"], cwd=repo, check=True)
-    (repo / ".env").write_text("POSTGRES_PASSWORD=p\n")
+    (repo / ".env").write_text(
+        "POSTGRES_PASSWORD=p\n" + (f"BOT_TOKEN={bot_token}\n" if bot_token else "")
+    )
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -338,6 +340,15 @@ class TestStandby:
 
         assert "up -d" in calls
         assert "stop bot worker" not in calls
+
+    def test_server_without_a_bot_token_starts_everything_but_the_bot(self, tmp_path: Path) -> None:
+        """Без токена бот падает на старте и перезапускается по кругу."""
+
+        calls = _deploy(tmp_path, standby=False, bot_token="")
+
+        assert "up -d postgres redis api worker" in calls
+        assert "stop bot" in calls
+        assert "up -d" not in calls
 
 
 # --- 3. боевой: только проверенный коммит из main ---------------------------------

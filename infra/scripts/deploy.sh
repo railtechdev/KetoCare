@@ -80,6 +80,12 @@ if [ -f "$STANDBY_MARK" ]; then
     echo "РЕЖИМ ОЖИДАНИЯ ($STANDBY_MARK): бот и воркер не запускаются"
     $COMPOSE up -d postgres redis api
     $COMPOSE stop bot worker
+elif [ -z "${BOT_TOKEN:-}" ]; then
+    # Бота ещё не подключили: без токена он падает на старте и перезапускается
+    # каждые несколько секунд, засоряя журнал. Остальное работает без него.
+    echo "Токен Telegram-бота не задан — бот не запускается"
+    $COMPOSE up -d postgres redis api worker
+    $COMPOSE stop bot
 else
     $COMPOSE up -d
 fi
