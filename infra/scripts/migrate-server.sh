@@ -243,6 +243,80 @@ health() {
     echo "API нового сервера отвечает"
 }
 
+# --- прежние адреса -----------------------------------------------------------
+
+#: Имя посадочной из окружения сервера: кабинет — app.<имя>, Mini App — tma.<имя>.
+landing_of() {
+    on "$1" "sed -n 's|^LANDING_SITE_URL=.\{0,1\}https://\([a-z0-9.-]*\).*|\1|p' $REPO/.env | head -1"
+}
+
+redirect_old() {
+    # Прежние адреса — закладки врачей, ссылки на распечатках, кнопки в старых
+    # сообщениях бота. Пока их DNS не переключён на новый сервер, они ведут
+    # сюда, на остановленный: здесь и отвечаем перенаправлением на новые имена,
+    # тем же сертификатом. Сайты прежнего сервера не удаляются, а выключаются —
+    # откат включает их обратно.
+    say "прежний сервер: адреса перенаправляют на новые"
+    local old_name new_name
+    old_name="$(landing_of "$OLD")"
+    new_name="$(landing_of "$NEW")"
+    [ -n "$old_name" ] && [ -n "$new_name" ] || fail "не удалось прочитать имена серверов из окружения"
+    on "$OLD" "bash -s -- '$old_name' '$new_name'" <<'REMOTE'
+set -euo pipefail
+old="$1"; new="$2"
+cert="/etc/letsencrypt/live/$old"
+[ -f "$cert/fullchain.pem" ] || { echo "нет сертификата $cert" >&2; exit 1; }
+conf=/etc/nginx/sites-available/ketocare-moved.conf
+{
+    first=1
+    for prefix in "" "app." "tma."; do
+        v6="listen [::]:443 ssl;"
+        [ "$first" = 1 ] && v6="listen [::]:443 ssl ipv6only=on;"
+        first=0
+        cat <<EOF
+server {
+    listen 443 ssl;
+    $v6
+    server_name ${prefix}${old};
+    ssl_certificate $cert/fullchain.pem;
+    ssl_certificate_key $cert/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    return 301 https://${prefix}${new}\$request_uri;
+}
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${prefix}${old};
+    return 301 https://${prefix}${new}\$request_uri;
+}
+EOF
+    done
+} > "$conf"
+mkdir -p /etc/nginx/sites-disabled-by-move
+for site in ketocare-landing ketocare-app ketocare-miniapp; do
+    [ -L "/etc/nginx/sites-enabled/$site.conf" ] && mv "/etc/nginx/sites-enabled/$site.conf" /etc/nginx/sites-disabled-by-move/
+done
+ln -sf "$conf" /etc/nginx/sites-enabled/ketocare-moved.conf
+if ! nginx -t >/dev/null 2>&1; then
+    rm -f /etc/nginx/sites-enabled/ketocare-moved.conf
+    mv /etc/nginx/sites-disabled-by-move/*.conf /etc/nginx/sites-enabled/ 2>/dev/null || true
+    echo "nginx не принял перенаправление — прежние сайты возвращены" >&2
+    exit 1
+fi
+systemctl reload nginx
+REMOTE
+    echo "https://app.$old_name → https://app.$new_name"
+}
+
+restore_old() {
+    say "прежний сервер: свои адреса обратно"
+    on "$OLD" "rm -f /etc/nginx/sites-enabled/ketocare-moved.conf; \
+        if ls /etc/nginx/sites-disabled-by-move/*.conf >/dev/null 2>&1; then mv /etc/nginx/sites-disabled-by-move/*.conf /etc/nginx/sites-enabled/; fi; \
+        nginx -t >/dev/null 2>&1 && systemctl reload nginx"
+    echo "сайты прежнего сервера включены"
+}
+
 # --- режимы -----------------------------------------------------------------
 
 case "$MODE" in
@@ -288,10 +362,11 @@ case "$MODE" in
         on "$NEW" "rm -f /etc/ketocare/standby && $C up -d >/dev/null 2>&1"
         health
         on "$NEW" "$C ps --format '{{.Service}} {{.State}}'" | sed 's/^/  /'
+        redirect_old
         echo
-        echo "Перенос выполнен. Прежний сервер остановлен в $STOPPED_AT и НЕ запускается сам."
-        echo "Дальше — по листу (docs/MIGRATION_2026-11.md): проверка входов, DNS прежних имён,"
-        echo "сертификат на них. Откат, пока DNS не переключён: $0 rollback $OLD $NEW"
+        echo "Перенос выполнен. Прежний сервер остановлен в $STOPPED_AT и НЕ запускается сам;"
+        echo "его адреса перенаправляют на новые. Дальше — по листу (docs/MIGRATION_2026-11.md)."
+        echo "Откат: $0 rollback $OLD $NEW"
         ;;
 
     rollback)
@@ -300,6 +375,7 @@ case "$MODE" in
         # Сначала глушится бот нового: два бота с одним токеном отбирают
         # сообщения друг у друга.
         on "$NEW" "touch /etc/ketocare/standby && $C stop bot worker"
+        restore_old
         say "прежний сервер: запуск"
         on "$OLD" "$C up -d >/dev/null 2>&1"
         on "$OLD" "$C ps --format '{{.Service}} {{.State}}'" | sed 's/^/  /'
